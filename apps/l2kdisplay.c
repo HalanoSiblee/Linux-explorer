@@ -70,6 +70,25 @@ presets[] = {
         {C_MENU,64,64,64},{C_MENUTEXT,230,230,230},{C_HIGHLIGHT,10,36,106},{C_HIGHLIGHTTEXT,255,255,255},
         {C_DESKTOP,32,48,64},{C_SCROLLBAR,80,80,80},{C_TOOLTIP,48,48,32},{C_TOOLTIPTEXT,230,230,200},
         {C_APPWORKSPACE,40,40,40}), 25 , -1 },
+    /* The two modern schemes: flat. The bevel colours are chosen so a
+     * button's outer ring is a thin grey outline and its inner ring the
+     * face itself, which is as flat as a 3D edge can be made to look. */
+    { "Modern Light", S({C_FACE,243,243,243},{C_LIGHT,243,243,243},{C_HILIGHT,196,196,196},
+        {C_SHADOW,243,243,243},{C_DKSHADOW,196,196,196},{C_TEXT,27,27,27},{C_GRAYTEXT,140,140,140},
+        {C_WINDOW,255,255,255},{C_WINDOWTEXT,27,27,27},{C_WINDOWFRAME,196,196,196},
+        {C_ACTIVETITLE,0,103,192},{C_ACTIVETITLE2,0,103,192},{C_TITLETEXT,255,255,255},
+        {C_INACTIVETITLE,232,232,232},{C_INACTIVETITLE2,232,232,232},{C_INACTIVETITLETEXT,110,110,110},
+        {C_MENU,249,249,249},{C_MENUTEXT,27,27,27},{C_HIGHLIGHT,0,103,192},{C_HIGHLIGHTTEXT,255,255,255},
+        {C_DESKTOP,36,82,140},{C_SCROLLBAR,240,240,240},{C_TOOLTIP,255,255,255},{C_TOOLTIPTEXT,27,27,27},
+        {C_APPWORKSPACE,225,225,225}), 25 , -1 },
+    { "Modern Dark", S({C_FACE,32,32,32},{C_LIGHT,32,32,32},{C_HILIGHT,72,72,72},
+        {C_SHADOW,32,32,32},{C_DKSHADOW,72,72,72},{C_TEXT,240,240,240},{C_GRAYTEXT,128,128,128},
+        {C_WINDOW,25,25,25},{C_WINDOWTEXT,240,240,240},{C_WINDOWFRAME,72,72,72},
+        {C_ACTIVETITLE,43,43,43},{C_ACTIVETITLE2,43,43,43},{C_TITLETEXT,255,255,255},
+        {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,32,32,32},{C_INACTIVETITLETEXT,128,128,128},
+        {C_MENU,40,40,40},{C_MENUTEXT,240,240,240},{C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},
+        {C_DESKTOP,24,32,44},{C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
+        {C_APPWORKSPACE,25,25,25}), 25 , -1 },
     { "Brick", S({C_ACTIVETITLE,128,0,0},{C_ACTIVETITLE2,192,96,96},{C_INACTIVETITLE,128,128,64},
         {C_INACTIVETITLE2,192,192,128},{C_HIGHLIGHT,128,0,0},{C_DESKTOP,0,128,128},
         {C_FACE,192,192,192},{C_LIGHT,223,223,223},{C_MENU,192,192,192},{C_SCROLLBAR,192,192,192}), 10 , -1 },
@@ -1137,8 +1156,20 @@ static void paint(W2kWin *w, Drawable d)
         w2k_draw_checkbox(d, dl.decorate_box.x, dl.decorate_box.y,
                           "&Title bar and border on windows that ask for none",
                           w2k_force_decorations, 0, 0);
-        w2k_text(d, F_UI, c.x + 10, c.y + c.h - fh - 6,
-                 "Colours apply to every open window when you click Apply.", C_GRAYTEXT);
+        {
+            /* The modern schemes get a word. */
+            int mp = matching_preset();
+            const char *mn = mp >= 0 ? presets[mp].name : "";
+            if (!strncmp(mn, "Modern", 6)) {
+                w2k_text(d, F_UI, c.x + 10, c.y + c.h - 2 * fh - 8,
+                         "Modern, on a Windows 2000 desktop. You could have installed GNOME.",
+                         C_GRAYTEXT);
+                w2k_text(d, F_UI, c.x + 10, c.y + c.h - fh - 6,
+                         "We won't tell anyone. Enjoy your flat buttons.", C_GRAYTEXT);
+            } else
+                w2k_text(d, F_UI, c.x + 10, c.y + c.h - fh - 6,
+                         "Colours apply to every open window when you click Apply.", C_GRAYTEXT);
+        }
         break;
     }
     case 2: {
@@ -1513,9 +1544,34 @@ static void fill_program_combos(void)
 
 static void on_tab(void *u, int i) { (void)u; (void)i; w2k_win_dirty(dl.win); }
 
-int main(void)
+int main(int argc, char **argv)
 {
     if (w2k_init("l2kdisplay") < 0) return 1;
+    /* "l2kdisplay --scheme NAME" applies a colour scheme from the command
+     * line and saves it -- for scripts, and for looking at one without
+     * the dialog. "--scheme list" names them. */
+    if (argc >= 3 && !strcmp(argv[1], "--scheme")) {
+        if (!strcmp(argv[2], "list")) {
+            for (int i = 0; i < NPRESET; i++) puts(presets[i].name);
+            w2k_fini();
+            return 0;
+        }
+        for (int i = 0; i < NPRESET; i++)
+            if (!strcasecmp(presets[i].name, argv[2])) {
+                w2k_theme = presets[i].theme >= 0 ? presets[i].theme : THEME_CLASSIC;
+                w2k_theme_colours(w2k_theme);
+                for (int k = 0; k < presets[i].n; k++)
+                    w2k_color_set(presets[i].t[k].color, presets[i].t[k].r,
+                                  presets[i].t[k].g, presets[i].t[k].b);
+                w2k_scheme_save(NULL);
+                w2k_scheme_broadcast();
+                w2k_fini();
+                return 0;
+            }
+        fprintf(stderr, "l2kdisplay: no scheme called \"%s\" (try --scheme list)\n", argv[2]);
+        w2k_fini();
+        return 1;
+    }
     int W = 420, H = 486;
     dl.win = w2k_win_new("Display Properties", "l2kdisplay", W, H, 0);
     dl.win->paint = paint;

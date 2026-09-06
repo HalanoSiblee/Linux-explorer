@@ -255,8 +255,13 @@ static void paint(W2kWin *w, Drawable d)
 
         /* The original's key colours: digits blue, operators and the
          * memory and clear keys red, functions black. */
-        if (b->colour == 1)      w2k_text_rgb(d, F_UI, tx, ty, b->label, 200, 0, 0);
-        else if (b->colour == 2) w2k_text_rgb(d, F_UI, tx, ty, b->label, 0, 0, 190);
+        /* On a dark scheme the same reds and blues are lightened so
+         * they still read against the face. */
+        int fr, fg, fb;
+        w2k_color_rgb(C_FACE, &fr, &fg, &fb);
+        int dark = (fr * 299 + fg * 587 + fb * 114) / 1000 < 128;
+        if (b->colour == 1)      w2k_text_rgb(d, F_UI, tx, ty, b->label, dark ? 255 : 200, dark ? 120 : 0, dark ? 120 : 0);
+        else if (b->colour == 2) w2k_text_rgb(d, F_UI, tx, ty, b->label, dark ? 120 : 0, dark ? 170 : 0, dark ? 255 : 190);
         else                     w2k_text(d, F_UI, tx, ty, b->label, C_TEXT);
     }
 }

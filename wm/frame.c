@@ -3,6 +3,7 @@
 #include "wm.h"
 #include <X11/extensions/shape.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ------------------------------------------------------------------ *
@@ -272,6 +273,11 @@ int frame_render(const char *path, int cw, int ch, int active, int maximized)
     c.maximized = maximized;
     c.icon = ICO_EXPLORER;
     c.name = (char *)"My Computer";
+    /* W2K_RENDER_TITLE / W2K_RENDER_ICON dress the frame for a picture
+     * of a particular program. */
+    if (getenv("W2K_RENDER_TITLE")) c.name = getenv("W2K_RENDER_TITLE");
+    if (getenv("W2K_RENDER_ICON")) c.icon = atoi(getenv("W2K_RENDER_ICON"));
+    if (getenv("W2K_RENDER_DIALOG_FRAME")) c.resizable = 0;
     Client *saved = focused;
     focused = active ? &c : NULL;
 

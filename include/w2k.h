@@ -326,6 +326,9 @@ int  w2k_theme_task_h(int theme);
 void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
                           int theme);
 void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme);
+/* Luna's notification area: the lighter well with its two-line divider,
+ * measured off a screenshot; nothing for the other themes. */
+void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme);
 
 /* ---- Bitmap skins -------------------------------------------------- *
  * An RGBA image kept on the server and drawn in pieces -- for the parts

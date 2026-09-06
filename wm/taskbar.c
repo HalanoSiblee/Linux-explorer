@@ -450,13 +450,17 @@ static void layout(void)
         int dw = w2k_text_width(F_UI, clock_date, -1);
         if (dw > clock_w) clock_w = dw;
     }
-    tray_w  = w2k_taskbar_showclock ? clock_w + 2 * TRAY_PAD : 0;
+    int tpad = w2k_theme == THEME_XP ? 12 : TRAY_PAD;
+    tray_w  = w2k_taskbar_showclock ? clock_w + 2 * tpad : 0;
     tray_x  = tb_w - (seven ? W7_SLIVER + 6 : TB_PAD) - tray_w;
 
-    vol_x = tray_x - 4 - 16;
-    bat_x = bat.present ? vol_x - 4 - 16 : vol_x;
+    /* Luna spaces its icons wider: six pixels between them, a dozen
+     * either side of the clock. */
+    int tgap = w2k_theme == THEME_XP ? 6 : 4;
+    vol_x = tray_x - tgap - 16;
+    bat_x = bat.present ? vol_x - tgap - 16 : vol_x;
     notify_w = tray_width();
-    notify_x = bat_x - (notify_w ? notify_w + 4 : 0);
+    notify_x = bat_x - (notify_w ? notify_w + tgap : 0);
     tray_layout(notify_x, (TASKBAR_H - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0) + (BTN_H - 16) / 2, 16);
 
     ntasks = 0;
@@ -700,15 +704,14 @@ static void taskbar_draw(Pixmap pm, int h)
         }
         return;
     }
-    int well_x = notify_x - 4;
+    int well_x = notify_x - (w2k_theme == THEME_XP ? 8 : 4);
     if (w2k_theme == THEME_CLASSIC) {
         w2k_edge(pm, well_x, by, tb_w - TB_PAD - well_x, BTN_H,
                  EDGE_SUNKEN_THIN, BF_RECT);
-    } else if (w2k_theme != THEME_BASIC7) {   /* Windows 7's is in the bar skin */
-        /* Luna's notification area is a darker inset panel with a light
-         * line down its left edge. */
-        int tw = tb_w - TB_PAD - well_x;
-        w2k_theme_taskbutton(pm, well_x, by, tw, BTN_H, W2K_TB_DOWN, w2k_theme);
+    } else if (w2k_theme == THEME_XP) {
+        /* Luna's notification area: the lighter well runs the full
+         * height of the bar, to its right edge, behind a divider. */
+        w2k_theme_tray(pm, well_x, 0, tb_w - well_x, h, w2k_theme);
     }
     volume_draw(pm, vol_x, by + (BTN_H - 16) / 2);
     if (bat.present) battery_draw(pm, bat_x, by + (BTN_H - 16) / 2);
@@ -730,8 +733,8 @@ static void taskbar_draw(Pixmap pm, int h)
         else if (w2k_theme == THEME_BASIC7)
             w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text, 0, 0, 0);
         else
-            w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text,
-                         255, 255, 255);
+            w2k_text_rgb(pm, F_UI, tray_x + (w2k_theme == THEME_XP ? 12 : TRAY_PAD), cy,
+                         clock_text, 255, 255, 255);
     }
 
 }

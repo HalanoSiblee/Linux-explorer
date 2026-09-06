@@ -544,6 +544,24 @@ void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
     free(ins);
 }
 
+/* The XP notification area is a *lighter* blue than the bar, with a
+ * bright line along its top and a dark-then-light divider at its left.
+ * Read off a 1:1 screenshot: (86,172,247) on top, (64,138,227) through
+ * the body, a little lighter just above a darker bottom row; the divider
+ * (35,74,167) then (85,166,229). */
+static const Stop tray_xp[] = {
+    {    0,  86, 172, 247 }, {   40,  72, 152, 233 }, {  100,  64, 140, 228 },
+    {  850,  65, 139, 228 }, {  920,  69, 147, 232 }, { 1000,  60, 124, 221 },
+};
+
+void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
+{
+    if (theme != THEME_XP || w <= 2 || h <= 0) return;
+    grad_fill(d, x + 2, y, w - 2, h, tray_xp, (int)(sizeof tray_xp / sizeof *tray_xp), NULL, 256);
+    w2k_fill_rgb(d, x, y, 1, h, 35, 74, 167);
+    w2k_fill_rgb(d, x + 1, y, 1, h, 85, 166, 229);
+}
+
 void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
 {
     if (theme == THEME_BASIC7) {

@@ -16,7 +16,7 @@
 #include <string.h>
 
 #define TRAY_ICON   16       /* the size every icon is given */
-#define TRAY_GAP     2
+#define TRAY_GAP     (w2k_theme == THEME_XP ? 6 : 2)
 #define MAX_TRAY    24
 
 /* system tray protocol */

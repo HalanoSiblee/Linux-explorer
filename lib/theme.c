@@ -555,13 +555,12 @@ static const Stop tray_xp[] = {
 };
 
 /* Windows 7 Basic's notification area is darker than the bar and fades
- * into it over thirty-odd pixels at its left; a dark line on top, a
- * light one under it, and a lighter band low down. Read off a
- * screenshot, like the sliver. */
+ * into it over thirty-odd pixels at its left: a dark line on top, a
+ * light one under it, then an even body that lightens a touch towards
+ * the bottom. Read off a screenshot, like the sliver. */
 static const Stop tray_7[] = {
     {    0,  83, 105, 142 }, {   45, 148, 161, 178 }, {   90, 133, 146, 162 },
-    {  650, 136, 144, 165 }, {  730, 156, 164, 183 }, {  770, 167, 179, 193 },
-    {  820, 153, 165, 179 }, {  870, 134, 147, 163 }, { 1000, 141, 150, 159 },
+    {  900, 134, 146, 166 }, { 1000, 141, 150, 159 },
 };
 
 void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
@@ -610,13 +609,14 @@ void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
         w2k_fill_rgb(d, x, y, w, 1, 74, 107, 142);
         w2k_fill_rgb(d, x, y + 1, w, 1, 180, 196, 219);
         /* Show Desktop: a darker sliver, lighter at its top and bottom,
-         * read off a screenshot; its own edge marks it, no line. */
+         * behind a dark divider -- read off a screenshot. */
         static const Stop sliver[] = {
             {    0,  64,  81, 111 }, {   45, 149, 157, 168 }, {  130, 118, 127, 136 },
             {  250,  90,  97, 113 }, {  600,  95, 104, 118 }, {  850, 116, 129, 148 },
             { 1000, 141, 150, 159 },
         };
         grad_fill(d, x + w - 12, y, 12, h, sliver, (int)(sizeof sliver / sizeof *sliver), NULL, 256);
+        w2k_fill_rgb(d, x + w - 13, y + 1, 1, h - 1, 107, 120, 137);
         return;
     }
     if (theme == THEME_XP) {

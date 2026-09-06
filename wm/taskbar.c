@@ -700,7 +700,7 @@ static void taskbar_draw(Pixmap pm, int h)
             int tw = w2k_text_width(F_UI, clock_text, -1);
             int cx = TB_PAD + (ww - tw) / 2, cy = tray_y + (BTN_H - w2k_font_height(F_UI)) / 2;
             if (w2k_theme == THEME_CLASSIC) w2k_text(pm, F_UI, cx, cy, clock_text, C_TEXT);
-            else if (w2k_theme == THEME_BASIC7) w2k_text_rgb(pm, F_UI, cx, cy, clock_text, 0, 0, 0);
+            else if (w2k_theme == THEME_BASIC7) w2k_text_rgb(pm, F_UI, cx, cy, clock_text, 255, 255, 255);
             else w2k_text_rgb(pm, F_UI, cx, cy, clock_text, 255, 255, 255);
         }
         return;

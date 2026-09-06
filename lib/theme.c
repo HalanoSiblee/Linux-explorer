@@ -554,8 +554,45 @@ static const Stop tray_xp[] = {
     {  850,  65, 139, 228 }, {  920,  69, 147, 232 }, { 1000,  60, 124, 221 },
 };
 
+/* Windows 7 Basic's notification area is darker than the bar and fades
+ * into it over thirty-odd pixels at its left; a dark line on top, a
+ * light one under it, and a lighter band low down. Read off a
+ * screenshot, like the sliver. */
+static const Stop tray_7[] = {
+    {    0,  83, 105, 142 }, {   45, 148, 161, 178 }, {   90, 133, 146, 162 },
+    {  650, 136, 144, 165 }, {  730, 156, 164, 183 }, {  770, 167, 179, 193 },
+    {  820, 153, 165, 179 }, {  870, 134, 147, 163 }, { 1000, 141, 150, 159 },
+};
+
 void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
 {
+    if (theme == THEME_BASIC7) {
+        if (w <= 0 || h <= 0) return;
+        int fade = 32;
+        int n = (int)(sizeof tray_7 / sizeof *tray_7);
+        if (w > fade) grad_fill(d, x + fade, y, w - fade, h, tray_7, n, NULL, 256);
+        /* The fade: each column a blend of the bar's flat colour and the
+         * tray's, row by row. */
+        int fw = w < fade ? w : fade;
+        for (int i = 0; i < fw; i++) {
+            int t = (i + 1) * 255 / (fade + 1);        /* 0 at the bar, 255 at the tray */
+            int ph = w2k_cw(y, h), py = w2k_cx(y), px = w2k_cx(x + i);
+            int pw = w2k_cw(x + i, 1);
+            for (int r = 0; r < ph; r++) {
+                int at = ph > 1 ? r * 1000 / (ph - 1) : 0;
+                int tr, tg, tb;
+                stop_rgb(tray_7, n, at, &tr, &tg, &tb);
+                int br = 167, bg = 192, bb = 220;
+                if (r == 0) { br = 74; bg = 107; bb = 142; }
+                else if (r == 1) { br = 180; bg = 196; bb = 219; }
+                XSetForeground(w2k.dpy, w2k.gc,
+                               w2k_rgb(br + (tr - br) * t / 255, bg + (tg - bg) * t / 255,
+                                       bb + (tb - bb) * t / 255));
+                XFillRectangle(w2k.dpy, d, w2k.gc, px, py + r, (unsigned)pw, 1);
+            }
+        }
+        return;
+    }
     if (theme != THEME_XP || w <= 2 || h <= 0) return;
     grad_fill(d, x + 2, y, w - 2, h, tray_xp, (int)(sizeof tray_xp / sizeof *tray_xp), NULL, 256);
     w2k_fill_rgb(d, x, y, 1, h, 35, 74, 167);
@@ -569,8 +606,18 @@ void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
          * colour: (167,192,220), every pixel. The Show Desktop sliver at
          * the far end is marked off with a line. */
         w2k_fill_rgb(d, x, y, w, h, 167, 192, 220);
-        w2k_fill_rgb(d, x + w - 16, y + 3, 1, h - 6, 126, 152, 182);
-        w2k_fill_rgb(d, x + w - 15, y + 3, 1, h - 6, 214, 228, 242);
+        /* A dark line along the top with a light one under it. */
+        w2k_fill_rgb(d, x, y, w, 1, 74, 107, 142);
+        w2k_fill_rgb(d, x, y + 1, w, 1, 180, 196, 219);
+        /* Show Desktop: a darker sliver, lighter at its top and bottom,
+         * behind a dark divider -- read off a screenshot. */
+        static const Stop sliver[] = {
+            {    0,  64,  81, 111 }, {   45, 149, 157, 168 }, {  130, 118, 127, 136 },
+            {  250,  90,  97, 113 }, {  600,  95, 104, 118 }, {  850, 116, 129, 148 },
+            { 1000, 141, 150, 159 },
+        };
+        grad_fill(d, x + w - 12, y, 12, h, sliver, (int)(sizeof sliver / sizeof *sliver), NULL, 256);
+        w2k_fill_rgb(d, x + w - 13, y + 1, 1, h - 1, 107, 120, 137);
         return;
     }
     if (theme == THEME_XP) {

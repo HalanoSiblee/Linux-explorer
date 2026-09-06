@@ -26,7 +26,8 @@
 /* Where a button row starts: a pixel of bar shows above the classic and
  * XP buttons; Windows 7's fill the row. */
 #define BTN_TOP      ((TASKBAR_ROW - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0))
-#define W7_SLIVER    15       /* Windows 7's Show Desktop, at the bar's far end */
+#define W7_SLIVER    12       /* Windows 7's Show Desktop, at the bar's far end */
+#define W7_ARROW     14       /* the "show hidden icons" arrow and its air */
 #define TRAY_PAD      6
 
 static Window tb;
@@ -444,7 +445,7 @@ static void layout(void)
     /* The tray, right to left: clock, then the speaker, then whatever
      * applications have docked. */
     int clock_w = w2k_text_width(F_UI, clock_text, -1);
-    if (seven && !w2k_taskbar_small) {
+    if (seven) {
         /* Two lines, the date under the time; and the Show Desktop
          * sliver plus a gap stays clear at the bar's end. */
         int dw = w2k_text_width(F_UI, clock_date, -1);
@@ -456,7 +457,7 @@ static void layout(void)
 
     /* Luna spaces its icons wider: six pixels between them, a dozen
      * either side of the clock. */
-    int tgap = w2k_theme == THEME_XP ? 6 : 4;
+    int tgap = w2k_theme == THEME_XP ? 6 : seven ? 8 : 4;
     vol_x = tray_x - tgap - 16;
     bat_x = bat.present ? vol_x - tgap - 16 : vol_x;
     notify_w = tray_width();
@@ -705,6 +706,16 @@ static void taskbar_draw(Pixmap pm, int h)
         return;
     }
     int well_x = notify_x - (w2k_theme == THEME_XP ? 8 : 4);
+    if (w2k_theme == THEME_BASIC7) {
+        /* The darker notification area, faded in from the bar, and the
+         * "show hidden icons" arrow Windows 7 keeps at its left. */
+        int ax = notify_x - W7_ARROW;
+        int tx = ax - 10 - 32;
+        w2k_theme_tray(pm, tx, 0, tb_w - W7_SLIVER - 1 - tx, h, w2k_theme);
+        int ay = by + BTN_H / 2 - 2;
+        for (int i = 0; i < 3; i++)
+            w2k_fill_rgb(pm, ax + 2 - i, ay + i, 1 + 2 * i, 1, 228, 234, 244);
+    }
     if (w2k_theme == THEME_CLASSIC) {
         w2k_edge(pm, well_x, by, tb_w - TB_PAD - well_x, BTN_H,
                  EDGE_SUNKEN_THIN, BF_RECT);
@@ -715,16 +726,17 @@ static void taskbar_draw(Pixmap pm, int h)
     }
     volume_draw(pm, vol_x, by + (BTN_H - 16) / 2);
     if (bat.present) battery_draw(pm, bat_x, by + (BTN_H - 16) / 2);
-    if (w2k_taskbar_showclock && w2k_theme == THEME_BASIC7 && !w2k_taskbar_small) {
-        /* Time over date, white and centred: the tops of the two lines
-         * are at rows 6 and 21 of the bar in the screenshot. A small bar
-         * has room for the time alone, drawn as the other themes do. */
+    if (w2k_taskbar_showclock && w2k_theme == THEME_BASIC7) {
+        /* Time over date, centred: the tops of the two lines are at rows
+         * 6 and 21 of the big bar in the screenshot; the small bar packs
+         * them at 3 and 15. */
         int cw = tray_w - 2 * TRAY_PAD;
         int tw = w2k_text_width(F_UI, clock_text, -1);
         int dw = w2k_text_width(F_UI, clock_date, -1);
-        w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - tw) / 2, 6,
+        int ty = w2k_taskbar_small ? 3 : 6, dy = w2k_taskbar_small ? 15 : 21;
+        w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - tw) / 2, ty,
                      clock_text, 0, 0, 0);
-        w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - dw) / 2, 21,
+        w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - dw) / 2, dy,
                      clock_date, 0, 0, 0);
     } else if (w2k_taskbar_showclock) {
         int cy = by + (BTN_H - w2k_font_height(F_UI)) / 2;

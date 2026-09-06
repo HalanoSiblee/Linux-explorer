@@ -610,14 +610,13 @@ void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
         w2k_fill_rgb(d, x, y, w, 1, 74, 107, 142);
         w2k_fill_rgb(d, x, y + 1, w, 1, 180, 196, 219);
         /* Show Desktop: a darker sliver, lighter at its top and bottom,
-         * behind a dark divider -- read off a screenshot. */
+         * read off a screenshot; its own edge marks it, no line. */
         static const Stop sliver[] = {
             {    0,  64,  81, 111 }, {   45, 149, 157, 168 }, {  130, 118, 127, 136 },
             {  250,  90,  97, 113 }, {  600,  95, 104, 118 }, {  850, 116, 129, 148 },
             { 1000, 141, 150, 159 },
         };
         grad_fill(d, x + w - 12, y, 12, h, sliver, (int)(sizeof sliver / sizeof *sliver), NULL, 256);
-        w2k_fill_rgb(d, x + w - 13, y + 1, 1, h - 1, 107, 120, 137);
         return;
     }
     if (theme == THEME_XP) {

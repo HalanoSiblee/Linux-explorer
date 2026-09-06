@@ -667,7 +667,7 @@ static void taskbar_draw(Pixmap pm, int h)
                 char buf[160];
                 w2k_ellipsis(F_UI, c->name, avail, buf, sizeof buf);
                 w2k_text_rgb(pm, F_UI, tx, by + (bh - w2k_font_height(F_UI)) / 2,
-                             buf, 0, 0, 0);
+                             buf, 255, 255, 255);
             }
             continue;
         }
@@ -734,16 +734,17 @@ static void taskbar_draw(Pixmap pm, int h)
         int tw = w2k_text_width(F_UI, clock_text, -1);
         int dw = w2k_text_width(F_UI, clock_date, -1);
         int ty = w2k_taskbar_small ? 3 : 6, dy = w2k_taskbar_small ? 15 : 21;
+        /* White, as Windows 7 sets its clock. */
         w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - tw) / 2, ty,
-                     clock_text, 0, 0, 0);
+                     clock_text, 255, 255, 255);
         w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - dw) / 2, dy,
-                     clock_date, 0, 0, 0);
+                     clock_date, 255, 255, 255);
     } else if (w2k_taskbar_showclock) {
         int cy = by + (BTN_H - w2k_font_height(F_UI)) / 2;
         if (w2k_theme == THEME_CLASSIC)
             w2k_text(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text, C_TEXT);
         else if (w2k_theme == THEME_BASIC7)
-            w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text, 0, 0, 0);
+            w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text, 255, 255, 255);
         else
             w2k_text_rgb(pm, F_UI, tray_x + (w2k_theme == THEME_XP ? 12 : TRAY_PAD), cy,
                          clock_text, 255, 255, 255);

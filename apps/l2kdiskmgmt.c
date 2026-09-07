@@ -556,7 +556,7 @@ enum { ID_EXIT = 100, ID_REFRESH, ID_RESCAN, ID_HELP, ID_ABOUT, ID_SETTINGS,
 enum { PANE_VOLUMES, PANE_DISKS, PANE_GRAPH, PANE_NONE };
 
 #define DISK_ROW_H   72
-#define DISK_LABEL_W 78
+#define DISK_LABEL_W 86
 #define LEGEND_H     22
 #define STRIPE_H      8
 
@@ -708,35 +708,52 @@ static void hatch(Drawable d, int x, int y, int w, int h)
     }
 }
 
-static void draw_graph(Drawable d)
+/* A line of the label box or a region, cut to fit. */
+static void fit_text(Drawable d, int font, int x, int y, int maxw, const char *text)
+{
+    char t[160];
+    if (maxw <= 4) return;
+    w2k_ellipsis(font, text, maxw, t, sizeof t);
+    w2k_text(d, font, x, y, t, C_TEXT);
+}
+
+/* The rows are drawn on a pixmap the size of the pane's inside and
+ * copied over, so a row scrolled half out of view stops at the edge. */
+static void draw_graph(Drawable dst)
 {
     W2kRect g = app.bottom;
-    w2k_fill(d, g.x, g.y, g.w, g.h, C_WINDOW);
-    w2k_edge(d, g.x, g.y, g.w, g.h, EDGE_SUNKEN, BF_RECT);
+    w2k_fill(dst, g.x, g.y, g.w, g.h, C_WINDOW);
+    w2k_edge(dst, g.x, g.y, g.w, g.h, EDGE_SUNKEN, BF_RECT);
     int inner_x = g.x + 2, inner_y = g.y + 2, inner_w = g.w - 4, inner_h = g.h - 4;
     int need = w2k_scroll_needed(&app.gsb);
     if (need) inner_w -= SCROLL_W;
+    if (inner_w <= 0 || inner_h <= 0) return;
+    int pw = w2k_cw(inner_x, inner_w), ph = w2k_cw(inner_y, inner_h);
+    Pixmap d = XCreatePixmap(w2k.dpy, w2k.root, (unsigned)pw, (unsigned)ph, w2k.depth);
+    w2k_fill(d, 0, 0, inner_w, inner_h, C_WINDOW);
     int fh = w2k_font_height(F_UI);
-    int y = inner_y + 4 - app.gsb.pos;
-    int gx = inner_x + 6 + DISK_LABEL_W, gw = inner_w - 12 - DISK_LABEL_W;
+    int y = 4 - app.gsb.pos;
+    int lx = 6;
+    int gx = lx + DISK_LABEL_W, gw = inner_w - 12 - DISK_LABEL_W;
     if (gw < 40) gw = 40;
     layout_regions(gw - 2);
     for (int i = 0; i < ndisks; i++, y += DISK_ROW_H) {
         Disk *dk = &disks[i];
         int rh = DISK_ROW_H - 6;
-        if (y + rh < inner_y || y > inner_y + inner_h) continue;
+        if (y + rh < 0 || y > inner_h) continue;
         /* The disk's label box, grey in a black line. */
-        int lx = inner_x + 6;
         w2k_fill(d, lx, y, DISK_LABEL_W, rh, C_FACE);
         w2k_frame(d, lx, y, DISK_LABEL_W + gw, rh, C_BLACK);
         if (app.sel_disk == i && app.graph_focus) hatch(d, lx + 1, y + 1, DISK_LABEL_W - 1, rh - 2);
         char b[64];
+        int tw = DISK_LABEL_W - 8;
         w2k_icon_draw(d, lx + 4, y + 4, dk->rom ? ICO_DRIVE_CD : dk->rm ? ICO_DRIVE_FLOPPY : ICO_DRIVE_HDD);
         snprintf(b, sizeof b, dk->rom ? "CD-ROM %d" : "Disk %d", dk->index);
-        w2k_text(d, F_UI_BOLD, lx + 24, y + 4, b, C_TEXT);
-        w2k_text(d, F_UI, lx + 4, y + 4 + fh + 2, dk->rom ? "DVD" : dk->rm ? "Removable" : "Basic", C_TEXT);
-        if (dk->size) w2k_text(d, F_UI, lx + 4, y + 4 + 2 * (fh + 2), fmt_size(dk->size, b, sizeof b), C_TEXT);
-        w2k_text(d, F_UI, lx + 4, y + 4 + 3 * (fh + 2), dk->rom && !dk->size ? "No Media" : dk->ro ? "Read-only" : "Online", C_TEXT);
+        fit_text(d, F_UI_BOLD, lx + 24, y + 4, DISK_LABEL_W - 28, b);
+        fit_text(d, F_UI, lx + 4, y + 4 + fh + 2, tw, dk->rom ? "DVD" : dk->rm ? "Removable" : "Basic");
+        if (dk->size) fit_text(d, F_UI, lx + 4, y + 4 + 2 * (fh + 2), tw, fmt_size(dk->size, b, sizeof b));
+        fit_text(d, F_UI, lx + 4, y + 4 + 3 * (fh + 2), tw,
+                 dk->rom && !dk->size ? "No Media" : dk->ro ? "Read-only" : "Online");
         w2k_vline(d, lx + DISK_LABEL_W, y, rh, C_BLACK);
         /* The regions. */
         for (int r = 0; r < nregions; r++) {
@@ -745,10 +762,7 @@ static void draw_graph(Drawable d)
             int rx = gx + 1 + rg->x, rw = rg->w, ry = y + 1, rhh = rh - 2;
             int kind = region_kind(rg);
             w2k_fill(d, rx, ry, rw, rhh, C_WINDOW);
-            /* The extended container is a green line around its drives. */
-            if (kind == LG_EXTENDED) {
-                w2k_fill_rgb(d, rx, ry, rw, rhh, 240, 255, 240);
-            }
+            if (kind == LG_EXTENDED) w2k_fill_rgb(d, rx, ry, rw, rhh, 240, 255, 240);
             const unsigned char *c = legend_rgb[kind];
             w2k_fill_rgb(d, rx, ry, rw, STRIPE_H, c[0], c[1], c[2]);
             if (rg->inext) {
@@ -777,25 +791,21 @@ static void draw_graph(Drawable d)
                 Part *p = &dk->part[rg->part];
                 char nm[80];
                 part_volname(dk, i, p, nm, sizeof nm);
-                if (p->extended) { snprintf(nm, sizeof nm, "Extended partition"); }
+                if (p->extended) snprintf(nm, sizeof nm, "Extended partition");
                 snprintf(l1, sizeof l1, "%s%s%s%s", nm, p->mount[0] ? " (" : "",
                          p->mount[0] ? p->mount : "", p->mount[0] ? ")" : "");
                 snprintf(l2, sizeof l2, "%s %s", fmt_size(p->size, b, sizeof b),
                          p->extended ? "" : fs_name(p->fstype));
                 part_status(p, l3, sizeof l3);
             }
-            char t[128];
-            w2k_ellipsis(F_UI_BOLD, l1, rw - 8, t, sizeof t);
-            w2k_text(d, F_UI_BOLD, rx + 4, ty, t, C_TEXT);
-            w2k_ellipsis(F_UI, l2, rw - 8, t, sizeof t);
-            w2k_text(d, F_UI, rx + 4, ty + fh + 2, t, C_TEXT);
-            if (l3[0]) {
-                w2k_ellipsis(F_UI, l3, rw - 8, t, sizeof t);
-                w2k_text(d, F_UI, rx + 4, ty + 2 * (fh + 2), t, C_TEXT);
-            }
+            fit_text(d, F_UI_BOLD, rx + 4, ty, rw - 8, l1);
+            fit_text(d, F_UI, rx + 4, ty + fh + 2, rw - 8, l2);
+            if (l3[0]) fit_text(d, F_UI, rx + 4, ty + 2 * (fh + 2), rw - 8, l3);
         }
     }
-    if (need) w2k_scroll_draw(d, &app.gsb);
+    XCopyArea(w2k.dpy, d, dst, w2k.gc, 0, 0, (unsigned)pw, (unsigned)ph, w2k_cx(inner_x), w2k_cx(inner_y));
+    XFreePixmap(w2k.dpy, d);
+    if (need) w2k_scroll_draw(dst, &app.gsb);
 }
 
 static void draw_legend(Drawable d)
@@ -907,6 +917,7 @@ static int region_at(int x, int y, int *disk_label)
     int inner_x = g.x + 2, inner_y = g.y + 2;
     int yy = inner_y + 4 - app.gsb.pos;
     int gx = inner_x + 6 + DISK_LABEL_W;
+    if (y < inner_y || y >= g.y + g.h - 2) return -1;
     for (int i = 0; i < ndisks; i++, yy += DISK_ROW_H) {
         int rh = DISK_ROW_H - 6;
         if (y < yy || y >= yy + rh) continue;

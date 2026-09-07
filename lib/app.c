@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -498,9 +499,99 @@ const char *w2k_distro_name(void)
     return name;
 }
 
-/* The Start button's icon follows the setting: the Windows flag is the
- * built-in artwork (or ~/.w2k/icons/startflag.ico if one was dropped
- * there), the others are files beside it. */
+/* A sixteen-pixel Tux for the Start button, drawn here because no
+ * distribution ships one at that size: K is the body, W the belly and
+ * eyes, O the beak and feet, nothing else -- no outline. The 32-pixel
+ * slot doubles it. */
+static const char *const tux16[16] = {
+    "......KKKK......",
+    ".....KKKKKK.....",
+    "....KKWKKWKK....",
+    "....KKKKKKKK....",
+    "....KOOOOOOK....",
+    "...KKKOOOOKKK...",
+    "...KKWWWWWWKK...",
+    "..KKKWWWWWWKKK..",
+    "..KKWWWWWWWWKK..",
+    "..KKWWWWWWWWKK..",
+    "..KKWWWWWWWWKK..",
+    "...KKWWWWWWKK...",
+    "...KKKWWWWKKK...",
+    "....OOOKKOOO....",
+    "...OOOO..OOOO...",
+    "................"
+};
+
+static unsigned char *tux_rgba(int n)
+{
+    unsigned char *out = calloc((size_t)n * n, 4);
+    if (!out) return NULL;
+    for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++) {
+            unsigned char *p = out + ((size_t)y * n + x) * 4;
+            switch (tux16[y * 16 / n][x * 16 / n]) {
+            case 'K': p[0] = p[1] = p[2] = 16;  p[3] = 255; break;
+            case 'W': p[0] = p[1] = p[2] = 250; p[3] = 255; break;
+            case 'O': p[0] = 240; p[1] = 150; p[2] = 30; p[3] = 255; break;
+            default: break;                     /* clear */
+            }
+        }
+    return out;
+}
+
+/* The distribution's logo as a PNG: the icon os-release names, then the
+ * usual names, in the icon theme's apps folders (a size that scales well
+ * to the sixteen-pixel button first) and the pixmaps folder. */
+int w2k_distro_logo_path(char *buf, int n)
+{
+    char logo[80] = "", id[80] = "";
+    FILE *f = fopen("/etc/os-release", "r");
+    if (!f) f = fopen("/usr/lib/os-release", "r");
+    if (f) {
+        char line[256];
+        while (fgets(line, sizeof line, f)) {
+            line[strcspn(line, "\r\n")] = 0;
+            char *eq = strchr(line, '=');
+            if (!eq) continue;
+            *eq = 0;
+            char *v = eq + 1;
+            if (*v == '"') { v++; char *q = strchr(v, '"'); if (q) *q = 0; }
+            if (!strcmp(line, "LOGO"))    snprintf(logo, sizeof logo, "%s", v);
+            else if (!strcmp(line, "ID")) snprintf(id, sizeof id, "%s", v);
+        }
+        fclose(f);
+    }
+    static const char *const dirs[] = {
+        "/usr/share/icons/hicolor/32x32/apps", "/usr/share/icons/hicolor/48x48/apps",
+        "/usr/share/icons/hicolor/64x64/apps", "/usr/share/icons/hicolor/128x128/apps",
+        "/usr/share/icons/hicolor/256x256/apps", "/usr/share/pixmaps",
+        "/usr/share/icons/hicolor/16x16/apps", "/usr/share/icons/hicolor/32x32/places",
+        "/usr/share/icons/hicolor/48x48/places", NULL };
+    char names[7][80];
+    int nn = 0;
+    if (logo[0]) snprintf(names[nn++], 80, "%s", logo);
+    if (id[0]) {
+        snprintf(names[nn++], 80, "%s-logo-icon", id);
+        snprintf(names[nn++], 80, "%s-logo", id);
+        snprintf(names[nn++], 80, "%s", id);
+    }
+    snprintf(names[nn++], 80, "distributor-logo");
+    snprintf(names[nn++], 80, "start-here");
+    for (int d = 0; dirs[d]; d++)
+        for (int i = 0; i < nn; i++) {
+            snprintf(buf, (size_t)n, "%s/%s.png", dirs[d], names[i]);
+            if (access(buf, R_OK) == 0) return 1;
+        }
+    if (n > 0) buf[0] = 0;
+    return 0;
+}
+
+/* The Start button's icon follows the setting. A file dropped into
+ * ~/.w2k/icons (startflag.ico, startflag-tux.ico, startflag-distro.ico)
+ * wins for its option; otherwise the flag is the built-in artwork, Tux
+ * is drawn above, and the distribution's logo is read from the system,
+ * with Tux standing in where there is none. Applied whenever the scheme
+ * is read, so it holds from logon and follows the icon set. */
 void w2k_start_icon_apply(void)
 {
     const char *home = getenv("HOME");
@@ -512,7 +603,20 @@ void w2k_start_icon_apply(void)
         snprintf(path, sizeof path, "%s/.w2k/icons/%s", home, file);
         if (w2k_icon_load_file(ICO_STARTFLAG, path)) return;
     }
-    snprintf(path, sizeof path, "/usr/local/share/w2k/icons/%s", file);
+    if (w2k_start_icon == SI_DISTRO && w2k_distro_logo_path(path, sizeof path)) {
+        int w = 0, h = 0;
+        unsigned char *rgba = w2k_image_load(path, &w, &h);
+        int ok = rgba && w2k_icon_load_rgba(ICO_STARTFLAG, rgba, w, h);
+        free(rgba);
+        if (ok) return;
+    }
+    if (w2k_start_icon != SI_FLAG) {
+        unsigned char *i16 = tux_rgba(16), *i32 = tux_rgba(32);
+        if (i16 && i32) { w2k_icon_set_user(ICO_STARTFLAG, i16, i32); return; }
+        free(i16);
+        free(i32);
+    }
+    snprintf(path, sizeof path, W2K_PREFIX "/share/w2k/icons/%s", file);
     if (w2k_icon_load_file(ICO_STARTFLAG, path)) return;
     w2k_icon_load_file(ICO_STARTFLAG, NULL);        /* built-in flag */
 }
@@ -784,6 +888,7 @@ int w2k_scheme_load(const char *path)
      * desktop is told. A few dozen small files: cheap. */
     w2k_skin_cache_flush();
     w2k_icon_load_default();
+    w2k_start_icon_apply();          /* over whatever the set brought */
     return n;
 }
 
@@ -1109,6 +1214,7 @@ int w2k_init(const char *appname)
      * manager adds its own masks to the root later; this one is harmless. */
     XSelectInput(d, w2k.root, PropertyChangeMask);
     w2k_icon_load_default();
+    w2k_start_icon_apply();
     return 0;
 }
 

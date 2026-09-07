@@ -160,9 +160,9 @@ in the window's own colour with thin Minimize, Maximize and Close glyphs
 (Close turns red when pressed), a one-pixel window border with rounded
 corners and an invisible six-pixel resize margin outside it, as Windows
 10 and 11 have, and flat rounded buttons everywhere -- in dialogs, on
-toolbars and on the taskbar, where a running window is marked by an
-accent-coloured line under its button and the default button in a dialog
-is filled with the accent colour. Modern Light is white and grey with a
+toolbars and on the taskbar, where the active window's button is pressed
+in and marked with an accent-coloured line, and the default button in a
+dialog is filled with the accent colour. Modern Light is white and grey with a
 blue accent; Modern Dark the same on near-black. The Appearance page has
 a word for people who choose it.
 

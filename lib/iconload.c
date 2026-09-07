@@ -190,6 +190,42 @@ int w2k_icon_load_file(int id, const char *path)
     return 1;
 }
 
+/* Ready-made 16 and 32 pixel images for an icon, taken over. */
+void w2k_icon_set_user(int id, unsigned char *i16, unsigned char *i32)
+{
+    if (id < 0 || id >= N_ICONS) { free(i16); free(i32); return; }
+    free(w2k_icon_user16[id]);
+    free(w2k_icon_user32[id]);
+    w2k_icon_user16[id] = i16;
+    w2k_icon_user32[id] = i32;
+    w2k_icon_cache_drop(id);
+}
+
+/* An icon's artwork replaced by an RGBA image of any size: centred on a
+ * square if it is not one, then scaled to the two slots. */
+int w2k_icon_load_rgba(int id, const unsigned char *rgba, int w, int h)
+{
+    if (id < 0 || id >= N_ICONS || !rgba || w <= 0 || h <= 0) return 0;
+    const unsigned char *src = rgba;
+    unsigned char *sq = NULL;
+    int side = w > h ? w : h;
+    if (w != h) {
+        sq = calloc((size_t)side * side, 4);
+        if (!sq) return 0;
+        int ox = (side - w) / 2, oy = (side - h) / 2;
+        for (int y = 0; y < h; y++)
+            memcpy(sq + ((size_t)(y + oy) * side + ox) * 4, rgba + (size_t)y * w * 4,
+                   (size_t)w * 4);
+        src = sq;
+    }
+    unsigned char *i16 = w2k_rgba_scale(src, side, side, 16);
+    unsigned char *i32 = w2k_rgba_scale(src, side, side, 32);
+    free(sq);
+    if (!i16 || !i32) { free(i16); free(i32); return 0; }
+    w2k_icon_set_user(id, i16, i32);
+    return 1;
+}
+
 /* An icon file registered as a new icon id, whatever format it is in:
  * .ico through the reader above, anything else through the image loader.
  * Cached by path, so a pinned icon costs one decode per session. */

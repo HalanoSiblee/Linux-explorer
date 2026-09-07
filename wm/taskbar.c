@@ -786,6 +786,33 @@ int taskbar_render(const char *path, int w)
     tb_pw = w2k_px(w);
     tb_ph = w2k_px(tb_h);
     w2k_power_read(&bat);
+    /* W2K_RENDER_TASKS="Title[,icon];Title..." stands some windows on the
+     * bar, the first of them active, so the buttons can be looked at. */
+    static Client fake[8];
+    const char *spec = getenv("W2K_RENDER_TASKS");
+    if (spec && *spec) {
+        char buf[512];
+        snprintf(buf, sizeof buf, "%s", spec);
+        int n = 0;
+        for (char *tok = strtok(buf, ";"); tok && n < 8; tok = strtok(NULL, ";")) {
+            memset(&fake[n], 0, sizeof fake[n]);
+            char *comma = strrchr(tok, ',');
+            fake[n].icon = ICO_APP;
+            if (comma) { *comma = 0; fake[n].icon = atoi(comma + 1); }
+            fake[n].name = strdup(tok);
+            fake[n].mapped = 1;
+            n++;
+        }
+        /* The list is newest first; the first named goes leftmost and
+         * is the active one. */
+        for (int i = 0; i < n; i++) fake[i].next = i + 1 < n ? &fake[i + 1] : NULL;
+        clients = n ? &fake[0] : NULL;
+        for (int i = 0; i < n / 2; i++) {
+            Client tmp = fake[i]; fake[i] = fake[n - 1 - i]; fake[n - 1 - i] = tmp;
+        }
+        for (int i = 0; i < n; i++) fake[i].next = i + 1 < n ? &fake[i + 1] : NULL;
+        focused = n ? &fake[n - 1] : NULL;
+    }
     layout();
     /* W2K_RENDER_ORB=n paints the orb part way through its glow. */
     if (getenv("W2K_RENDER_ORB") && theme_start_skin() && orb_frames[0]) {

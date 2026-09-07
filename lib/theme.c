@@ -441,19 +441,20 @@ void w2k_theme_capbtn(Drawable d, int x, int y, int w, int h, int kind,
          * one for Close. The glyph is a one-pixel stroke in the title's
          * colour, ten pixels across, centred. */
         int t = w2k_scale_raw ? w2k_th(1) : 1;
-        int g[3];
+        int g[3], bg[3];
         const unsigned char *tc = w2k_scheme_rgb(active ? C_TITLETEXT
                                                         : C_INACTIVETITLETEXT);
+        const unsigned char *cc = w2k_scheme_rgb(active ? C_ACTIVETITLE
+                                                        : C_INACTIVETITLE);
         g[0] = tc[0]; g[1] = tc[1]; g[2] = tc[2];
+        bg[0] = cc[0]; bg[1] = cc[1]; bg[2] = cc[2];
         if (pressed) {
             if (kind == W2K_CAP_CLOSE) {
-                w2k_fill_rgb(d, x, y, w, h, 196, 43, 28);
+                bg[0] = 196; bg[1] = 43; bg[2] = 28;
                 g[0] = g[1] = g[2] = 255;
-            } else {
-                int f[3];
-                w2k_modern_rgb(MODERN_PRESSED, f);
-                w2k_fill_rgb(d, x, y, w, h, f[0], f[1], f[2]);
-            }
+            } else
+                w2k_modern_rgb(MODERN_PRESSED, bg);
+            w2k_fill_rgb(d, x, y, w, h, bg[0], bg[1], bg[2]);
         }
         fg_rgb(g);
         int n = S(MD_GLYPH);
@@ -475,6 +476,26 @@ void w2k_theme_capbtn(Drawable d, int x, int y, int w, int h, int kind,
             break;
         }
         default:
+            /* The cross: two one-pixel diagonals. A bare diagonal of
+             * single pixels touches only at the corners and reads as a
+             * chain of dots, white on a dark caption especially, so at
+             * one pixel each step gets two soft neighbours -- the same
+             * anti-aliasing the Windows glyph has. */
+            if (t == 1) {
+                int soft[3];
+                for (int k = 0; k < 3; k++) soft[k] = (g[k] * 2 + bg[k] * 3) / 5;
+                fg_rgb(soft);
+                for (int i = 0; i < n; i++) {
+                    int xa = cx + i, xb = cx + n - 1 - i, yy = cy + i;
+                    if (i + 1 < n) {
+                        w2k_fill_fg(d, xa + 1, yy, 1, 1);
+                        w2k_fill_fg(d, xa, yy + 1, 1, 1);
+                        w2k_fill_fg(d, xb - 1, yy, 1, 1);
+                        w2k_fill_fg(d, xb, yy + 1, 1, 1);
+                    }
+                }
+                fg_rgb(g);
+            }
             for (int i = 0; i < n; i++) {
                 w2k_fill_fg(d, cx + i, cy + i, t, t);
                 w2k_fill_fg(d, cx + n - t - i, cy + i, t, t);
@@ -594,7 +615,7 @@ int w2k_theme_task_h(int theme)
     /* XP's task buttons: rows 573..597 of a 570..599 bar. Windows 7's
      * fill the bar, top line and all: forty rows, or thirty with small
      * icons. */
-    if (theme == THEME_MODERN) return 32;
+    if (theme == THEME_MODERN) return 22;      /* the classic bar's height */
     return theme == THEME_BASIC7 ? (w2k_taskbar_small ? 30 : W7_BAR_H) : 25;
 }
 
@@ -602,21 +623,21 @@ void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
                           int theme)
 {
     if (theme == THEME_MODERN) {
-        /* Windows 11's task buttons: nothing but a short accent line
-         * under a running window's icon, a rounded box behind it under
-         * the pointer, and a wider line on a fuller box for the active
-         * window. */
+        /* Every running window has a rounded box, as the classic bar
+         * gives it a button; the pointer lightens it, and the active
+         * window's is pressed in and marked with an accent line. */
         int f[3], l[3], a[3];
         w2k_modern_rgb(MODERN_ACCENT, a);
         w2k_modern_rgb(MODERN_BORDER, l);
-        if (state != W2K_TB_NORMAL) {
-            w2k_modern_rgb(state == W2K_TB_DOWN ? MODERN_HOT : MODERN_BUTTON, f);
-            w2k_round_rect_rgb(d, x, y, w, h, 4, f, l);
+        w2k_modern_rgb(state == W2K_TB_DOWN ? MODERN_PRESSED :
+                       state == W2K_TB_HOT  ? MODERN_HOT : MODERN_BUTTON, f);
+        w2k_round_rect_rgb(d, x, y, w, h, 4, f, l);
+        if (state == W2K_TB_DOWN) {
+            int lw = S(16), lh = S(2);
+            if (lw > w - S(8)) lw = w - S(8);
+            w2k_round_fill_rgb(d, x + (w - lw) / 2, y + h - lh - S(2), lw, lh, 1,
+                               a[0], a[1], a[2]);
         }
-        int lw = S(state == W2K_TB_DOWN ? 16 : 6), lh = S(3);
-        if (lw > w - S(4)) lw = w - S(4);
-        w2k_round_fill_rgb(d, x + (w - lw) / 2, y + h - lh - S(1), lw, lh, 1,
-                           a[0], a[1], a[2]);
         return;
     }
     if (theme == THEME_BASIC7) {

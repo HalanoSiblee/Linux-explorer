@@ -802,6 +802,9 @@ int  w2k_icon_sets(char names[][32], int max);  /* the sets available, win2k fir
 const char *w2k_icon_set_label(const char *name);  /* "Windows XP" for "winxp" */
 /* Override one icon from a file, or restore the built-in when path is NULL. */
 int  w2k_icon_load_file(int id, const char *path);
+int  w2k_icon_load_rgba(int id, const unsigned char *rgba, int w, int h);
+void w2k_icon_set_user(int id, unsigned char *i16, unsigned char *i32);
+int  w2k_distro_logo_path(char *buf, int n);   /* the distribution's logo PNG */
 /* Register an icon file (.ico, .png, .bmp, .jpg) as a new icon id. */
 int  w2k_icon_from_file(const char *path);
 /* The built-in icon a slug names, or -1: the reverse of w2k_icon_slug(). */

@@ -142,9 +142,10 @@ Try it nested first, without logging out of anything:
                    who it is licensed to and the memory (Start > Programs >
                    Accessories > System Tools, or Run > linver)
 
-Four looks, from Display Properties > Appearance: the Windows 2000
+Five looks, from Display Properties > Appearance: the Windows 2000
 classic scheme (and its colour variants: Brick, Desert, Eggplant, a
 Windows Classic Dark and the rest), Windows XP (Luna, with the two-column
+Start menu), Windows Vista Basic (7's frames over Vista's dark bar and
 Start menu), Windows 7 Basic (with its Start menu, orb and taskbar), and
 Modern, in a Light and a Dark scheme. Every element's colour can be set
 from the basic-colours palette or by its red, green and blue values, and
@@ -154,6 +155,8 @@ chrome is cropped from screenshots and checked by diffing against them.
 ![Windows XP look: Luna windows, the two-column Start menu, Explorer, Task Manager and Display Properties](docs/windows-xp.png)
 
 ![Windows 7 Basic look: the orb, the Windows 7 Start menu and taskbar, with the Windows 7 icon set](docs/windows-7.png)
+
+![Windows Vista Basic look: the dark gradient bar with glassy task buttons, and the Vista Start menu with its power, lock and arrow buttons](docs/windows-vista.png)
 
 Modern is for anyone who wants the desktop without the bevels: title bars
 in the window's own colour with thin Minimize, Maximize and Close glyphs

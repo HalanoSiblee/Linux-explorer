@@ -60,6 +60,56 @@
 #define P7_TILE_W      59
 #define P7_TILE_H      53
 
+/* Windows Vista's panel, measured off its screenshot: the same 411
+ * columns, 474 rows, the white pane in the same place, the tile inside
+ * the top edge rather than above it, the right column from row 72 with
+ * three-row ruled gaps between its groups, and a strip of three buttons
+ * -- power, lock, arrow -- at the bottom right. */
+#define PV_H          474
+#define PV_LEFT_TOP     7
+#define PV_LEFT_BOT   464
+#define PV_LEFT_Y       8
+#define PV_AP_Y       388
+#define PV_AP_H        32
+#define PV_SEARCH_Y   432
+#define PV_SEARCH_H    22
+#define PV_RIGHT_Y     72
+#define PV_RROW_H      35
+#define PV_RSEP_H       3
+#define PV_TILE_X     307
+#define PV_TILE_Y       4
+#define PV_TILE_W      59
+#define PV_TILE_H      59
+#define PV_BTN_X      266
+#define PV_BTN_Y      431
+#define PV_BTN_W      132
+#define PV_BTN_H       25
+
+/* What differs between the two panels that share this layout. */
+typedef struct {
+    int over, h;                 /* rows above the panel; the panel's height */
+    int left_top, left_bot, left_y;
+    int ap_y, ap_h;
+    int search_y, search_h;
+    int right_y, rrow_h, rsep_h;
+    int btn_x, btn_y, btn_w, btn_h;   /* the button strip at the bottom right */
+    int ncell;
+    struct { int row, w; } cell[3];   /* its cells, left to right: col-2 row, width */
+} PanelMetrics;
+
+static const PanelMetrics metrics7 = {
+    P7_OVER, P7_H, P7_LEFT_TOP, P7_LEFT_BOT, P7_LEFT_Y, P7_AP_Y, P7_AP_H,
+    P7_SEARCH_Y, P7_SEARCH_H, P7_RIGHT_Y, P7_RROW_H, P7_RSEP_H,
+    P7_SHUT_X, P7_SHUT_Y, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H,
+    2, { { 1, P7_SHUT_W }, { 0, P7_ARROW_W }, { 0, 0 } }
+};
+static const PanelMetrics metricsv = {
+    0, PV_H, PV_LEFT_TOP, PV_LEFT_BOT, PV_LEFT_Y, PV_AP_Y, PV_AP_H,
+    PV_SEARCH_Y, PV_SEARCH_H, PV_RIGHT_Y, PV_RROW_H, PV_RSEP_H,
+    PV_BTN_X, PV_BTN_Y, PV_BTN_W, PV_BTN_H,
+    3, { { 1, 58 }, { 2, 52 }, { 0, 22 } }
+};
+
 /* Windows XP's panel, measured off its screenshot: 380 by 478, a 68-row
  * header (the last four rows are the orange rule), a 42-row footer, the
  * white column 2..189, the divider at 190 and the pale blue column from
@@ -70,7 +120,7 @@
 #define XP_LEFT_W   190
 #define XP_BODY_MIN 368      /* the reference body: the panel does not shrink */
 
-#define PANEL_W     (w2k_theme == THEME_BASIC7 ? P7_W : 380)
+#define PANEL_W     (W2K_THEME_IS7(w2k_theme) ? P7_W : 380)
 #define HEADER_H     XP_HEADER
 #define FOOTER_H     XP_FOOTER
 #define LEFT_W       XP_LEFT_W
@@ -91,7 +141,8 @@ typedef struct {
     char label[96];
 } Row;
 
-static int seven(void) { return w2k_theme == THEME_BASIC7; }
+static int seven(void) { return W2K_THEME_IS7(w2k_theme); }   /* 7 or Vista */
+static int vista(void) { return w2k_theme == THEME_VISTA; }
 
 static Row  left_rows[MAXROWS], right_rows[MAXROWS];
 static int  nleft, nright;
@@ -344,15 +395,19 @@ static void draw_row(Drawable d, const Row *r, int x, int y, int w, int rh,
 /* ------------------------------------------------------------------ *
  * The Windows 7 panel
  * ------------------------------------------------------------------ */
-static struct { const char *name; W2kSkin *s; int tried; } panel_skins[5] = {
+#define NPANEL_SKINS 7
+static struct { const char *name; W2kSkin *s; int tried; } panel_skins[NPANEL_SKINS] = {
     { "w7-usertile.png", NULL, 0 }, { "xp-panel-header.png", NULL, 0 },
     { "xp-panel-footer.png", NULL, 0 }, { "xp-panel-body.png", NULL, 0 },
-    { "w7-panel.png", NULL, 0 }
+    { "w7-panel.png", NULL, 0 }, { "vista-usertile.png", NULL, 0 },
+    { "vista-power.png", NULL, 0 }
 };
+
+static const PanelMetrics *pm7(void) { return vista() ? &metricsv : &metrics7; }
 
 void startpanel_skins_reload(void)
 {
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < NPANEL_SKINS; i++) {
         w2k_skin_free(panel_skins[i].s);
         panel_skins[i].s = NULL;
         panel_skins[i].tried = 0;
@@ -362,7 +417,7 @@ void startpanel_skins_reload(void)
 static W2kSkin *skin7(const char *name)
 {
 #define cache panel_skins
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < NPANEL_SKINS; i++) {
         if (strcmp(cache[i].name, name)) continue;
         if (!cache[i].tried) {
             char path[1024];
@@ -436,38 +491,102 @@ static void panel7_ground(Drawable pm, int x0, int y0, int w)
     w2k_fill_fg(pm, x0 + w - 2, y0 + 1, 1, P7_H - 2);
 }
 
+/* Vista's ground: one grey gradient, light at the top, dark through the
+ * middle and lighter again at the bottom, measured every ten rows off
+ * the screenshot; a dark line outside a lighter one all round, and a
+ * light line over the bottom edge. */
+static void panelv_ground(Drawable pm)
+{
+    static const struct { short y; unsigned char g; } st[] = {
+        {   0, 109 }, {  10, 106 }, {  20, 103 }, {  30,  99 }, {  40,  94 },
+        {  50,  89 }, {  60,  84 }, {  70,  79 }, {  80,  75 }, {  90,  72 },
+        { 100,  70 }, { 110,  67 }, { 120,  65 }, { 130,  63 }, { 140,  61 },
+        { 150,  59 }, { 160,  57 }, { 170,  56 }, { 180,  54 }, { 190,  53 },
+        { 200,  52 }, { 220,  51 }, { 240,  51 }, { 250,  52 }, { 260,  53 },
+        { 270,  54 }, { 280,  55 }, { 290,  57 }, { 300,  59 }, { 310,  61 },
+        { 320,  63 }, { 330,  66 }, { 340,  68 }, { 350,  71 }, { 360,  74 },
+        { 370,  77 }, { 380,  80 }, { 390,  83 }, { 400,  87 }, { 410,  93 },
+        { 420, 100 }, { 430, 106 }, { 440, 113 }, { 450, 118 }, { 460, 123 },
+        { 470, 127 }, { 473, 127 },
+    };
+    int n = (int)(sizeof st / sizeof *st);
+    for (int y = 0; y < PV_H; y++) {
+        int k = 0;
+        while (k < n - 1 && st[k + 1].y < y) k++;
+        int g = st[k].g;
+        if (k < n - 1 && st[k + 1].y > st[k].y)
+            g += (st[k + 1].g - st[k].g) * (y - st[k].y) / (st[k + 1].y - st[k].y);
+        w2k_fill_rgb(pm, 1, y, P7_W - 2, 1, g, g, g);
+    }
+    w2k_fill_rgb(pm, 0, 0, 1, PV_H, 45, 45, 45);
+    w2k_fill_rgb(pm, P7_W - 1, 0, 1, PV_H, 45, 45, 45);
+    w2k_fill_rgb(pm, 1, 0, 1, PV_H, 103, 103, 103);
+    w2k_fill_rgb(pm, P7_W - 2, 0, 1, PV_H, 103, 103, 103);
+    w2k_fill_rgb(pm, 1, PV_H - 2, P7_W - 2, 1, 159, 159, 159);
+    w2k_fill_rgb(pm, 0, PV_H - 1, P7_W, 1, 45, 45, 45);
+}
+
+/* The pointer's row on Vista's dark pane: a lighter grey box. */
+static void hoverv(Drawable d, int x, int y, int w, int h)
+{
+    fill(d, x, y, w, h, w2k_rgb(92, 92, 92));
+    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(150, 150, 150));
+    rect_fg(d, x, y, w, h);
+}
+
+/* The Windows 7 panel, and Vista's, which lays its rows out the same way
+ * on its own ground. */
 static void panel7_draw(Drawable pm)
 {
-    W2kSkin *tile = skin7("w7-usertile.png");
-    int oy = P7_OVER;
-    /* Above the panel only the tile is window (the rest is shaped away);
-     * the desktop colour is for the W2K_RENDER picture of it. */
-    fill(pm, 0, 0, P7_W, oy, w2k.col[C_DESKTOP]);
-    panel7_ground(pm, 0, oy, P7_W);
-    /* The white column, in a dark line. */
-    fill(pm, P7_LEFT_X, oy + P7_LEFT_TOP, P7_LEFT_W, P7_LEFT_BOT - P7_LEFT_TOP + 1,
-         w2k_rgb(255, 255, 255));
-    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(101, 120, 138));
-    rect_fg(pm, P7_LEFT_X - 1, oy + P7_LEFT_TOP - 1,
-            P7_LEFT_W + 2, P7_LEFT_BOT - P7_LEFT_TOP + 3);
-    if (tile) w2k_skin_draw(pm, tile, P7_TILE_X, 0, 0, 0, P7_TILE_W, P7_TILE_H);
-    w2k_bigicon_draw(pm, P7_TILE_X + (P7_TILE_W - 32) / 2, (P7_TILE_H - 32) / 2,
-                     ICO_MYCOMPUTER);
+    const PanelMetrics *m = pm7();
+    int v = vista();
+    int oy = m->over;
+    if (v) {
+        panelv_ground(pm);
+    } else {
+        /* Above the panel only the tile is window (the rest is shaped
+         * away); the desktop colour is for the W2K_RENDER picture of it. */
+        fill(pm, 0, 0, P7_W, oy, w2k.col[C_DESKTOP]);
+        panel7_ground(pm, 0, oy, P7_W);
+    }
+    /* The white column, in a dark line; Vista's has a lighter line over
+     * it and another under it. */
+    int lh = m->left_bot - m->left_top + 1;
+    fill(pm, P7_LEFT_X, oy + m->left_top, P7_LEFT_W, lh, w2k_rgb(255, 255, 255));
+    XSetForeground(w2k.dpy, w2k.gc, v ? w2k_rgb(61, 61, 61) : w2k_rgb(101, 120, 138));
+    rect_fg(pm, P7_LEFT_X - 1, oy + m->left_top - 1, P7_LEFT_W + 2, lh + 2);
+    if (v) {
+        w2k_fill_rgb(pm, P7_LEFT_X - 1, oy + m->left_top - 2, P7_LEFT_W + 2, 1, 144, 144, 144);
+        w2k_fill_rgb(pm, P7_LEFT_X - 1, oy + m->left_bot + 2, P7_LEFT_W + 2, 1, 158, 158, 158);
+    }
+    /* The user's tile: Windows 7 stands it above the panel, Vista keeps
+     * it inside the top edge. */
+    if (v) {
+        W2kSkin *tile = skin7("vista-usertile.png");
+        if (tile) w2k_skin_draw(pm, tile, PV_TILE_X, PV_TILE_Y, 0, 0, PV_TILE_W, PV_TILE_H);
+        w2k_bigicon_draw(pm, PV_TILE_X + (PV_TILE_W - 32) / 2,
+                         PV_TILE_Y + (PV_TILE_H - 32) / 2, ICO_MYCOMPUTER);
+    } else {
+        W2kSkin *tile = skin7("w7-usertile.png");
+        if (tile) w2k_skin_draw(pm, tile, P7_TILE_X, 0, 0, 0, P7_TILE_W, P7_TILE_H);
+        w2k_bigicon_draw(pm, P7_TILE_X + (P7_TILE_W - 32) / 2, (P7_TILE_H - 32) / 2,
+                         ICO_MYCOMPUTER);
+    }
 
     int fh = w2k_font_height(F_UI);
     char buf[128];
+    unsigned long sepc = v ? w2k_rgb(224, 224, 224) : w2k_rgb(207, 229, 249);
 
     /* The white column: 32-pixel icons at 12 on 38-pixel rows, text at 51. */
-    int y = oy + P7_LEFT_Y;
+    int y = oy + m->left_y;
     for (int i = 0; i < nleft; i++) {
         const Row *r = &left_rows[i];
         if (r->kind == R_SEP) {
-            fill(pm, P7_LEFT_X + 12, y + P7_SEP_H / 2, P7_LEFT_W - 24, 1,
-                 w2k_rgb(207, 229, 249));
+            fill(pm, P7_LEFT_X + 12, y + P7_SEP_H / 2, P7_LEFT_W - 24, 1, sepc);
             y += P7_SEP_H;
             continue;
         }
-        if (y + P7_ROW_H > oy + P7_AP_Y - 4) break;
+        if (y + P7_ROW_H > oy + m->ap_y - 4) break;
         if (hot_col == 0 && hot_row == i)
             hover7(pm, P7_LEFT_X + 2, y, P7_LEFT_W - 4, P7_ROW_H, 1);
         if (r->icon >= 0) w2k_bigicon_draw(pm, P7_LEFT_X + 3, y + 3, r->icon);
@@ -477,22 +596,22 @@ static void panel7_draw(Drawable pm)
         y += P7_ROW_H;
     }
 
-    int ay = oy + P7_AP_Y;
-    fill(pm, P7_LEFT_X + 12, ay - 2, P7_LEFT_W - 24, 1, w2k_rgb(207, 229, 249));
+    int ay = oy + m->ap_y;
+    fill(pm, P7_LEFT_X + 12, ay - 2, P7_LEFT_W - 24, 1, sepc);
     if (hot_col == 0 && hot_row == nleft)
-        hover7(pm, P7_LEFT_X + 2, ay, P7_LEFT_W - 4, P7_AP_H, 1);
-    arrow7(pm, P7_LEFT_X + 11, ay + P7_AP_H / 2, 0, 0, 0);
-    w2k_text_rgb(pm, F_UI, P7_LEFT_X + 42, ay + (P7_AP_H - fh) / 2,
+        hover7(pm, P7_LEFT_X + 2, ay, P7_LEFT_W - 4, m->ap_h, 1);
+    arrow7(pm, P7_LEFT_X + 11, ay + m->ap_h / 2, 0, 0, 0);
+    w2k_text_rgb(pm, F_UI, P7_LEFT_X + 42, ay + (m->ap_h - fh) / 2,
                  "All Programs", 0, 0, 0);
 
     /* The search box: white in a dark line, the magnifier at its end. */
-    int sy = oy + P7_SEARCH_Y;
-    fill(pm, P7_SEARCH_X, sy, P7_SEARCH_W, P7_SEARCH_H, w2k_rgb(255, 255, 255));
-    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(74, 88, 101));
-    rect_fg(pm, P7_SEARCH_X, sy, P7_SEARCH_W, P7_SEARCH_H);
-    w2k_text_rgb(pm, F_UI, P7_SEARCH_X + 6, sy + (P7_SEARCH_H - fh) / 2,
+    int sy = oy + m->search_y, sh = m->search_h;
+    fill(pm, P7_SEARCH_X, sy, P7_SEARCH_W, sh, w2k_rgb(255, 255, 255));
+    XSetForeground(w2k.dpy, w2k.gc, v ? w2k_rgb(63, 63, 63) : w2k_rgb(74, 88, 101));
+    rect_fg(pm, P7_SEARCH_X, sy, P7_SEARCH_W, sh);
+    w2k_text_rgb(pm, F_UI, P7_SEARCH_X + 6, sy + (sh - fh) / 2,
                  "Search programs and files", 109, 109, 109);
-    int mx = P7_SEARCH_X + P7_SEARCH_W - 14, my = sy + P7_SEARCH_H / 2 - 2;
+    int mx = P7_SEARCH_X + P7_SEARCH_W - 14, my = sy + sh / 2 - 2;
     XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(58, 96, 140));
     XSetLineAttributes(w2k.dpy, w2k.gc, (unsigned)w2k_th(1), LineSolid, CapButt, JoinMiter);
     XDrawArc(w2k.dpy, pm, w2k.gc, w2k_cx(mx - 4), w2k_cx(my - 4),
@@ -503,24 +622,53 @@ static void panel7_draw(Drawable pm)
         w2k_fill_fg(pm, mx + 3 + i, my + 2 + i, 1, 1);
     }
 
-    /* The blue column: white text, 35 pixels a row. */
-    y = oy + P7_RIGHT_Y;
+    /* The right column: white text, 35 pixels a row. Windows 7 leaves a
+     * gap between groups; Vista rules it, a dark line over a light one. */
+    y = oy + m->right_y;
     for (int i = 0; i < nright; i++) {
         const Row *r = &right_rows[i];
-        if (r->kind == R_SEP) {          /* a gap; Windows 7 draws no rule */
-            y += P7_RSEP_H;
+        if (r->kind == R_SEP) {
+            if (v) {
+                w2k_fill_rgb(pm, P7_RIGHT_X - 3, y + 1, P7_RIGHT_W + 3, 1, 44, 44, 44);
+                w2k_fill_rgb(pm, P7_RIGHT_X - 3, y + 2, P7_RIGHT_W + 3, 1, 72, 72, 72);
+            }
+            y += m->rsep_h;
             continue;
         }
-        if (y + P7_RROW_H > oy + P7_SHUT_Y - 4) break;
-        if (hot_col == 1 && hot_row == i)
-            hover7(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, P7_RROW_H, 0);
+        if (y + m->rrow_h > oy + m->btn_y - 4) break;
+        if (hot_col == 1 && hot_row == i) {
+            if (v) hoverv(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, m->rrow_h);
+            else   hover7(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, m->rrow_h, 0);
+        }
         w2k_ellipsis(F_UI, r->label, P7_RIGHT_W - 30, buf, sizeof buf);
-        w2k_text_rgb(pm, F_UI, P7_RIGHT_X + 13, y + (P7_RROW_H - fh) / 2, buf,
+        w2k_text_rgb(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
                      255, 255, 255);
         if (r->kind == R_SUB)
-            arrow7(pm, P7_RIGHT_X + P7_RIGHT_W - 14, y + P7_RROW_H / 2,
+            arrow7(pm, P7_RIGHT_X + P7_RIGHT_W - 14, y + m->rrow_h / 2,
                    255, 255, 255);
-        y += P7_RROW_H;
+        y += m->rrow_h;
+    }
+
+    if (v) {
+        /* Power, lock and the arrow, cropped whole from the reference;
+         * the pointer's cell gets a light ring. */
+        W2kSkin *pb = skin7("vista-power.png");
+        int bx = m->btn_x, by = oy + m->btn_y;
+        if (pb) w2k_skin_draw(pm, pb, bx, by, 0, 0, PV_BTN_W, PV_BTN_H);
+        else {
+            fill(pm, bx, by, PV_BTN_W, PV_BTN_H, w2k_rgb(60, 60, 60));
+            XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(120, 120, 120));
+            rect_fg(pm, bx, by, PV_BTN_W, PV_BTN_H);
+        }
+        int cx = bx;
+        for (int k = 0; k < m->ncell; k++) {
+            if (hot_col == 2 && hot_row == m->cell[k].row) {
+                XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(210, 210, 210));
+                rect_fg(pm, cx + 1, by + 1, m->cell[k].w - 2, PV_BTN_H - 2);
+            }
+            cx += m->cell[k].w;
+        }
+        return;
     }
 
     /* Shut down, and the arrow beside it that stands in for Log Off. */
@@ -541,30 +689,31 @@ static void panel7_draw(Drawable pm)
  * (row 0, Log Off), 3 the search box. */
 static int hit7(int x, int y, int *col, int *row)
 {
-    int oy = P7_OVER;
+    const PanelMetrics *m = pm7();
+    int oy = m->over;
     *col = *row = -1;
-    if (x < 0 || x >= P7_W || y < oy || y >= oy + P7_H) return 0;
-    if (y >= oy + P7_SHUT_Y && y < oy + P7_SHUT_Y + P7_SHUT_H) {
-        if (x >= P7_SHUT_X && x < P7_SHUT_X + P7_SHUT_W) {
-            *col = 2; *row = 1; return 1;
-        }
-        if (x >= P7_SHUT_X + P7_SHUT_W &&
-            x < P7_SHUT_X + P7_SHUT_W + P7_ARROW_W) {
-            *col = 2; *row = 0; return 1;
+    if (x < 0 || x >= P7_W || y < oy || y >= oy + m->h) return 0;
+    if (y >= oy + m->btn_y && y < oy + m->btn_y + m->btn_h) {
+        int cx = m->btn_x;
+        for (int k = 0; k < m->ncell; k++) {
+            if (x >= cx && x < cx + m->cell[k].w) {
+                *col = 2; *row = m->cell[k].row; return 1;
+            }
+            cx += m->cell[k].w;
         }
     }
     if (x >= P7_SEARCH_X && x < P7_SEARCH_X + P7_SEARCH_W &&
-        y >= oy + P7_SEARCH_Y && y < oy + P7_SEARCH_Y + P7_SEARCH_H) {
+        y >= oy + m->search_y && y < oy + m->search_y + m->search_h) {
         *col = 3; *row = 0; return 1;
     }
     if (x >= P7_LEFT_X && x < P7_LEFT_X + P7_LEFT_W) {
-        if (y >= oy + P7_AP_Y && y < oy + P7_AP_Y + P7_AP_H) {
+        if (y >= oy + m->ap_y && y < oy + m->ap_y + m->ap_h) {
             *col = 0; *row = nleft; return 1;
         }
-        int cy = oy + P7_LEFT_Y;
+        int cy = oy + m->left_y;
         for (int i = 0; i < nleft; i++) {
             int rh = left_rows[i].kind == R_SEP ? P7_SEP_H : P7_ROW_H;
-            if (cy + rh > oy + P7_AP_Y - 4) break;
+            if (cy + rh > oy + m->ap_y - 4) break;
             if (y >= cy && y < cy + rh) {
                 if (left_rows[i].kind == R_SEP) return 0;
                 *col = 0; *row = i; return 1;
@@ -574,10 +723,10 @@ static int hit7(int x, int y, int *col, int *row)
         return 0;
     }
     if (x >= P7_RIGHT_X && x < P7_RIGHT_X + P7_RIGHT_W) {
-        int cy = oy + P7_RIGHT_Y;
+        int cy = oy + m->right_y;
         for (int i = 0; i < nright; i++) {
-            int rh = right_rows[i].kind == R_SEP ? P7_RSEP_H : P7_RROW_H;
-            if (cy + rh > oy + P7_SHUT_Y - 4) break;
+            int rh = right_rows[i].kind == R_SEP ? m->rsep_h : m->rrow_h;
+            if (cy + rh > oy + m->btn_y - 4) break;
             if (y >= cy && y < cy + rh) {
                 if (right_rows[i].kind == R_SEP) return 0;
                 *col = 1; *row = i; return 1;
@@ -743,7 +892,7 @@ static void panel_paint(void)
 /* Work out how tall the panel is for the rows it holds. */
 static void panel_measure(void)
 {
-    if (seven()) { panel_h = P7_H + P7_OVER; return; }
+    if (seven()) { panel_h = pm7()->h + pm7()->over; return; }
     int body_h = 8 + rows_height(left_rows, nleft, ROW_H) + 8 + ALLPROG_H;
     int right_h = 8 + rows_height(right_rows, nright, RROW_H);
     if (right_h > body_h) body_h = right_h;
@@ -833,7 +982,7 @@ static int row_id(int col, int row)
     if (col == 0) return row == nleft ? SM_ALLPROGRAMS :
                          (row >= 0 && row < nleft ? left_rows[row].id : 0);
     if (col == 1) return row >= 0 && row < nright ? right_rows[row].id : 0;
-    if (col == 2) return row == 0 ? SM_LOGOFF : SM_SHUTDOWN;
+    if (col == 2) return row == 1 ? SM_SHUTDOWN : SM_LOGOFF;   /* the arrow, and Vista's lock, log off */
     if (col == 3) return SM_SEARCH;
     return 0;
 }
@@ -911,7 +1060,23 @@ int startpanel_run(int bx, int by)
         XShapeCombineRectangles(w2k.dpy, panel, ShapeBounding, 0, 0, rs, 6,
                                 ShapeSet, Unsorted);
     }
-    if (seven()) {
+    if (vista()) {
+        /* A rounded rectangle, the corners' curve three, two, one, one. */
+        static const int ins[4] = { 3, 2, 1, 1 };
+        XRectangle rs[9];
+        int n = 0;
+        #define RV(x, y, w, h) (XRectangle){ (short)w2k_px(x), (short)w2k_px(y), \
+                                (unsigned short)(w2k_px((x) + (w)) - w2k_px(x)), \
+                                (unsigned short)(w2k_px((y) + (h)) - w2k_px(y)) }
+        for (int i = 0; i < 4; i++) {
+            rs[n++] = RV(ins[i], i, P7_W - 2 * ins[i], 1);
+            rs[n++] = RV(ins[i], PV_H - 1 - i, P7_W - 2 * ins[i], 1);
+        }
+        rs[n++] = RV(0, 4, P7_W, PV_H - 8);
+        #undef RV
+        XShapeCombineRectangles(w2k.dpy, panel, ShapeBounding, 0, 0, rs, n,
+                                ShapeSet, Unsorted);
+    } else if (seven()) {
         /* Only the panel and the tile above it are window; the desktop
          * shows either side of the tile. */
         static const int ins[4] = { 3, 2, 1, 1 };   /* the corners' curve */

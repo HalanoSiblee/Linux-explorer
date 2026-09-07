@@ -54,6 +54,7 @@ presets[] = {
 #define S(...) (const Tint[]){ __VA_ARGS__ }
     { "Windows Standard", NULL, 0, THEME_CLASSIC },
     { "Windows XP", NULL, 0, THEME_XP },
+    { "Windows Vista Basic", NULL, 0, THEME_VISTA },
     { "Windows 7 Basic", NULL, 0, THEME_BASIC7 },
     { "Windows Classic", S({C_FACE,192,192,192},{C_LIGHT,223,223,223},{C_DKSHADOW,0,0,0},
         {C_ACTIVETITLE,0,0,128},{C_ACTIVETITLE2,16,132,208},{C_INACTIVETITLE,128,128,128},

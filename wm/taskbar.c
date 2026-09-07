@@ -141,7 +141,7 @@ static void orb_tick(void *u)
 /* The pointer came on to, or left, the Start button. */
 static void start_hot_changed(void)
 {
-    if (w2k_theme == THEME_BASIC7 && orb_frames[0]) {
+    if (W2K_THEME_IS7(w2k_theme) && orb_frames[0]) {
         orb_target = start_hot ? ORB_FRAMES - 1 : 0;
         if (orb_frame != orb_target) w2k_add_timer(ORB_STEP_MS, orb_tick, NULL);
     }
@@ -171,13 +171,14 @@ static W2kSkin *theme_start_skin(void)
     orb_frames_free();
     if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN) return NULL;
 
+    /* Vista's bar is thirty rows: the orb that fits it is the small one. */
     const char *file = w2k_theme == THEME_XP ? "xp-start.png"
-                                             : w2k_taskbar_small ? "w7-orb-small.png"
-                                                                : "w7-orb.png";
+                     : (w2k_taskbar_small || w2k_theme == THEME_VISTA) ? "w7-orb-small.png"
+                                                                       : "w7-orb.png";
     char path[1024];
     if (w2k_skin_path(file, path, sizeof path)) {
         skin = w2k_skin_load(path);
-        if (skin && w2k_theme == THEME_BASIC7) orb_frames_build(path);
+        if (skin && W2K_THEME_IS7(w2k_theme)) orb_frames_build(path);
     }
     return skin;
 #undef skin
@@ -458,7 +459,7 @@ static void layout(void)
 
     /* Luna spaces its icons wider: six pixels between them, a dozen
      * either side of the clock. */
-    int tgap = w2k_theme == THEME_XP ? 6 : seven ? 8 : 4;
+    int tgap = w2k_theme == THEME_XP ? 6 : (seven || w2k_theme == THEME_VISTA) ? 8 : 4;
     vol_x = tray_x - tgap - 16;
     bat_x = bat.present ? vol_x - tgap - 16 : vol_x;
     notify_w = tray_width();
@@ -494,7 +495,7 @@ static void layout(void)
      * wrap onto further rows when the bar is more than one row tall --
      * which is what dragging the top edge of the Windows taskbar does. */
     int rows = w2k_taskbar_rows;
-    int gap = seven ? 0 : TASK_GAP;
+    int gap = seven ? 0 : w2k_theme == THEME_VISTA ? 4 : TASK_GAP;   /* Vista: measured */
     int avail = notify_x - task_x - gap;
     if (avail < 0) avail = 0;
     int per_row = ntasks ? (ntasks + rows - 1) / rows : 0;
@@ -589,7 +590,7 @@ static void taskbar_draw(Pixmap pm, int h)
         int sw = w2k_skin_w(skin), sh = w2k_skin_h(skin) / 3;
         int state = start_pressed ? 2 : (start_hot ? 1 : 0);
         int sy = vert ? TB_PAD : (h - sh) / 2;
-        if (state != 2 && orb_frames[0] && w2k_theme == THEME_BASIC7)
+        if (state != 2 && orb_frames[0] && W2K_THEME_IS7(w2k_theme))
             /* Part way through the glow: the mixed frame. */
             w2k_skin_draw(pm, orb_frames[orb_frame], TB_PAD - 2, sy, 0, 0, sw, sh);
         else
@@ -676,7 +677,8 @@ static void taskbar_draw(Pixmap pm, int h)
             continue;
         }
         int o = active ? 1 : 0;
-        int ix = x + 4 + o, tx = ix + 20;
+        if (w2k_theme == THEME_VISTA) o = 0;             /* nothing sinks in glass */
+        int ix = x + (w2k_theme == THEME_VISTA ? 8 : 4) + o, tx = ix + 20;
         if (w > 26) w2k_icon_draw(pm, ix, by + (bh - 16) / 2 + o, c->icon);
         int avail = x + w - 4 - tx;
         if (avail > 6) {
@@ -717,6 +719,12 @@ static void taskbar_draw(Pixmap pm, int h)
         int ax = notify_x - W7_ARROW;
         int tx = ax - 10 - 32;
         w2k_theme_tray(pm, tx, 0, tb_w - W7_SLIVER - 1 - tx, h, w2k_theme);
+        int ay = by + BTN_H / 2 - 2;
+        for (int i = 0; i < 3; i++)
+            w2k_fill_rgb(pm, ax + 2 - i, ay + i, 1 + 2 * i, 1, 228, 234, 244);
+    } else if (w2k_theme == THEME_VISTA) {
+        /* Vista keeps the arrow too, on its plain dark bar. */
+        int ax = notify_x - W7_ARROW;
         int ay = by + BTN_H / 2 - 2;
         for (int i = 0; i < 3; i++)
             w2k_fill_rgb(pm, ax + 2 - i, ay + i, 1 + 2 * i, 1, 228, 234, 244);

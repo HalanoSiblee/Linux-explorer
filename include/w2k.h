@@ -360,7 +360,10 @@ void     w2k_skin_tile(Drawable d, W2kSkin *s, int x, int y, int w, int h,
  * Windows XP's Luna. The theme decides the colour table and the handful
  * of things XP draws differently -- gradient taskbar, skinned Start
  * button, the two-column Start menu. */
-enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, THEME_MODERN, N_THEMES };
+enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, THEME_MODERN, THEME_VISTA, N_THEMES };
+/* Windows Vista Basic shares Windows 7 Basic's frames; only the bar and
+ * the Start menu are its own. */
+#define W2K_THEME_IS7(t) ((t) == THEME_BASIC7 || (t) == THEME_VISTA)
 extern const char *w2k_theme_name(int theme);
 extern int w2k_theme;
 void w2k_theme_colours(int theme);   /* load that theme's colour table */

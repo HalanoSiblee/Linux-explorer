@@ -140,7 +140,7 @@ static void frame_draw_raw(Client *c, Drawable d)
 
     /* Windows 7 sets its icon two pixels in from the eight-pixel border
      * and the title, in the regular UI face, six past it. */
-    int seven = w2k_theme == THEME_BASIC7;
+    int seven = W2K_THEME_IS7(w2k_theme);
     int modern = w2k_theme == THEME_MODERN;
     int inset = P(w2k_theme == THEME_CLASSIC ? 1 : seven ? 10 : modern ? 9 : 6);
     int tx = inset + P(1);
@@ -269,7 +269,7 @@ void frame_shape(Client *c)
      * curve. Basic's caption has no such corner, and keeps a small arc. */
     static const int luna[5] = { 5, 3, 2, 1, 1 };
     static const int basic[5] = { 3, 2, 1, 1, 0 };
-    const int *ins = w2k_theme == THEME_BASIC7 ? basic : luna;
+    const int *ins = W2K_THEME_IS7(w2k_theme) ? basic : luna;
     /* On a scaled desktop each measured row stands for a band of rows. */
     int rad = P(5);
     Pixmap mask = XCreatePixmap(w2k.dpy, c->frame, (unsigned)fw, (unsigned)fh,

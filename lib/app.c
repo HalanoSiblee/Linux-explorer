@@ -394,6 +394,7 @@ const char *w2k_theme_name(int theme)
     case THEME_XP:     return "Windows XP";
     case THEME_BASIC7: return "Windows 7 Basic";
     case THEME_MODERN: return "Modern";
+    case THEME_VISTA:  return "Windows Vista Basic";
     }
     return "Windows Standard";
 }
@@ -401,7 +402,7 @@ const char *w2k_theme_name(int theme)
 void w2k_theme_colour(int theme, int color, unsigned char rgb[3])
 {
     const unsigned char (*t)[3] = theme == THEME_XP    ? luna :
-                                  theme == THEME_BASIC7 ? basic7 :
+                                  W2K_THEME_IS7(theme) ? basic7 :
                                   theme == THEME_MODERN ? modern : standard;
     if (color < 0 || color >= N_COLORS) { rgb[0] = rgb[1] = rgb[2] = 0; return; }
     rgb[0] = t[color][0];
@@ -412,7 +413,7 @@ void w2k_theme_colour(int theme, int color, unsigned char rgb[3])
 void w2k_theme_colours(int theme)
 {
     const unsigned char (*t)[3] = theme == THEME_XP    ? luna :
-                                  theme == THEME_BASIC7 ? basic7 :
+                                  W2K_THEME_IS7(theme) ? basic7 :
                                   theme == THEME_MODERN ? modern : standard;
     for (int i = 0; i < N_COLORS; i++)
         w2k_color_set(i, t[i][0], t[i][1], t[i][2]);
@@ -654,7 +655,8 @@ int w2k_scheme_load(const char *path)
         const char *val = line + 6;
         w2k_theme = !strncasecmp(val, "xp", 2)     ? THEME_XP :
                     !strncasecmp(val, "basic7", 6) ? THEME_BASIC7 :
-                    !strncasecmp(val, "modern", 6) ? THEME_MODERN
+                    !strncasecmp(val, "modern", 6) ? THEME_MODERN :
+                    !strncasecmp(val, "vista", 5)  ? THEME_VISTA
                                                    : THEME_CLASSIC;
         w2k_theme_colours(w2k_theme);
         break;
@@ -932,7 +934,8 @@ int w2k_scheme_save(const char *path)
     fprintf(f, "Effects=%s\n", fx);
     fprintf(f, "Theme=%s\n", w2k_theme == THEME_XP ? "xp" :
             w2k_theme == THEME_BASIC7 ? "basic7" :
-            w2k_theme == THEME_MODERN ? "modern" : "classic");
+            w2k_theme == THEME_MODERN ? "modern" :
+            w2k_theme == THEME_VISTA ? "vista" : "classic");
     fprintf(f, "IconSet=%s\n", w2k_icon_set);
     fprintf(f, "UiScale=%d\n", w2k_ui_scale_pref);
     fprintf(f, "Resample=%s\n", w2k_resample == RS_NEAREST ? "nearest"

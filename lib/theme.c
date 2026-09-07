@@ -245,6 +245,11 @@ static void strip_draw(Drawable d, W2kSkin *s, int sy, int sh, int lcap,
  * ------------------------------------------------------------------ */
 #define XP_CAP_H 30
 
+/* Windows Vista Basic: the reference bar is 30 rows and its task buttons
+ * 27, from row 2 to the light line under them at row 28. */
+#define VISTA_BAR_H 30
+#define VISTA_BTN_H 27
+
 /* The Modern look: a 31-row caption under a one-pixel outline, with the
  * six-pixel invisible margin outside it that Windows 10 and 11 keep for
  * the resize cursor; caption buttons 46 by 30 like theirs, the glyphs
@@ -276,7 +281,7 @@ void w2k_theme_caption(Drawable d, int x, int y, int w, int h, int active,
         w2k_fill(d, x + w - t, y, t, h, C_WINDOWFRAME);
         return;
     }
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         W2kSkin *s = skin("w7-caption.png", 256);
         if (s && w2k_skin_w(s) == W7_CAP_LCAP + 1 + W7_CAP_RCAP &&
             w2k_skin_h(s) == 2 * W7_CAP_H && w >= S(W7_CAP_LCAP + W7_CAP_RCAP)) {
@@ -298,7 +303,7 @@ void w2k_theme_caption(Drawable d, int x, int y, int w, int h, int active,
     }
     const Stop *st;
     int n;
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         st = active ? cap_7_active : cap_7_inactive;
         n = active ? (int)(sizeof cap_7_active / sizeof *cap_7_active)
                    : (int)(sizeof cap_7_inactive / sizeof *cap_7_inactive);
@@ -307,7 +312,7 @@ void w2k_theme_caption(Drawable d, int x, int y, int w, int h, int active,
         n = active ? (int)(sizeof cap_xp_active / sizeof *cap_xp_active)
                    : (int)(sizeof cap_xp_inactive / sizeof *cap_xp_inactive);
     }
-    int *ins = corner_insets(h, S(theme == THEME_BASIC7 ? 4 : 6), 0);
+    int *ins = corner_insets(h, S(W2K_THEME_IS7(theme) ? 4 : 6), 0);
     grad_fill(d, x, y, w, h, st, n, ins, 256);
     free(ins);
 }
@@ -316,7 +321,7 @@ int w2k_theme_caption_h(int theme)
 {
     /* Windows XP: 30 rows from the frame's top edge to the client, of
      * which 4 are the frame border. Windows 7 Basic: 31, of which 10. */
-    if (theme == THEME_BASIC7) return W7_CAP_H - W7_BORDER;
+    if (W2K_THEME_IS7(theme)) return W7_CAP_H - W7_BORDER;
     if (theme == THEME_MODERN) return MD_CAP_H;
     return XP_CAP_H - 4;
 }
@@ -340,7 +345,7 @@ void w2k_theme_frame_edges(Drawable d, int fw, int fh, int b, int active,
         w2k_fill(d, m, fh - m - t, fw - 2 * m, t, C_WINDOWFRAME);
         return;
     }
-    if (theme == THEME_BASIC7 && b == S(W7_BORDER)) {
+    if (W2K_THEME_IS7(theme) && b == S(W7_BORDER)) {
         W2kSkin *fr = skin("w7-frame.png", 256), *bt = skin("w7-bottom.png", 256);
         if (fr && bt && w2k_skin_w(fr) == 20 && w2k_skin_h(fr) == 2 &&
             w2k_skin_w(bt) == 1 && w2k_skin_h(bt) == 20) {
@@ -396,13 +401,13 @@ void w2k_theme_frame_edges(Drawable d, int fw, int fh, int b, int active,
  * ------------------------------------------------------------------ */
 int w2k_theme_capbtn_size(int theme)
 {
-    return theme == THEME_BASIC7 ? W7_BTN_H : theme == THEME_MODERN ? MD_BTN_H : 21;
+    return W2K_THEME_IS7(theme) ? W7_BTN_H : theme == THEME_MODERN ? MD_BTN_H : 21;
 }
 
 int w2k_theme_capbtn_w(int theme, int kind)
 {
     (void)kind;
-    return theme == THEME_BASIC7 ? W7_BTN_W : theme == THEME_MODERN ? MD_BTN_W : 21;   /* all three alike */
+    return W2K_THEME_IS7(theme) ? W7_BTN_W : theme == THEME_MODERN ? MD_BTN_W : 21;   /* all three alike */
 }
 
 /* Where the buttons sit on an XP caption, measured: 21 pixels square at
@@ -419,7 +424,7 @@ void w2k_theme_capbtn_place(int theme, int fw, int *y, int *close_x,
         *min_x = *max_x - S(MD_BTN_W);
         return;
     }
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         /* Measured: 32 wide, two apart, Close ten pixels in from the edge. */
         *y = S(W7_BTN_Y);
         *close_x = fw - S(W7_BTN_INSET + W7_BTN_W);
@@ -503,7 +508,7 @@ void w2k_theme_capbtn(Drawable d, int x, int y, int w, int h, int kind,
         }
         return;
     }
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         W2kSkin *s = skin("w7-capbtn.png", pressed ? 200 : 256);
         if (s && w2k_skin_w(s) == 134 && w2k_skin_h(s) == 2 * W7_BTN_H &&
             w == S(W7_BTN_W) && h == S(W7_BTN_H)) {
@@ -541,7 +546,7 @@ void w2k_theme_capbtn(Drawable d, int x, int y, int w, int h, int kind,
         }
     }
 
-    int seven = theme == THEME_BASIC7;
+    int seven = W2K_THEME_IS7(theme);
     const Stop *st = kind == W2K_CAP_CLOSE ? (seven ? btn_7_close : btn_xp_close)
                                            : (seven ? btn_7_blue : btn_xp_blue);
     int n;
@@ -616,12 +621,34 @@ int w2k_theme_task_h(int theme)
      * fill the bar, top line and all: forty rows, or thirty with small
      * icons. */
     if (theme == THEME_MODERN) return 22;      /* the classic bar's height */
-    return theme == THEME_BASIC7 ? (w2k_taskbar_small ? 30 : W7_BAR_H) : 25;
+    if (theme == THEME_VISTA) return VISTA_BTN_H;
+    return W2K_THEME_IS7(theme) ? (w2k_taskbar_small ? 30 : W7_BAR_H) : 25;
 }
 
 void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
                           int theme)
 {
+    if (theme == THEME_VISTA) {
+        /* Cropped from the reference: a glassy dark box, 27 rows with the
+         * light line under it, eight-pixel caps. The pointer lightens
+         * it and the active window's is lighter still. */
+        W2kSkin *s = skin("vista-task.png", state == W2K_TB_DOWN ? 300 :
+                                            state == W2K_TB_HOT ? 272 : 256);
+        if (s && w2k_skin_w(s) == 17 && w2k_skin_h(s) == VISTA_BTN_H) {
+            strip_draw(d, s, 0, VISTA_BTN_H, 8, 8, x, y, w, h);
+            return;
+        }
+        /* Without the skin: the box drawn in its measured greys. */
+        int top = state == W2K_TB_NORMAL ? 217 : 235;
+        for (int i = 1; i < h - 1; i++) {
+            int g = i < h / 2 ? top - (top - 134) * i / (h / 2) : i < h * 3 / 4 ? 60 : 24;
+            w2k_fill_rgb(d, x + 1, y + i, w - 2, 1, g, g, g);
+        }
+        XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(55, 55, 55));
+        w2k_frame_fg(d, x, y, w, h - 1);
+        w2k_fill_rgb(d, x + 1, y + h - 1, w - 2, 1, 82, 82, 82);
+        return;
+    }
     if (theme == THEME_MODERN) {
         /* Every running window has a rounded box, as the classic bar
          * gives it a button; the pointer lightens it, and the active
@@ -640,7 +667,7 @@ void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
         }
         return;
     }
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         /* Basic's buttons are pale framed boxes on the bar: a dark line,
          * a light one inside it, and a fill that lightens under the
          * pointer and more for the active window. The reference for these
@@ -671,8 +698,8 @@ void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
             return;
         }
     }
-    const Stop *st = theme == THEME_BASIC7 ? task_7 : task_xp;
-    int n = theme == THEME_BASIC7 ? (int)(sizeof task_7 / sizeof *task_7)
+    const Stop *st = W2K_THEME_IS7(theme) ? task_7 : task_xp;
+    int n = W2K_THEME_IS7(theme) ? (int)(sizeof task_7 / sizeof *task_7)
                                   : (int)(sizeof task_xp / sizeof *task_xp);
     int scale = state == W2K_TB_DOWN ? 200 : state == W2K_TB_HOT ? 292 : 256;
     int *ins = corner_insets(h, S(3), 1);
@@ -701,7 +728,7 @@ static const Stop tray_7[] = {
 
 void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
 {
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         if (w <= 0 || h <= 0) return;
         int fade = 32;
         int n = (int)(sizeof tray_7 / sizeof *tray_7);
@@ -736,6 +763,19 @@ void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
 
 void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
 {
+    if (theme == THEME_VISTA) {
+        /* Every row of the reference bar: a dark line, a white one, a
+         * grey gradient down to the flat dark band at the bottom. A bar
+         * of another height stretches the table. */
+        static const unsigned char rows[VISTA_BAR_H] = {
+            23, 251, 185, 181, 174, 168, 161, 153, 146, 138, 130, 121, 113, 104,
+            96, 88, 80, 72, 66, 60, 54, 49, 24, 24, 24, 24, 24, 24, 24, 24 };
+        for (int i = 0; i < h; i++) {
+            int g = rows[i * VISTA_BAR_H / h];
+            w2k_fill_rgb(d, x, y + i, w, 1, g, g, g);
+        }
+        return;
+    }
     if (theme == THEME_MODERN) {
         /* The face, with the outline along its top. */
         int t = w2k_scale_raw ? w2k_th(1) : 1;
@@ -743,7 +783,7 @@ void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
         w2k_fill(d, x, y, w, t, C_WINDOWFRAME);
         return;
     }
-    if (theme == THEME_BASIC7) {
+    if (W2K_THEME_IS7(theme)) {
         /* The theme's own taskbar texture, both sizes of it, is one flat
          * colour: (167,192,220), every pixel. The Show Desktop sliver at
          * the far end is marked off with a line. */

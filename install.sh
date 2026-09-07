@@ -24,7 +24,9 @@
 #      other programs use, Chicago95 for GTK, the Windows style and 2000
 #      palette for Qt, B00merang's Windows XP, Vista and 7 themes and icons
 #      and the Windows 7 Kvantum theme (which the looks switch to), and the
-#      file manager as the folder handler.
+#      file manager as the folder handler; and for the machine: brightnessctl
+#      with the backlight udev rule and the video group, and a PolicyKit
+#      agent for pkexec.
 # It is safe to run again; existing configuration files are backed up
 # with a .pre-w2k suffix the first time they are replaced.
 set -e
@@ -96,7 +98,7 @@ if [ "$DO_DEPS" = 1 ]; then
             libjpeg-dev libwebp-dev libxss-dev x11-xserver-utils x11-utils xdg-utils zip unzip tar p7zip-full \
             pulseaudio-utils alsa-utils xterm python3 git curl fonts-dejavu-core dbus-x11 \
             cabextract qt5ct qt6ct libpam0g-dev xauth libdbus-1-dev libnotify-bin \
-            qt5-style-plugins qt-style-kvantum lxpolkit ;;
+            qt5-style-plugins qt-style-kvantum lxpolkit brightnessctl ;;
     *fedora*|*rhel*|*centos*|*rocky*|*alma*)
         # strict=0: a name this release no longer has is skipped, not fatal.
         as_root dnf install -y --setopt=strict=0 gcc make libX11-devel libXext-devel libXrandr-devel \
@@ -104,7 +106,7 @@ if [ "$DO_DEPS" = 1 ]; then
             libjpeg-turbo-devel libwebp-devel libXScrnSaver-devel xrandr xset xsetroot xrdb xmessage xdg-utils zip unzip \
             tar p7zip p7zip-plugins pulseaudio-utils alsa-utils xterm python3 git curl \
             dejavu-sans-fonts dbus-x11 cabextract qt5ct qt6ct pam-devel xorg-x11-xauth dbus-devel libnotify \
-            qt5-qtstyleplugins kvantum kvantum-qt5 lxpolkit ;;
+            qt5-qtstyleplugins kvantum kvantum-qt5 lxpolkit brightnessctl ;;
     *arch*|*manjaro*|*endeavouros*)
         # -Syu, never -Sy: a refreshed database with an unrefreshed system
         # is the partial upgrade Arch warns about.
@@ -112,24 +114,24 @@ if [ "$DO_DEPS" = 1 ]; then
             libxcursor libxft fontconfig freetype2 zlib libjpeg-turbo libwebp libxss xorg-xrandr \
             xorg-xset xorg-xsetroot xorg-xrdb xorg-xmessage xdg-utils zip unzip tar \
             p7zip libpulse alsa-utils xterm python git curl ttf-dejavu dbus cabextract qt5ct qt6ct pam xorg-xauth libnotify \
-            kvantum kvantum-qt5 polkit-gnome ;;
+            kvantum kvantum-qt5 polkit-gnome brightnessctl ;;
     *suse*)
         as_root zypper --non-interactive install gcc make libX11-devel libXext-devel \
             libXrandr-devel libXcursor-devel libXft-devel fontconfig-devel \
             freetype2-devel zlib-devel libjpeg8-devel libwebp-devel libXss-devel xrandr xset xsetroot xrdb xmessage \
             xdg-utils zip unzip tar p7zip-full pulseaudio-utils alsa-utils xterm python3 git curl \
-            dejavu-fonts dbus-1-x11 cabextract qt5ct qt6ct pam-devel xauth dbus-1-devel libnotify-tools ;;
+            dejavu-fonts dbus-1-x11 cabextract qt5ct qt6ct pam-devel xauth dbus-1-devel libnotify-tools brightnessctl ;;
     *alpine*)
         as_root apk add build-base libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxft-dev fontconfig-dev freetype-dev zlib-dev libjpeg-turbo-dev libwebp-dev libxscrnsaver-dev xrandr \
             xset xsetroot xrdb xmessage xdg-utils zip unzip tar p7zip pulseaudio-utils \
-            xterm python3 git curl font-dejavu dbus-x11 cabextract linux-pam-dev xauth dbus-dev libnotify ;;
+            xterm python3 git curl font-dejavu dbus-x11 cabextract linux-pam-dev xauth dbus-dev libnotify brightnessctl ;;
     *void*)
         as_root xbps-install -Sy base-devel libX11-devel libXext-devel libXrandr-devel \
             libXcursor-devel libXft-devel fontconfig-devel freetype-devel zlib-devel \
             libjpeg-turbo-devel libwebp-devel libXScrnSaver-devel xrandr xset xsetroot xrdb xmessage xdg-utils zip unzip \
             tar p7zip pulseaudio-utils xterm python3 git curl dejavu-fonts-ttf dbus \
-            cabextract qt5ct qt6ct pam-devel xauth dbus-devel libnotify ;;
+            cabextract qt5ct qt6ct pam-devel xauth dbus-devel libnotify brightnessctl ;;
     *)
         echo "install.sh: I do not know this distribution's package manager." >&2
         echo "  Install: a C compiler and make; the development packages for X11," >&2

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<!-- Disk Management runs as the administrator, as it does on Windows: the
+     program asks through pkexec when it opens and keeps the rights until
+     it closes. The display and the cookie are let through so the elevated
+     copy can open its window; the prompt names the program. -->
+<policyconfig>
+  <vendor>Linux 2000</vendor>
+  <vendor_url>https://github.com/JackTulli/Linux-explorer</vendor_url>
+  <action id="org.linux2000.diskmgmt">
+    <description>Run Disk Management</description>
+    <message>Authentication is required to run Disk Management, which partitions and formats the disks in this computer.</message>
+    <icon_name>drive-harddisk</icon_name>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@BINDIR@/l2kdiskmgmt</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

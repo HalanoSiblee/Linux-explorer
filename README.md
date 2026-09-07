@@ -127,7 +127,9 @@ Try it nested first, without logging out of anything:
                    snap-in; create and delete partitions, format (NTFS,
                    FAT32, exFAT, ext2/3/4, XFS, Btrfs, swap), mount, mark
                    active, initialize a blank disk as MBR or GPT -- through
-                   sfdisk, mkfs and mount as root, each asked for first
+                   sfdisk, mkfs and mount; asks for the administrator's
+                   password when it opens, as Windows does, and runs as
+                   root from then on, each change confirmed first
     l2ktaskmgr     Task Manager: applications, processes, and a Performance
                    page in the Windows 2000 layout -- LED meters, the green
                    grid graphs with kernel time in red, page-file usage, the

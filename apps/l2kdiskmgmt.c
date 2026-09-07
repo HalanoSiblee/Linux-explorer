@@ -17,6 +17,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -435,6 +437,55 @@ static void build_vols(void)
 }
 
 /* ------------------------------------------------------------------ *
+ * Running as the administrator
+ * ------------------------------------------------------------------ */
+static char elevated_user[64];         /* who opened us, when running as root for them */
+
+/* Windows asks for the administrator when Disk Management opens; so does
+ * this, through pkexec, and the whole program runs as root from then on.
+ * The user's home, display and cookie travel as arguments, since pkexec
+ * starts the elevated copy with a clean environment. Returns 1 when this
+ * is the elevated copy; 0 to carry on as the user (no pkexec, no agent,
+ * or the prompt was dismissed). */
+static int elevate(int argc, char **argv)
+{
+    if (argc >= 6 && !strcmp(argv[1], "--elevated")) {
+        setenv("HOME", argv[2], 1);
+        setenv("DISPLAY", argv[3], 1);
+        setenv("XAUTHORITY", argv[4], 1);
+        snprintf(elevated_user, sizeof elevated_user, "%s", argv[5]);
+        /* Anything a library caches goes to root's own places. */
+        setenv("XDG_CACHE_HOME", "/root/.cache", 1);
+        setenv("XDG_CONFIG_HOME", "/root/.config", 1);
+        return 1;
+    }
+    if (geteuid() == 0) return 1;
+    if (getenv("W2K_RENDER") || getenv("W2K_FAKE_LSBLK") || getenv("W2K_NO_ELEVATE")) return 0;
+    char self[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
+    if (n <= 0) return 0;
+    self[n] = 0;
+    const char *home = getenv("HOME"), *disp = getenv("DISPLAY"), *xa = getenv("XAUTHORITY");
+    if (!home || !disp) return 0;
+    char xauth[PATH_MAX];
+    if (xa && *xa) snprintf(xauth, sizeof xauth, "%s", xa);
+    else snprintf(xauth, sizeof xauth, "%s/.Xauthority", home);
+    struct passwd *pw = getpwuid(getuid());
+    const char *user = pw ? pw->pw_name : getenv("USER") ? getenv("USER") : "";
+    pid_t pid = fork();
+    if (pid < 0) return 0;
+    if (pid == 0) {
+        execlp("pkexec", "pkexec", self, "--elevated", home, disp, xauth, user, (char *)NULL);
+        _exit(127);
+    }
+    int st = 0;
+    waitpid(pid, &st, 0);
+    int code = WIFEXITED(st) ? WEXITSTATUS(st) : 1;
+    if (code == 126 || code == 127) return 0;   /* dismissed, refused, or no pkexec */
+    exit(code);                                  /* the elevated copy was the program */
+}
+
+/* ------------------------------------------------------------------ *
  * Running things as root
  * ------------------------------------------------------------------ */
 typedef struct {
@@ -510,7 +561,8 @@ static int run_root(W2kWin *over, const char *what, const char *script, char *ou
         close(p[0]); close(p[1]);
         int nul = open("/dev/null", O_RDONLY);
         if (nul >= 0) { dup2(nul, STDIN_FILENO); close(nul); }
-        execlp("pkexec", "pkexec", "sh", "-c", full, (char *)NULL);
+        if (geteuid() == 0) execl("/bin/sh", "sh", "-c", full, (char *)NULL);
+        else execlp("pkexec", "pkexec", "sh", "-c", full, (char *)NULL);
         _exit(127);
     }
     close(p[1]);
@@ -1518,9 +1570,15 @@ static void open_in_explorer(const char *mount, int explore)
                    "(Change Drive Letter and Paths).", MB_OK | MB_ICONINFO);
         return;
     }
-    char q[600], cmd[700];
+    char q[600], cmd[900], qu[128];
     w2k_shell_quote(mount, q, sizeof q);
-    snprintf(cmd, sizeof cmd, "l2kexplorer %s%s >/dev/null 2>&1 &", explore ? "" : "", q);
+    (void)explore;
+    /* Explorer is the user's program, not the administrator's. */
+    if (elevated_user[0]) {
+        w2k_shell_quote(elevated_user, qu, sizeof qu);
+        snprintf(cmd, sizeof cmd, "runuser -u %s -- l2kexplorer %s >/dev/null 2>&1 &", qu, q);
+    } else
+        snprintf(cmd, sizeof cmd, "l2kexplorer %s >/dev/null 2>&1 &", q);
     if (system(cmd) < 0) { /* nothing to say */ }
 }
 
@@ -1850,8 +1908,9 @@ static void on_activate(void *u, int idx)
     else if (v) do_properties(v);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    int as_root = elevate(argc, argv);
     if (w2k_init("l2kdiskmgmt") < 0) return 1;
     memset(&app, 0, sizeof app);
     app.sel_region = app.sel_disk = -1;
@@ -1915,6 +1974,13 @@ int main(void)
     w2k_scroll_bind(&app.gsb, app.win);
     layout(app.win);
     refresh();
+    if (!as_root && !getenv("W2K_RENDER") && !getenv("W2K_FAKE_LSBLK"))
+        w2k_msgbox(NULL, "Disk Management",
+                   "Disk Management is running without administrator rights: the disks can be "
+                   "looked at, but nothing can be changed.\n\nStart it again and give the "
+                   "administrator's password when asked (pkexec needs a PolicyKit agent in the "
+                   "session, which the desktop starts when one is installed).",
+                   MB_OK | MB_ICONWARNING);
     if (nregions) { app.sel_region = 0; }
     /* W2K_RENDER_DIALOG=format|create|init|props, with W2K_RENDER: a
      * picture of that dialog for the first volume, free space or disk. */

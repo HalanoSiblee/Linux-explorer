@@ -105,6 +105,11 @@ install: all
 	    sed 's|^Exec=.*|Exec=$(BINDIR)/l2k-session|; /^TryExec/d' config/l2k-session.desktop > $(DESTDIR)/usr/share/xsessions/l2k-session.desktop; \
 	    rm -f $(DESTDIR)/usr/share/xsessions/w2k-session.desktop; \
 	else echo "(no /usr/share/xsessions entry: not writable)"; fi
+	# Disk Management asks for the administrator through pkexec: its polkit
+	# action carries the prompt and lets the display through.
+	@if install -d $(DESTDIR)/usr/share/polkit-1/actions 2>/dev/null; then \
+	    sed 's|@BINDIR@|$(BINDIR)|' config/org.linux2000.diskmgmt.policy.in > $(DESTDIR)/usr/share/polkit-1/actions/org.linux2000.diskmgmt.policy; \
+	else echo "(no polkit action: /usr/share/polkit-1/actions not writable)"; fi
 
 .PHONY: all clean install swatch
 .PRECIOUS: apps/%.o

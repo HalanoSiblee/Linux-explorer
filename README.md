@@ -9,8 +9,6 @@ and Start menu, the logon screen, and the applications that came with it,
 written from scratch in C against Xlib. Optional Windows XP and Windows 7
 Basic looks are cropped pixel for pixel from the real thing.
 
-![The desktop](docs/desktop.png)
-
 Questions, bug reports and screenshots are welcome on the project's
 Discord server: https://discord.gg/KPQBnSqcK
 
@@ -150,8 +148,6 @@ Try it nested first, without logging out of anything:
                    who it is licensed to and the memory (Start > Programs >
                    Accessories > System Tools, or Run > linver)
 
-![Disk Management: the volume list over the disks drawn to scale, with the Format dialog](docs/disk-management.png)
-
 Five looks, from Display Properties > Appearance: the Windows 2000
 classic scheme (and its colour variants: Brick, Desert, Eggplant, a
 Windows Classic Dark and the rest), Windows XP (Luna, with the two-column
@@ -162,11 +158,21 @@ from the basic-colours palette or by its red, green and blue values, and
 title bars have a Color 2 for the far end of their gradient. The XP and 7
 chrome is cropped from screenshots and checked by diffing against them.
 
-![Windows XP look: Luna windows, the two-column Start menu, Explorer, Task Manager and Display Properties](docs/windows-xp.png)
+Each look, as a desktop at 1280 by 800 with Explorer, Display Properties, Calculator and Notepad open and the Start menu up:
 
-![Windows 7 Basic look: the orb, the Windows 7 Start menu and taskbar, with the Windows 7 icon set](docs/windows-7.png)
+![Windows Standard: the Windows 2000 look with the classic Start menu](docs/desktop-standard.png)
 
-![Windows Vista Basic look: the dark gradient bar with glassy task buttons, and the Vista Start menu with its power, lock and arrow buttons](docs/windows-vista.png)
+![Windows XP: Luna frames, the two-column Start menu and Bliss](docs/desktop-xp.png)
+
+![Windows Vista Basic: 7's frames over Vista's dark bar and Start menu](docs/desktop-vista.png)
+
+![Windows 7 Basic: the orb, the Windows 7 Start menu and taskbar](docs/desktop-windows7.png)
+
+![Modern Light: flat captions, rounded buttons and a plain bar](docs/desktop-modern-light.png)
+
+![Modern Dark: the same on near-black](docs/desktop-modern-dark.png)
+
+![Windows Classic Dark: the classic look with the lights off](docs/desktop-classic-dark.png)
 
 Modern is for anyone who wants the desktop without the bevels: title bars
 in the window's own colour with thin Minimize, Maximize and Close glyphs
@@ -178,10 +184,6 @@ in and marked with an accent-coloured line, and the default button in a
 dialog is filled with the accent colour. Modern Light is white and grey with a
 blue accent; Modern Dark the same on near-black. The Appearance page has
 a word for people who choose it.
-
-![Modern Light: the Run dialog, Calculator and Display Properties, with the taskbar](docs/modern-light.png)
-
-![Modern Dark: the same on near-black](docs/modern-dark.png)
 
 Icons come in five sets, from Display Properties > Appearance > Icons:
 Windows 2000 (the built-in artwork), Windows 98, Windows XP, Windows 7 and

@@ -330,3 +330,5 @@ void    wm_help_dialog(void);
 int     wm_change_icon_dialog(char *out, int outsz);
 
 #endif /* W2KWM_H */
+
+int  desktop_render(const char *path, int w, int h);

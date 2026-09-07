@@ -554,6 +554,74 @@ void desktop_paint(void)
     XCopyArea(w2k.dpy, pm, dw, w2k.gc, 0, 0, w, h, wx, wy);
 }
 
+/* Development aid, like the other W2K_RENDER hooks: the desktop's colour
+ * and icons at a given size, to a PPM, for pictures of a whole desktop. */
+int desktop_render(const char *path, int w, int h)
+{
+    desktop_scan();
+    place_unplaced();
+    int pw = w2k_px(w), ph = w2k_px(h);
+    Pixmap pm = XCreatePixmap(w2k.dpy, w2k.root, (unsigned)pw, (unsigned)ph, w2k.depth);
+    XSetForeground(w2k.dpy, w2k.gc, w2k.col[C_DESKTOP]);
+    XFillRectangle(w2k.dpy, pm, w2k.gc, 0, 0, (unsigned)pw, (unsigned)ph);
+    /* The wallpaper, stretched or filling the picture (the other styles
+     * are drawn as fill: this is for pictures, not the screen). */
+    if (w2k_wallpaper[0]) {
+        int iw = 0, ih = 0;
+        unsigned char *rgba = w2k_image_load(w2k_wallpaper, &iw, &ih);
+        if (rgba && iw > 0 && ih > 0) {
+            int scw = pw, sch = ph, offx = 0, offy = 0;
+            if (w2k_wallpaper_style != 2) {
+                /* Cover the picture and crop the middle. */
+                double f = (double)pw / iw > (double)ph / ih ? (double)pw / iw : (double)ph / ih;
+                scw = (int)(iw * f + 0.5); sch = (int)(ih * f + 0.5);
+                offx = (pw - scw) / 2; offy = (ph - sch) / 2;
+            }
+            unsigned char *sc = w2k_rgba_resample(rgba, iw, ih, scw, sch,
+                                                  w2k_resample == RS_NEAREST ? RS_BILINEAR : w2k_resample);
+            char *pixels = sc ? malloc((size_t)pw * ph * 4) : NULL;
+            XImage *im = pixels ? XCreateImage(w2k.dpy, w2k.visual, w2k.depth, ZPixmap, 0, pixels, pw, ph, 32, 0) : NULL;
+            if (im) {
+                for (int y = 0; y < ph; y++)
+                    for (int x = 0; x < pw; x++) {
+                        int sx = x - offx, sy = y - offy;
+                        unsigned long px = w2k.col[C_DESKTOP];
+                        if (sx >= 0 && sy >= 0 && sx < scw && sy < sch) {
+                            const unsigned char *q = sc + ((size_t)sy * scw + sx) * 4;
+                            px = w2k_rgb(q[0], q[1], q[2]);
+                        }
+                        XPutPixel(im, x, y, px);
+                    }
+                XPutImage(w2k.dpy, pm, w2k.gc, im, 0, 0, 0, 0, (unsigned)pw, (unsigned)ph);
+                XDestroyImage(im);
+            } else free(pixels);
+            free(sc);
+        }
+        free(rgba);
+    }
+    for (int i = 0; i < NICONS; i++) {
+        int x = ICON_LEFT + icons[i].col * ICON_CELL_W;
+        int y = ICON_TOP + icons[i].row * ICON_CELL_H;
+        w2k_bigicon_draw(pm, x + (ICON_CELL_W - 32) / 2, y, icons[i].icon);
+        draw_label(pm, x + ICON_CELL_W / 2, y + 36, icons[i].label, 0);
+    }
+    XImage *im = XGetImage(w2k.dpy, pm, 0, 0, (unsigned)pw, (unsigned)ph, AllPlanes, ZPixmap);
+    FILE *f = fopen(path, "wb");
+    if (f && im) {
+        fprintf(f, "P6\n%d %d\n255\n", pw, ph);
+        for (int y = 0; y < ph; y++)
+            for (int x = 0; x < pw; x++) {
+                unsigned long v = XGetPixel(im, x, y);
+                unsigned char rgb[3] = { (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff };
+                fwrite(rgb, 1, 3, f);
+            }
+    }
+    if (f) fclose(f);
+    if (im) XDestroyImage(im);
+    w2k_free_pixmap(pm);
+    return 1;
+}
+
 /* Select every icon the band touches. */
 static void band_select(void)
 {

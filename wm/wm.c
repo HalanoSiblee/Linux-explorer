@@ -795,6 +795,11 @@ int main(int argc, char **argv)
             setenv("W2K_RENDER_MENU", getenv("W2K_RENDER"), 1);
             startmenu_open();
         }
+        else if (which && !strcmp(which, "desktop")) {
+            int rw = getenv("W2K_RENDER_W") ? atoi(getenv("W2K_RENDER_W")) : 1280;
+            int rh = getenv("W2K_RENDER_H") ? atoi(getenv("W2K_RENDER_H")) : 800;
+            desktop_render(getenv("W2K_RENDER"), rw, rh);
+        }
         else if (which && !strcmp(which, "balloon")) {
             balloon_render(getenv("W2K_RENDER"));
         }

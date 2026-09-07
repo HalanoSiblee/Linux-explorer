@@ -198,10 +198,21 @@ any of that.
 Other programs match: GTK 2/3/4 get the Chicago95 theme and icons, Qt gets
 the Windows style through qt5ct/qt6ct, every program gets the Windows
 cursors through an Xcursor theme, and Explorer is the folder handler for
-`xdg-open` and "show in folder". Display Properties > Programs lets you
-pick a different GTK theme, icon theme and Qt style from what is installed
-(Chicago95 and Windows are the defaults); the choice is kept in the scheme
-and written to the GTK and qt5ct/qt6ct settings with the colours. The colours you pick in Display
+`xdg-open` and "show in folder". The looks bring their own: choosing
+Windows XP in Appearance switches GTK programs to B00merang's Windows XP
+Luna theme and Windows XP icons, Qt programs to the same through the GTK 2
+bridge (`qt5-style-plugins`), and the desktop's own icons to the Windows
+XP set; Windows Vista and Windows 7 Basic switch to B00merang's Windows
+Vista and Windows-7 themes, the Windows-7 icons, the Windows 7 Kvantum
+theme for Qt (with Kvantum installed) and the Windows 7 icon set; Modern
+goes to Adwaita and Fusion; the classic schemes go back to Chicago95. The
+installer fetches all of these (`--no-theme` skips them), and each is
+used only when it is there. Display Properties > Programs still lets you
+pick any GTK theme, icon theme and Qt style from what is installed; the
+choice is kept in the scheme (`GtkTheme=`, `IconTheme=`, `QtStyle=`,
+`KvantumTheme=`) and written to the GTK, qt5ct/qt6ct and Kvantum settings
+with the colours, and programs started afterwards from the Start menu
+take it up. The colours you pick in Display
 Properties > Appearance reach those programs too: on every save, and at
 logon, the desktop writes the scheme out as `@define-color` overrides for
 Chicago95 (`~/.config/gtk-3.0/w2k-colors.css`, imported from your

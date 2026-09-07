@@ -738,6 +738,16 @@ extern char w2k_icon_set[32];
  * with the colours by w2k_scheme_export_gtk(). Chicago95 and Windows
  * unless changed. */
 extern char w2k_gtk_theme[64], w2k_icon_theme[64], w2k_qt_style[64];
+extern char w2k_kvantum_theme[64];      /* the Kvantum theme, when the style is kvantum */
+int  w2k_gtk_theme_installed(const char *name);
+int  w2k_icon_theme_installed(const char *name);
+int  w2k_qt_style_installed(const char *name);
+int  w2k_kvantum_theme_installed(const char *name);
+/* The third-party themes and the icon set that go with a look, applied
+ * when the look is chosen: B00merang's GTK themes and icons for XP, Vista
+ * and 7, the Windows 7 Kvantum theme for Qt, Chicago95 for the classic
+ * look, Adwaita and Fusion for Modern. Each only if it is installed. */
+void w2k_look_themes(int theme);
 /* The choices installed: sorted names into out, up to max. */
 int  w2k_gtk_themes(char (*out)[64], int max);
 int  w2k_icon_themes(char (*out)[64], int max);

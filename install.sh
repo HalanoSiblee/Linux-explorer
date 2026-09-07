@@ -5,7 +5,8 @@
 #   ./install.sh --prefix DIR    install under DIR (default /usr/local)
 #   ./install.sh --no-deps       do not touch the package manager
 #   ./install.sh --no-build      do not compile or install the binaries
-#   ./install.sh --no-theme      skip Chicago95 (needs the network)
+#   ./install.sh --no-theme      skip Chicago95 and the XP, Vista and 7 themes
+#                                for GTK and Qt programs (they need the network)
 #   ./install.sh --tahoma        fetch Tahoma from the corefonts project
 #   ./install.sh --xinitrc       make l2k-session your startx session
 #   ./install.sh --user-only     only this user's configuration
@@ -21,7 +22,9 @@
 #      with --full the l2kdm service that boots into Log On to Windows;
 #   3. for the user running it: the Windows cursor set, the Xcursor theme
 #      other programs use, Chicago95 for GTK, the Windows style and 2000
-#      palette for Qt, and the file manager as the folder handler.
+#      palette for Qt, B00merang's Windows XP, Vista and 7 themes and icons
+#      and the Windows 7 Kvantum theme (which the looks switch to), and the
+#      file manager as the folder handler.
 # It is safe to run again; existing configuration files are backed up
 # with a .pre-w2k suffix the first time they are replaced.
 set -e
@@ -92,21 +95,24 @@ if [ "$DO_DEPS" = 1 ]; then
             libxcursor-dev libxft-dev libfontconfig1-dev libfreetype-dev zlib1g-dev \
             libjpeg-dev libwebp-dev libxss-dev x11-xserver-utils x11-utils xdg-utils zip unzip tar p7zip-full \
             pulseaudio-utils alsa-utils xterm python3 git curl fonts-dejavu-core dbus-x11 \
-            cabextract qt5ct qt6ct libpam0g-dev xauth libdbus-1-dev libnotify-bin ;;
+            cabextract qt5ct qt6ct libpam0g-dev xauth libdbus-1-dev libnotify-bin \
+            qt5-style-plugins qt-style-kvantum ;;
     *fedora*|*rhel*|*centos*|*rocky*|*alma*)
         # strict=0: a name this release no longer has is skipped, not fatal.
         as_root dnf install -y --setopt=strict=0 gcc make libX11-devel libXext-devel libXrandr-devel \
             libXcursor-devel libXft-devel fontconfig-devel freetype-devel zlib-devel \
             libjpeg-turbo-devel libwebp-devel libXScrnSaver-devel xrandr xset xsetroot xrdb xmessage xdg-utils zip unzip \
             tar p7zip p7zip-plugins pulseaudio-utils alsa-utils xterm python3 git curl \
-            dejavu-sans-fonts dbus-x11 cabextract qt5ct qt6ct pam-devel xorg-x11-xauth dbus-devel libnotify ;;
+            dejavu-sans-fonts dbus-x11 cabextract qt5ct qt6ct pam-devel xorg-x11-xauth dbus-devel libnotify \
+            qt5-qtstyleplugins kvantum kvantum-qt5 ;;
     *arch*|*manjaro*|*endeavouros*)
         # -Syu, never -Sy: a refreshed database with an unrefreshed system
         # is the partial upgrade Arch warns about.
         as_root pacman -Syu --needed --noconfirm base-devel libx11 libxext libxrandr \
             libxcursor libxft fontconfig freetype2 zlib libjpeg-turbo libwebp libxss xorg-xrandr \
             xorg-xset xorg-xsetroot xorg-xrdb xorg-xmessage xdg-utils zip unzip tar \
-            p7zip libpulse alsa-utils xterm python git curl ttf-dejavu dbus cabextract qt5ct qt6ct pam xorg-xauth libnotify ;;
+            p7zip libpulse alsa-utils xterm python git curl ttf-dejavu dbus cabextract qt5ct qt6ct pam xorg-xauth libnotify \
+            kvantum kvantum-qt5 ;;
     *suse*)
         as_root zypper --non-interactive install gcc make libX11-devel libXext-devel \
             libXrandr-devel libXcursor-devel libXft-devel fontconfig-devel \
@@ -322,6 +328,76 @@ if [ "$DO_THEME" = 1 ]; then
         fi
     else
         say "Chicago95 is already installed"
+    fi
+fi
+
+# The looks' own themes for other programs, fetched like Chicago95:
+# B00merang's Windows XP (all seven styles), Windows Vista and Windows 7
+# GTK themes and the B00merang-Artwork Windows XP and Windows 7 icon
+# themes (github.com/B00merang-Project, github.com/B00merang-Artwork), and
+# the Windows 7 Kvantum theme for Qt from the KDE Store (store.kde.org
+# 1679903, by drgordbord). Display Properties switches to them with the
+# look, and the classic look goes back to Chicago95. Nothing is fetched
+# twice: a theme already in place is left alone.
+fetch_tgz() {   # url dest [folder]: the archive's top folder, or a folder
+                # inside it, becomes dest
+    _url=$1; _dest=$2; _sub=$3
+    [ -d "$_dest" ] && return 0
+    _tmp=$(mktemp -d)
+    if curl -fsL -m 300 "$_url" | tar xz -C "$_tmp" 2>/dev/null; then
+        _top=$(find "$_tmp" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+        _src="$_top${_sub:+/$_sub}"
+        if [ -d "$_src" ]; then
+            mkdir -p "$(dirname "$_dest")" && cp -r "$_src" "$_dest"
+        else
+            echo "  (nothing called $_sub in $_url; skipped)" >&2
+        fi
+    else
+        echo "  (could not fetch $_url; skipped)" >&2
+    fi
+    rm -rf "$_tmp"
+}
+if [ "$DO_THEME" = 1 ]; then
+    say "Fetching the Windows XP, Vista and 7 themes for GTK and Qt programs"
+    if [ "$DRY" = 1 ]; then
+        echo "  + B00merang Windows XP, Windows Vista, Windows-7 into ~/.themes"
+        echo "  + B00merang-Artwork Windows XP, Windows-7 into ~/.local/share/icons"
+        echo "  + Windows 7 Kvantum into ~/.config/Kvantum"
+    else
+        B=https://github.com/B00merang-Project
+        A=https://github.com/B00merang-Artwork
+        mkdir -p "$HOME/.themes" "$HOME/.local/share/icons" "$HOME/.config/Kvantum"
+        if [ ! -d "$HOME/.themes/Windows XP Luna" ]; then
+            tmp=$(mktemp -d)
+            if curl -fsL -m 300 "$B/Windows-XP/archive/refs/tags/3.1.tar.gz" | tar xz -C "$tmp" 2>/dev/null; then
+                for d in "$tmp"/Windows-XP-*/"Windows XP "*/; do
+                    [ -d "$d" ] && cp -r "$d" "$HOME/.themes/"
+                done
+            else
+                echo "  (could not fetch the Windows XP themes; skipped)" >&2
+            fi
+            rm -rf "$tmp"
+        fi
+        fetch_tgz "$B/Windows-7/archive/refs/tags/2.1.tar.gz" "$HOME/.themes/Windows-7"
+        fetch_tgz "$B/Windows-Vista/archive/refs/tags/1.0.tar.gz" "$HOME/.themes/Windows Vista"
+        fetch_tgz "$A/Windows-XP/archive/refs/tags/3.1.tar.gz" "$HOME/.local/share/icons/Windows XP"
+        fetch_tgz "$A/Windows-7/archive/refs/tags/1.0.tar.gz" "$HOME/.local/share/icons/Windows-7"
+        for t in "Windows XP" "Windows-7"; do
+            [ -d "$HOME/.local/share/icons/$t" ] && command -v gtk-update-icon-cache >/dev/null 2>&1 && \
+                gtk-update-icon-cache -q -f "$HOME/.local/share/icons/$t" 2>/dev/null || true
+        done
+        # The KDE Store hands out a fresh download link through its OCS API.
+        if [ ! -d "$HOME/.config/Kvantum/Windows7Kvantum" ]; then
+            link=$(curl -fsL -m 30 "https://api.pling.com/ocs/v1/content/data/1679903" 2>/dev/null | \
+                   tr -d '\r' | sed -n 's/.*<downloadlink1>\([^<]*\)<.*/\1/p' | head -n 1)
+            if [ -n "$link" ]; then
+                fetch_tgz "$link" "$HOME/.config/Kvantum/Windows7Kvantum"
+            else
+                echo "  (the KDE Store did not answer for the Windows 7 Kvantum theme; skipped)" >&2
+            fi
+        fi
+        n=0; for t in "Windows XP Luna" "Windows-7" "Windows Vista"; do [ -d "$HOME/.themes/$t" ] && n=$((n + 1)); done
+        echo "  $n of 3 GTK themes, $(ls -d "$HOME/.local/share/icons/Windows XP" "$HOME/.local/share/icons/Windows-7" 2>/dev/null | wc -l) of 2 icon themes, Kvantum: $([ -d "$HOME/.config/Kvantum/Windows7Kvantum" ] && echo yes || echo no)"
     fi
 fi
 

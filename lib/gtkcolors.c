@@ -149,12 +149,13 @@ static int dir_has(const char *dir, const char *sub)
 int w2k_gtk_themes(char (*out)[64], int max)
 {
     const char *home = getenv("HOME") ? getenv("HOME") : "/";
-    char dirs[3][1024];
+    char dirs[4][1024];
     snprintf(dirs[0], sizeof dirs[0], "%s/.themes", home);
     snprintf(dirs[1], sizeof dirs[1], "%s/.local/share/themes", home);
     snprintf(dirs[2], sizeof dirs[2], "/usr/share/themes");
+    snprintf(dirs[3], sizeof dirs[3], "/usr/local/share/themes");
     int n = 0;
-    for (int d = 0; d < 3; d++) {
+    for (int d = 0; d < 4; d++) {
         DIR *dp = opendir(dirs[d]);
         if (!dp) continue;
         struct dirent *e;
@@ -174,12 +175,13 @@ int w2k_gtk_themes(char (*out)[64], int max)
 int w2k_icon_themes(char (*out)[64], int max)
 {
     const char *home = getenv("HOME") ? getenv("HOME") : "/";
-    char dirs[3][1024];
+    char dirs[4][1024];
     snprintf(dirs[0], sizeof dirs[0], "%s/.icons", home);
     snprintf(dirs[1], sizeof dirs[1], "%s/.local/share/icons", home);
     snprintf(dirs[2], sizeof dirs[2], "/usr/share/icons");
+    snprintf(dirs[3], sizeof dirs[3], "/usr/local/share/icons");
     int n = 0;
-    for (int d = 0; d < 3; d++) {
+    for (int d = 0; d < 4; d++) {
         DIR *dp = opendir(dirs[d]);
         if (!dp) continue;
         struct dirent *e;
@@ -224,6 +226,7 @@ int w2k_qt_styles(char (*out)[64], int max)
         while ((e = readdir(dp))) {
             /* libqcleanlooksstyle.so -> Cleanlooks; the ct plugins are not styles. */
             const char *nm = e->d_name;
+            if (!strcmp(nm, "libkvantum.so")) { add_name(out, &n, max, "kvantum"); continue; }
             const char *end = strstr(nm, "style.so");
             if (strncmp(nm, "libq", 4) || !end || strstr(nm, "ct-style")) continue;
             int len = (int)(end - nm - 4);
@@ -403,6 +406,110 @@ static void gtk_css(const char *dir, int adwaita)
     free(css);
 }
 
+/* ---- Is it installed? ---------------------------------------------- */
+static const char *config_dir(char *buf, int n)
+{
+    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+    if (xdg && *xdg) snprintf(buf, (size_t)n, "%s", xdg);
+    else             snprintf(buf, (size_t)n, "%s/.config", home ? home : "/");
+    return buf;
+}
+
+int w2k_gtk_theme_installed(const char *name)
+{
+    if (!name || !*name) return 0;
+    const char *home = getenv("HOME") ? getenv("HOME") : "/";
+    const char *fmt[] = { "%s/.themes/%s", "%s/.local/share/themes/%s",
+                          "/usr/share/themes/%s", "/usr/local/share/themes/%s" };
+    for (int i = 0; i < 4; i++) {
+        char p[1200];
+        if (i < 2) snprintf(p, sizeof p, fmt[i], home, name);
+        else       snprintf(p, sizeof p, fmt[i], name);
+        if (dir_has(p, "gtk-3.0") || dir_has(p, "gtk-2.0") || dir_has(p, "gtk-4.0")) return 1;
+    }
+    return 0;
+}
+
+int w2k_icon_theme_installed(const char *name)
+{
+    if (!name || !*name) return 0;
+    const char *home = getenv("HOME") ? getenv("HOME") : "/";
+    const char *fmt[] = { "%s/.icons/%s", "%s/.local/share/icons/%s",
+                          "/usr/share/icons/%s", "/usr/local/share/icons/%s" };
+    for (int i = 0; i < 4; i++) {
+        char p[1200];
+        if (i < 2) snprintf(p, sizeof p, fmt[i], home, name);
+        else       snprintf(p, sizeof p, fmt[i], name);
+        if (dir_has(p, "index.theme")) return 1;
+    }
+    return 0;
+}
+
+/* Qt's own two styles are always there; the rest are plugins. */
+int w2k_qt_style_installed(const char *name)
+{
+    if (!name || !*name) return 0;
+    if (!strcasecmp(name, "Windows") || !strcasecmp(name, "Fusion")) return 1;
+    char names[24][64];
+    int n = w2k_qt_styles(names, 24);
+    for (int i = 0; i < n; i++)
+        if (!strcasecmp(names[i], name)) return 1;
+    return 0;
+}
+
+int w2k_kvantum_theme_installed(const char *name)
+{
+    if (!name || !*name) return 0;
+    char cfg[1100], p[1300];
+    config_dir(cfg, sizeof cfg);
+    snprintf(p, sizeof p, "%s/Kvantum/%s/%s.kvconfig", cfg, name, name);
+    if (access(p, F_OK) == 0) return 1;
+    snprintf(p, sizeof p, "/usr/share/Kvantum/%s/%s.kvconfig", name, name);
+    return access(p, F_OK) == 0;
+}
+
+/* ---- The looks' third-party themes -------------------------------- */
+void w2k_look_themes(int theme)
+{
+    const char *gtk, *icons, *qt, *kv = "", *set;
+    switch (theme) {
+    case THEME_XP:
+        gtk = "Windows XP Luna"; icons = "Windows XP"; qt = "gtk2"; set = "winxp";
+        break;
+    case THEME_VISTA:
+        gtk = "Windows Vista"; icons = "Windows-7"; qt = "kvantum";
+        kv = "Windows7Kvantum"; set = "win7";
+        break;
+    case THEME_BASIC7:
+        gtk = "Windows-7"; icons = "Windows-7"; qt = "kvantum";
+        kv = "Windows7Kvantum"; set = "win7";
+        break;
+    case THEME_MODERN:
+        /* GTK carries Adwaita itself; the desktop's colours go over it. */
+        gtk = w2k_modern_dark() ? "Adwaita-dark" : "Adwaita"; icons = "Adwaita";
+        qt = "Fusion"; set = "win2k";
+        break;
+    default:
+        gtk = "Chicago95"; icons = "Chicago95"; qt = "Windows"; set = "win2k";
+        break;
+    }
+    if (theme == THEME_MODERN || w2k_gtk_theme_installed(gtk))
+        snprintf(w2k_gtk_theme, sizeof w2k_gtk_theme, "%s", gtk);
+    if (w2k_icon_theme_installed(icons))
+        snprintf(w2k_icon_theme, sizeof w2k_icon_theme, "%s", icons);
+    /* Qt: the Windows 7 Kvantum theme needs both the Kvantum style and
+     * the theme; XP's GTK 2 bridge needs its plugin. Otherwise Qt's own
+     * classic style stays. */
+    if (!strcmp(qt, "kvantum")) {
+        if (w2k_qt_style_installed("kvantum") && w2k_kvantum_theme_installed(kv))
+            snprintf(w2k_kvantum_theme, sizeof w2k_kvantum_theme, "%s", kv);
+        else qt = "Windows";
+    } else if (!strcmp(qt, "gtk2") && !w2k_qt_style_installed("gtk2"))
+        qt = "Windows";
+    snprintf(w2k_qt_style, sizeof w2k_qt_style, "%s", qt);
+    snprintf(w2k_icon_set, sizeof w2k_icon_set, "%s", set);
+}
+
 /* ---- GTK 2 ---------------------------------------------------------- */
 static void gtk2(const char *home)
 {
@@ -487,4 +594,17 @@ void w2k_scheme_export_gtk(void)
     gtk2(home);
     qtct(cfg, "qt5ct");
     qtct(cfg, "qt6ct");
+    /* Kvantum reads its theme's name from its own file. */
+    if (w2k_kvantum_theme[0]) {
+        snprintf(dir, sizeof dir, "%s/Kvantum", cfg);
+        if (mkdirs(dir)) {
+            char path[1300];
+            snprintf(path, sizeof path, "%s/kvantum.kvconfig", dir);
+            ini_set(path, "General", "theme", w2k_kvantum_theme);
+        }
+    }
+    /* Programs started from here on (the Start menu, Run) inherit the
+     * choice; the session script sets the same at logon. */
+    setenv("GTK_THEME", w2k_gtk_theme, 1);
+    setenv("QT_STYLE_OVERRIDE", w2k_qt_style, 1);
 }

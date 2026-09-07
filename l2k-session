@@ -65,12 +65,16 @@ Xcursor.theme: Windows2000
 Xcursor.size: 32
 XRDB
 
-# Widget themes: Chicago95 for GTK (~/.themes), and Qt's own built-in
-# classic style, which is the Windows 9x look and needs nothing installed.
-# ~/.config/qt5ct also carries a Windows 2000 palette, used when
-# QT_QPA_PLATFORMTHEME is set to qt5ct or qt6ct.
-export QT_STYLE_OVERRIDE=Windows
-export GTK_THEME=Chicago95
+# Widget themes: whatever Display Properties chose with the look (GtkTheme=
+# and QtStyle= in ~/.w2k/scheme) -- Chicago95 for GTK and Qt's own built-in
+# classic style, the Windows 9x look that needs nothing installed, unless a
+# look brought B00merang's XP, Vista or 7 themes or the Windows 7 Kvantum
+# theme with it. ~/.config/qt5ct also carries the desktop's palette, used
+# when QT_QPA_PLATFORMTHEME is set to qt5ct or qt6ct.
+GTK_THEME=$(sed -n 's/^GtkTheme=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)
+QT_STYLE_OVERRIDE=$(sed -n 's/^QtStyle=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)
+export QT_STYLE_OVERRIDE="${QT_STYLE_OVERRIDE:-Windows}"
+export GTK_THEME="${GTK_THEME:-Chicago95}"
 # qt5ct/qt6ct carry the Windows 2000 palette install.sh wrote; without them
 # Qt still gets the Windows style from QT_STYLE_OVERRIDE.
 if command -v qt6ct >/dev/null 2>&1; then export QT_QPA_PLATFORMTHEME=qt6ct

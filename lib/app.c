@@ -219,6 +219,7 @@ int           w2k_monitor_cfg_n;
  * until Alt is pressed, which is what Windows 2000 does. */
 int w2k_accel_shown = 1;
 char w2k_gtk_theme[64] = "Chicago95", w2k_icon_theme[64] = "Chicago95", w2k_qt_style[64] = "Windows";
+char w2k_kvantum_theme[64] = "";
 
 void w2k_accel_show(void)
 {
@@ -425,6 +426,7 @@ void w2k_scheme_reset(void)
     snprintf(w2k_gtk_theme, sizeof w2k_gtk_theme, "Chicago95");
     snprintf(w2k_icon_theme, sizeof w2k_icon_theme, "Chicago95");
     snprintf(w2k_qt_style, sizeof w2k_qt_style, "Windows");
+    w2k_kvantum_theme[0] = 0;
     snprintf(w2k_sound_pack, sizeof w2k_sound_pack, "win2000");
     w2k_sound_volume = 100;
     memset(w2k_sound_override, 0, sizeof w2k_sound_override);
@@ -860,6 +862,7 @@ int w2k_scheme_load(const char *path)
         if (!strcasecmp(line, "GtkTheme"))  { snprintf(w2k_gtk_theme, sizeof w2k_gtk_theme, "%.63s", val); continue; }
         if (!strcasecmp(line, "IconTheme")) { snprintf(w2k_icon_theme, sizeof w2k_icon_theme, "%.63s", val); continue; }
         if (!strcasecmp(line, "QtStyle"))   { snprintf(w2k_qt_style, sizeof w2k_qt_style, "%.63s", val); continue; }
+        if (!strcasecmp(line, "KvantumTheme")) { snprintf(w2k_kvantum_theme, sizeof w2k_kvantum_theme, "%.63s", val); continue; }
         if (!strcasecmp(line, "StartIcon")) {
             w2k_start_icon = !strcasecmp(val, "tux") ? SI_TUX :
                              !strcasecmp(val, "distro") ? SI_DISTRO : SI_FLAG;
@@ -951,6 +954,7 @@ int w2k_scheme_save(const char *path)
     fprintf(f, "GtkTheme=%s\n", w2k_gtk_theme);
     fprintf(f, "IconTheme=%s\n", w2k_icon_theme);
     fprintf(f, "QtStyle=%s\n", w2k_qt_style);
+    fprintf(f, "KvantumTheme=%s\n", w2k_kvantum_theme);
     fprintf(f, "Cursors=%s\n", w2k_cursors_windows ? "windows" : "x11");
     fprintf(f, "DoubleClickTime=%d\n", w2k_dblclk_ms);
     fprintf(f, "MouseSwap=%d\n", w2k_mouse_swap);

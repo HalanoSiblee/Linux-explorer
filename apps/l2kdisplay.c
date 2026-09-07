@@ -586,6 +586,8 @@ static int matching_preset(void)
     return -1;
 }
 
+static void fill_program_combos(void);
+
 static void on_scheme(void *u, int i)
 {
     (void)u;
@@ -605,6 +607,13 @@ static void on_scheme(void *u, int i)
     for (int k = 0; k < presets[i].n; k++)
         w2k_color_set(presets[i].t[k].color, presets[i].t[k].r,
                       presets[i].t[k].g, presets[i].t[k].b);
+    /* The look brings its GTK and Qt themes, icon theme and icon set. */
+    w2k_look_themes(w2k_theme);
+    w2k_icon_load_default();
+    if (dl.gtktheme) fill_program_combos();
+    if (dl.iconset)
+        for (int k = 0; k < dl.nsets; k++)
+            if (!strcmp(dl.sets[k], w2k_icon_set)) dl.iconset->sel = k;
     XSetWindowBackground(w2k.dpy, dl.win->win, w2k.col[C_FACE]);
     fill_color_edits();
     dl.dirty = 1;
@@ -1572,6 +1581,7 @@ int main(int argc, char **argv)
                 for (int k = 0; k < presets[i].n; k++)
                     w2k_color_set(presets[i].t[k].color, presets[i].t[k].r,
                                   presets[i].t[k].g, presets[i].t[k].b);
+                w2k_look_themes(w2k_theme);
                 w2k_scheme_save(NULL);
                 w2k_scheme_broadcast();
                 w2k_fini();

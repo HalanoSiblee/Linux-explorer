@@ -15,5 +15,20 @@ property of its owners and is not relicensed:
   cursors/                                              Windows cursors
   sounds/                                               Windows sound schemes
 
+Fetched by the installer into the user's home, not carried in the
+repository, and under their own licences:
+
+  Chicago95                     github.com/grassmunk/Chicago95 (GPL-3)
+  Windows XP, Windows Vista,    github.com/B00merang-Project (GPL-3),
+  Windows-7 GTK themes          Windows XP Luna, Metallic, Royale, Royale
+                                Dark, Zune, Homestead and Embedded, and
+                                the Vista and 7 themes
+  Windows XP, Windows-7 icons   github.com/B00merang-Artwork (Windows-XP
+                                under GPL-2; Windows-7, the Win2-7 set,
+                                as its author distributes it)
+  Windows 7 Kvantum             store.kde.org/p/1679903 by drgordbord, a
+                                theme for the Kvantum engine
+                                (github.com/tsujan/Kvantum, GPL-3)
+
 See icons/README.md and the "Trademarks and copyright" section of
 README.md.

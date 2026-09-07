@@ -648,7 +648,7 @@ void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
         unsigned long fill = state == W2K_TB_DOWN ? w2k_rgb(207, 229, 249)
                            : state == W2K_TB_HOT  ? w2k_rgb(225, 235, 250)
                                                   : w2k_rgb(179, 211, 241);
-        int bx = x, by = y + 1, bw = w, bh = h - 2;   /* under the bar's top line */
+        int bx = x, by = y + 1, bw = w, bh = h - 1;   /* from under the bar's top line to its last row */
         XSetForeground(w2k.dpy, w2k.gc, fill);
         w2k_fill_fg(d, bx + 1, by + 1, bw - 2, bh - 2);
         XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(200, 218, 238));

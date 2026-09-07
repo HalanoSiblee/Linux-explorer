@@ -86,6 +86,33 @@ dbus-update-activation-environment --systemd \
     DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE QT_STYLE_OVERRIDE \
     QT_QPA_PLATFORMTHEME GTK_THEME 2>/dev/null
 
+# A PolicyKit authentication agent, so that pkexec can ask for a password:
+# the lid and power-button settings, Device Manager's drivers, Disk
+# Management and the brightness fallback all go through it. Whichever of
+# the usual agents is installed; none is fatal, only those things fail.
+if ! pgrep -f 'polkit.*agent' >/dev/null 2>&1 && ! pgrep -x lxpolkit >/dev/null 2>&1; then
+    for agent in lxpolkit \
+        /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+        /usr/libexec/polkit-gnome-authentication-agent-1 \
+        /usr/lib/x86_64-linux-gnu/polkit-gnome/polkit-gnome-authentication-agent-1 \
+        /usr/lib/polkit-gnome-authentication-agent-1 \
+        /usr/libexec/polkit-mate-authentication-agent-1 \
+        /usr/lib/x86_64-linux-gnu/polkit-mate/polkit-mate-authentication-agent-1 \
+        /usr/lib/xfce-polkit/xfce-polkit /usr/libexec/xfce-polkit/xfce-polkit \
+        lxqt-policykit-agent \
+        /usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1 \
+        /usr/libexec/polkit-kde-authentication-agent-1 \
+        /usr/lib/polkit-kde-authentication-agent-1 \
+        hyprpolkitagent; do
+        case $agent in
+            /*) [ -x "$agent" ] || continue ;;
+            *)  command -v "$agent" >/dev/null 2>&1 || continue ;;
+        esac
+        "$agent" >/dev/null 2>&1 &
+        break
+    done
+fi
+
 xsetroot -solid "#3a6ea5" 2>/dev/null
 xset b off 2>/dev/null
 

@@ -276,7 +276,12 @@ arrangement, `UiScale=` and `ScaleMode=desktop|supersample|xrandr` for
 the scaling above, `Resample=`, the power scheme's `MonitorOff=`,
 `StandBy=` and `Hibernate=` minutes, `StartWidth=` for the classic Start
 menu's columns) and is applied live to every running program. Shut Down
-offers Stand by and Hibernate when logind allows them. Commands in
+offers Stand by and Hibernate when logind allows them. The installer
+gives your account the `video` group and a udev rule so Power Options can
+set the screen brightness straight from `/sys/class/backlight` (log off
+and on once after installing), and the session starts a PolicyKit agent
+(`lxpolkit` or whichever is installed) so that the lid settings, Device
+Manager and Disk Management can ask for a password through pkexec. Commands in
 `~/.w2k/autostart` (one per line) are launched at logon. Pinned programs,
 favorites and the Recycle Bin are under `~/.w2k` too.
 

@@ -131,16 +131,30 @@ void w2k_power_describe(const W2kPower *p, char *out, int n)
 /* ------------------------------------------------------------------ *
  * The backlight
  * ------------------------------------------------------------------ */
+/* The backlight to use. A laptop can show two -- the GPU's own
+ * ("raw": intel_backlight, amdgpu_bl0) and the firmware's (acpi_video0),
+ * which often does nothing -- so the GPU's is preferred, then any with a
+ * range. */
 static int backlight_dir(char *out, int n)
 {
     DIR *d = opendir("/sys/class/backlight");
     if (!d) return 0;
     struct dirent *de;
-    int found = 0;
-    while (!found && (de = readdir(d))) {
+    int found = 0, found_raw = 0;
+    while ((de = readdir(d))) {
         if (de->d_name[0] == '.') continue;
-        snprintf(out, (size_t)n, "/sys/class/backlight/%.200s", de->d_name);
-        if (read_num(out, "max_brightness", 0) > 0) found = 1;
+        char dir[400], tpath[520], type[32] = "";
+        snprintf(dir, sizeof dir, "/sys/class/backlight/%.200s", de->d_name);
+        if (read_num(dir, "max_brightness", 0) <= 0) continue;
+        snprintf(tpath, sizeof tpath, "%s/type", dir);
+        FILE *f = fopen(tpath, "r");
+        if (f) { if (!fgets(type, sizeof type, f)) type[0] = 0; fclose(f); }
+        int raw = !strncmp(type, "raw", 3);
+        if (!found || (raw && !found_raw)) {
+            snprintf(out, (size_t)n, "%s", dir);
+            found = 1;
+            found_raw = raw;
+        }
     }
     closedir(d);
     return found;

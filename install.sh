@@ -96,7 +96,7 @@ if [ "$DO_DEPS" = 1 ]; then
             libjpeg-dev libwebp-dev libxss-dev x11-xserver-utils x11-utils xdg-utils zip unzip tar p7zip-full \
             pulseaudio-utils alsa-utils xterm python3 git curl fonts-dejavu-core dbus-x11 \
             cabextract qt5ct qt6ct libpam0g-dev xauth libdbus-1-dev libnotify-bin \
-            qt5-style-plugins qt-style-kvantum ;;
+            qt5-style-plugins qt-style-kvantum lxpolkit ;;
     *fedora*|*rhel*|*centos*|*rocky*|*alma*)
         # strict=0: a name this release no longer has is skipped, not fatal.
         as_root dnf install -y --setopt=strict=0 gcc make libX11-devel libXext-devel libXrandr-devel \
@@ -104,7 +104,7 @@ if [ "$DO_DEPS" = 1 ]; then
             libjpeg-turbo-devel libwebp-devel libXScrnSaver-devel xrandr xset xsetroot xrdb xmessage xdg-utils zip unzip \
             tar p7zip p7zip-plugins pulseaudio-utils alsa-utils xterm python3 git curl \
             dejavu-sans-fonts dbus-x11 cabextract qt5ct qt6ct pam-devel xorg-x11-xauth dbus-devel libnotify \
-            qt5-qtstyleplugins kvantum kvantum-qt5 ;;
+            qt5-qtstyleplugins kvantum kvantum-qt5 lxpolkit ;;
     *arch*|*manjaro*|*endeavouros*)
         # -Syu, never -Sy: a refreshed database with an unrefreshed system
         # is the partial upgrade Arch warns about.
@@ -112,7 +112,7 @@ if [ "$DO_DEPS" = 1 ]; then
             libxcursor libxft fontconfig freetype2 zlib libjpeg-turbo libwebp libxss xorg-xrandr \
             xorg-xset xorg-xsetroot xorg-xrdb xorg-xmessage xdg-utils zip unzip tar \
             p7zip libpulse alsa-utils xterm python git curl ttf-dejavu dbus cabextract qt5ct qt6ct pam xorg-xauth libnotify \
-            kvantum kvantum-qt5 ;;
+            kvantum kvantum-qt5 polkit-gnome ;;
     *suse*)
         as_root zypper --non-interactive install gcc make libX11-devel libXext-devel \
             libXrandr-devel libXcursor-devel libXft-devel fontconfig-devel \
@@ -259,6 +259,26 @@ if [ "$DO_BUILD" = 1 ]; then
             echo "  No systemd here: start '$PREFIX/bin/l2kdm' as root at boot from your" >&2
             echo "  init system (it runs in the foreground and restarts the logon screen itself)." >&2
         fi
+    fi
+fi
+
+# The screen's backlight: a udev rule hands the brightness file to the
+# video group and the user joins that group, so Power Options can set it
+# straight from the file, with no password (brightnessctl's package does
+# the same). The rule is applied now; the group takes effect at the
+# user's next logon.
+if [ "$USER_ONLY" != 1 ]; then
+    tmp=$(mktemp)
+    cat > "$tmp" <<'EOF'
+# Linux 2000: the console user (video group) may set the screen brightness.
+ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", RUN+="/bin/chmod g+w /sys/class/backlight/%k/brightness"
+EOF
+    as_root install -m644 "$tmp" /etc/udev/rules.d/90-linux2000-backlight.rules
+    rm -f "$tmp"
+    as_root sh -c "udevadm control --reload 2>/dev/null; udevadm trigger -s backlight -c add 2>/dev/null; true"
+    bl_user=${TARGET_USER:-$USER}
+    if [ -n "$bl_user" ] && [ "$bl_user" != root ] && getent group video >/dev/null 2>&1; then
+        as_root usermod -aG video "$bl_user" 2>/dev/null || true
     fi
 fi
 

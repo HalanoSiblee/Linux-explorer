@@ -1832,8 +1832,11 @@ static void pw_commit(PowerDlg *pd)
         else {
             ok = 0;
             w2k_msgbox(pd->win, "Power Options",
-                       "The brightness could not be changed. Install brightnessctl, or\n"
-                       "give your user write access to /sys/class/backlight.",
+                       "The brightness could not be changed.\n\n"
+                       "The installer gives your account the video group and a udev rule\n"
+                       "for the backlight: log off and on again for them to take effect\n"
+                       "(or run install.sh once more). Otherwise install brightnessctl, or\n"
+                       "log on with a PolicyKit agent running so that pkexec can ask.",
                        MB_OK | MB_ICONERROR);
         }
     }

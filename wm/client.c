@@ -148,6 +148,7 @@ static int icon_for_class(const char *cls)
     if (!strcasecmp(cls, "l2kcalc"))     return ICO_CALC;
     if (!strcasecmp(cls, "l2kcharmap"))  return ICO_CHARMAP;
     if (!strncasecmp(cls, "l2kdevmgmt", 10)) return ICO_MYCOMPUTER;
+    if (!strncasecmp(cls, "l2kdiskmgmt", 11)) return ICO_DRIVE_HDD;
     if (!strcasecmp(cls, "l2kimage"))    return ICO_PAINT;
     if (!strcasecmp(cls, "l2kpaint"))    return ICO_PAINT;
     if (!strcasecmp(cls, "l2ksnip"))     return ICO_SNIP;

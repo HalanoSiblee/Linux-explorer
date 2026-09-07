@@ -40,6 +40,8 @@ static const Applet applets[] = {
       ICO_PROGRAMS, NULL },
     { "Device Manager", "Shows the hardware installed in this computer and lets you change its drivers.",
       ICO_MYCOMPUTER, "l2kdevmgmt" },
+    { "Disk Management", "Partitions and formats the disks in this computer, and mounts their volumes.",
+      ICO_DRIVE_HDD, "l2kdiskmgmt" },
     { "Display", "Customize your desktop display and screen saver.",
       ICO_CP_DISPLAY, "l2kdisplay" },
     { "Folder Options", "Customizes the display of files and folders, changes file associations, and makes network files available offline.",

@@ -160,6 +160,7 @@ static int pin_icon_resolve(const Pin *p)
     if (strstr(p->cmd, "l2kcalc"))     return ICO_CALC;
     if (strstr(p->cmd, "l2kcharmap"))  return ICO_CHARMAP;
     if (strstr(p->cmd, "l2kdevmgmt"))  return ICO_MYCOMPUTER;
+    if (strstr(p->cmd, "l2kdiskmgmt")) return ICO_DRIVE_HDD;
     if (strstr(p->cmd, "l2kcontrol"))  return ICO_CONTROLPANEL;
     if (strstr(p->cmd, "l2kdisplay"))  return ICO_SETTINGS;
     if (strstr(p->cmd, "l2kimage"))    return ICO_PAINT;

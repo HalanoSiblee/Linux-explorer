@@ -122,6 +122,12 @@ Try it nested first, without logging out of anything:
                    experimentally, the desktop's own: see Scaling below
     l2kdevmgmt     Device Manager: the machine's hardware from sysfs, drivers,
                    enable/disable, DKMS driver install (contributed)
+    l2kdiskmgmt    Disk Management: every disk as a row of partitions drawn
+                   to scale with the volume list above, as the Windows 2000
+                   snap-in; create and delete partitions, format (NTFS,
+                   FAT32, exFAT, ext2/3/4, XFS, Btrfs, swap), mount, mark
+                   active, initialize a blank disk as MBR or GPT -- through
+                   sfdisk, mkfs and mount as root, each asked for first
     l2ktaskmgr     Task Manager: applications, processes, and a Performance
                    page in the Windows 2000 layout -- LED meters, the green
                    grid graphs with kernel time in red, page-file usage, the
@@ -141,6 +147,8 @@ Try it nested first, without logging out of anything:
                    logo, the version and build, the distribution, the kernel,
                    who it is licensed to and the memory (Start > Programs >
                    Accessories > System Tools, or Run > linver)
+
+![Disk Management: the volume list over the disks drawn to scale, with the Format dialog](docs/disk-management.png)
 
 Five looks, from Display Properties > Appearance: the Windows 2000
 classic scheme (and its colour variants: Brick, Desert, Eggplant, a

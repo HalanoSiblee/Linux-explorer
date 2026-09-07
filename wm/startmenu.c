@@ -198,6 +198,7 @@ static int on_context(int id, int x, int y)
     case SM_CALC:     own = "l2kcalc";     own_label = "Calculator"; break;
     case SM_CHARMAP:  own = "l2kcharmap";  own_label = "Character Map"; break;
     case SM_DEVMGMT:  own = "l2kdevmgmt";  own_label = "Device Manager"; break;
+    case SM_DISKMGMT: own = "l2kdiskmgmt"; own_label = "Disk Management"; break;
     case SM_LINVER:   own = "linver";      own_label = "About Linux 2000"; own_icon = "w2k:startflag"; break;
     case SM_UPDATE:   own = "l2kupdate";   own_label = "Windows Update"; own_icon = "w2k:winupdate"; break;
     case SM_IMAGING:  own = "l2kimage";    own_label = "Imaging"; break;
@@ -242,6 +243,7 @@ void startmenu_open(void)
     W2kMenu *systools = w2k_menu_new();
     prog_item(systools, SM_CHARMAP, "&Character Map", "l2kcharmap", ICO_CHARMAP);
     prog_item(systools, SM_DEVMGMT, "&Device Manager", "l2kdevmgmt", ICO_MYCOMPUTER);
+    prog_item(systools, SM_DISKMGMT, "Dis&k Management", "l2kdiskmgmt", ICO_DRIVE_HDD);
     prog_item(systools, SM_LINVER, "&About Linux 2000", "linver", ICO_STARTFLAG);
     /* Windows Update is pinned to the Start menu at first, as an ordinary
      * pin; this is where it can be pinned again from. */
@@ -384,6 +386,7 @@ void startmenu_dispatch(int id)
     case SM_CALC:         wm_spawn("l2kcalc"); break;
     case SM_CHARMAP:      wm_spawn("l2kcharmap"); break;
     case SM_DEVMGMT:      wm_spawn("l2kdevmgmt"); break;
+    case SM_DISKMGMT:     wm_spawn("l2kdiskmgmt"); break;
     case SM_LINVER:       wm_spawn("linver"); break;
     case SM_UPDATE:       wm_spawn("l2kupdate"); break;
     case SM_FOLDEROPTS:   wm_spawn("l2kcontrol folders"); break;

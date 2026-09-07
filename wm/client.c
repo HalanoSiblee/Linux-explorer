@@ -30,6 +30,9 @@ int client_border(Client *c)
     if (!c->decorate || c->fullscreen) return 0;
     /* Windows 7 Basic frames are ten pixels all round, dialogs included. */
     if (w2k_theme == THEME_BASIC7) return w2k_px(10);
+    /* Modern: a one-pixel line with an invisible six-pixel margin
+     * outside it, shaped away, that the resize cursor still finds. */
+    if (w2k_theme == THEME_MODERN) return w2k_theme_modern_margin() + w2k_th(1);
     return c->resizable ? FRAME_SIZE : FRAME_FIXED;
 }
 
@@ -540,8 +543,14 @@ void client_maximize(Client *c, int on)
         int wx, wy, ww, wh;
         wm_workarea_of_client(c, &wx, &wy, &ww, &wh);
         int b = client_border(c), cap = client_caption_h(c);
-        client_move_resize(c, wx + b, wy + b + cap,
-                           ww - 2 * b, wh - 2 * b - cap);
+        if (w2k_theme == THEME_MODERN) {
+            /* The invisible margin goes off the edge of the work area,
+             * as Windows pushes it, so the client meets the edges. */
+            int t = w2k_th(1);
+            client_move_resize(c, wx, wy + cap + t, ww, wh - cap - t);
+        } else
+            client_move_resize(c, wx + b, wy + b + cap,
+                               ww - 2 * b, wh - 2 * b - cap);
     } else if (!on && c->maximized) {
         c->maximized = 0;
         client_move_resize(c, c->rx, c->ry, c->rw, c->rh);

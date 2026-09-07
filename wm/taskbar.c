@@ -169,7 +169,7 @@ static W2kSkin *theme_start_skin(void)
     skin = NULL;
     w2k_del_timer(orb_tick, NULL);
     orb_frames_free();
-    if (w2k_theme == THEME_CLASSIC) return NULL;
+    if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN) return NULL;
 
     const char *file = w2k_theme == THEME_XP ? "xp-start.png"
                                              : w2k_taskbar_small ? "w7-orb-small.png"
@@ -331,6 +331,7 @@ int taskbar_button_rect(Client *c, int *x, int *y, int *w, int *h)
 static int drag_task = -1;
 static int hover_task = -1;
 static long hover_since;
+static int hover_ql = -1;         /* the pinned item under the pointer (Windows 7) */
 static int tip_up;
 static int tip_kind;              /* 1 the clock's date, 2 the battery */
 
@@ -611,9 +612,12 @@ static void taskbar_draw(Pixmap pm, int h)
             w2k_icon_draw(pm, TB_PAD + (start_w - 16) / 2,
                           ql_y + i * QL_BTN + (QL_BTN - 16) / 2, ql[i].icon);
         else if (w2k_theme == THEME_BASIC7) {
-            /* A framed box with its icon, like a running window's. */
-            w2k_theme_taskbutton(pm, ql_x + i * QL_BTN, 0, QL_BTN, BTN_H,
-                                 W2K_TB_NORMAL, w2k_theme);
+            /* Windows 7 shows a pinned item that is not running as its
+             * icon alone on the bar; the framed box appears under the
+             * pointer (and for running windows, which are task buttons). */
+            if (i == hover_ql)
+                w2k_theme_taskbutton(pm, ql_x + i * QL_BTN, 0, QL_BTN, BTN_H,
+                                     W2K_TB_HOT, w2k_theme);
             if (w2k_taskbar_small)
                 w2k_icon_draw(pm, ql_x + i * QL_BTN + (QL_BTN - 16) / 2,
                               (BTN_H - 16) / 2, ql[i].icon);
@@ -679,7 +683,7 @@ static void taskbar_draw(Pixmap pm, int h)
             char buf[160];
             w2k_ellipsis(F_UI, c->name, avail, buf, sizeof buf);
             int ty = by + (bh - w2k_font_height(F_UI)) / 2 + o;
-            if (w2k_theme == THEME_CLASSIC)
+            if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN)
                 w2k_text(pm, F_UI, tx, ty, buf, C_TEXT);
             else
                 w2k_text_rgb(pm, F_UI, tx, ty, buf, 255, 255, 255);
@@ -699,7 +703,8 @@ static void taskbar_draw(Pixmap pm, int h)
         if (w2k_taskbar_showclock) {
             int tw = w2k_text_width(F_UI, clock_text, -1);
             int cx = TB_PAD + (ww - tw) / 2, cy = tray_y + (BTN_H - w2k_font_height(F_UI)) / 2;
-            if (w2k_theme == THEME_CLASSIC) w2k_text(pm, F_UI, cx, cy, clock_text, C_TEXT);
+            if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN)
+                w2k_text(pm, F_UI, cx, cy, clock_text, C_TEXT);
             else if (w2k_theme == THEME_BASIC7) w2k_text_rgb(pm, F_UI, cx, cy, clock_text, 255, 255, 255);
             else w2k_text_rgb(pm, F_UI, cx, cy, clock_text, 255, 255, 255);
         }
@@ -741,7 +746,7 @@ static void taskbar_draw(Pixmap pm, int h)
                      clock_date, 255, 255, 255);
     } else if (w2k_taskbar_showclock) {
         int cy = by + (BTN_H - w2k_font_height(F_UI)) / 2;
-        if (w2k_theme == THEME_CLASSIC)
+        if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN)
             w2k_text(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text, C_TEXT);
         else if (w2k_theme == THEME_BASIC7)
             w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD, cy, clock_text, 255, 255, 255);
@@ -1229,6 +1234,7 @@ void taskbar_hover_tick(void)
 static void hover_clear(void)
 {
     hover_task = -1;
+    hover_ql = -1;
     hover_since = 0;
     if (tip_up) { w2k_tooltip_hide(); tip_up = 0; }
 }
@@ -1313,10 +1319,18 @@ int taskbar_event(XEvent *e)
             hover_task = over;
             hover_since = over >= 0 ? w2k_now_ms() : 0;
         }
+        /* Windows 7 lights a pinned item under the pointer. */
+        int oq = -1;
+        if (w2k_theme == THEME_BASIC7 && !vertical())
+            for (int i = 0; i < NQL; i++)
+                if (mx >= ql_x + i * QL_BTN && mx < ql_x + (i + 1) * QL_BTN) oq = i;
+        if (oq != hover_ql) { hover_ql = oq; taskbar_paint(); }
         return 1;
     }
     if (e->type == LeaveNotify && e->xcrossing.window == tb) {
+        int lit = hover_ql >= 0;
         hover_clear();
+        if (lit) taskbar_paint();
         if (start_hot) { start_hot = 0; start_hot_changed(); }
     }
     if (e->type == ButtonRelease && drag_task >= 0) { drag_task = -1; return 1; }

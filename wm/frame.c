@@ -26,11 +26,13 @@ static void caption_layout(Client *c, Rect *cap, Rect *sys,
     int b = client_border(c);
     int themed = w2k_theme != THEME_CLASSIC;
     /* Luna's caption reaches to the frame's edge and swallows the top
-     * border; the classic one sits inside it. */
-    cap->x = themed ? 0 : b;
-    cap->y = themed ? 0 : b;
-    cap->w = client_frame_w(c) - (themed ? 0 : 2 * b);
-    cap->h = themed ? client_caption_h(c) + b : CAPTION_H;
+     * border; the classic one sits inside it. Modern's reaches to the
+     * visible edge: the invisible margin lies outside. */
+    int m = w2k_theme == THEME_MODERN ? w2k_theme_modern_margin() : 0;
+    cap->x = themed ? m : b;
+    cap->y = themed ? m : b;
+    cap->w = client_frame_w(c) - (themed ? 2 * m : 2 * b);
+    cap->h = themed ? client_caption_h(c) + b - m : CAPTION_H;
 
     int bw = themed ? P(w2k_theme_capbtn_size(w2k_theme)) : CAPBTN_W;
     int bh = themed ? bw : CAPBTN_H;
@@ -39,6 +41,7 @@ static void caption_layout(Client *c, Rect *cap, Rect *sys,
          * square; Windows 7's Close is wider than its neighbours. */
         int by, cx, mxx, mnx;
         w2k_theme_capbtn_place(w2k_theme, cap->w, &by, &cx, &mxx, &mnx);
+        cx += cap->x; mxx += cap->x; mnx += cap->x; by += cap->y;
         cl->x = cx;  cl->y = by; cl->w = P(w2k_theme_capbtn_w(w2k_theme, W2K_CAP_CLOSE)); cl->h = bh;
         mx->x = mxx; mx->y = by; mx->w = P(w2k_theme_capbtn_w(w2k_theme, W2K_CAP_MAX));   mx->h = bh;
         mn->x = mnx; mn->y = by; mn->w = P(w2k_theme_capbtn_w(w2k_theme, W2K_CAP_MIN));   mn->h = bh;
@@ -138,14 +141,18 @@ static void frame_draw_raw(Client *c, Drawable d)
     /* Windows 7 sets its icon two pixels in from the eight-pixel border
      * and the title, in the regular UI face, six past it. */
     int seven = w2k_theme == THEME_BASIC7;
-    int inset = P(w2k_theme == THEME_CLASSIC ? 1 : seven ? 10 : 6);
+    int modern = w2k_theme == THEME_MODERN;
+    int inset = P(w2k_theme == THEME_CLASSIC ? 1 : seven ? 10 : modern ? 9 : 6);
     int tx = inset + P(1);
     if (c->icon >= 0 && !c->is_dialog) {
-        /* Measured off the artwork: the icon at (10,11), the title at 30. */
+        /* Measured off the artwork: the icon at (10,11), the title at 30.
+         * Windows 11 sets the icon eight pixels in and the title eight
+         * past it. */
         w2k_icon_draw(pm, inset, seven ? P(11) : (cap.h - P(16)) / 2, c->icon);
-        tx = w2k_theme == THEME_CLASSIC ? inset + P(16 + 3) : P(seven ? 30 : 27);
+        tx = w2k_theme == THEME_CLASSIC ? inset + P(16 + 3)
+           : modern ? inset + P(16 + 8) : P(seven ? 30 : 27);
     }
-    int tfont = seven ? F_UI : F_UI_BOLD;
+    int tfont = (seven || modern) ? F_UI : F_UI_BOLD;
 
     int avail = mn.w ? mn.x - cap.x - tx - P(2) : cl.x - cap.x - tx - P(2);
     if (avail > P(8) && c->name) {
@@ -217,6 +224,37 @@ void frame_shape(Client *c)
     int fw = client_frame_w(c), fh = client_frame_h(c);
     if (fw <= 0 || fh <= 0) return;
 
+    if (w2k_theme == THEME_MODERN && c->decorate && !c->fullscreen) {
+        /* The invisible margin is cut away all round, and the visible
+         * window gets Windows 11's rounded corners -- unless it is
+         * maximised, when the margin is off the screen and the corners
+         * are square. */
+        int m = w2k_theme_modern_margin();
+        int rad = c->maximized ? 0 : P(8);
+        int vw = fw - 2 * m, vh = fh - 2 * m;
+        if (vw <= 0 || vh <= 0) return;
+        if (2 * rad > vw) rad = vw / 2;
+        if (2 * rad > vh) rad = vh / 2;
+        Pixmap mask = XCreatePixmap(w2k.dpy, c->frame, (unsigned)fw,
+                                    (unsigned)fh, 1);
+        GC g = XCreateGC(w2k.dpy, mask, 0, NULL);
+        XSetForeground(w2k.dpy, g, 0);
+        XFillRectangle(w2k.dpy, mask, g, 0, 0, (unsigned)fw, (unsigned)fh);
+        XSetForeground(w2k.dpy, g, 1);
+        if (vh > 2 * rad)
+            XFillRectangle(w2k.dpy, mask, g, m, m + rad, (unsigned)vw,
+                           (unsigned)(vh - 2 * rad));
+        for (int i = 0; i < rad; i++) {
+            int ins = w2k_round_inset(rad, i);
+            if (2 * ins >= vw) continue;
+            XFillRectangle(w2k.dpy, mask, g, m + ins, m + i, (unsigned)(vw - 2 * ins), 1);
+            XFillRectangle(w2k.dpy, mask, g, m + ins, m + vh - 1 - i, (unsigned)(vw - 2 * ins), 1);
+        }
+        XShapeCombineMask(w2k.dpy, c->frame, ShapeBounding, 0, 0, mask, ShapeSet);
+        XFreeGC(w2k.dpy, g);
+        XFreePixmap(w2k.dpy, mask);
+        return;
+    }
     if (w2k_theme == THEME_CLASSIC || !c->decorate || c->maximized ||
         c->fullscreen) {
         XShapeCombineMask(w2k.dpy, c->frame, ShapeBounding, 0, 0, None,

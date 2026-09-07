@@ -142,17 +142,33 @@ Try it nested first, without logging out of anything:
                    who it is licensed to and the memory (Start > Programs >
                    Accessories > System Tools, or Run > linver)
 
-Three looks, from Display Properties > Appearance: the Windows 2000
+Four looks, from Display Properties > Appearance: the Windows 2000
 classic scheme (and its colour variants: Brick, Desert, Eggplant, a
-Windows Classic Dark and the rest), Windows XP (Luna, with the two-column Start menu), and Windows 7
-Basic (with its Start menu, orb and taskbar). Every element's colour can
-be set from the basic-colours palette or by its red, green and blue
-values, and title bars have a Color 2 for the far end of their gradient. The XP and 7 chrome is cropped from screenshots and checked by
-diffing against them.
+Windows Classic Dark and the rest), Windows XP (Luna, with the two-column
+Start menu), Windows 7 Basic (with its Start menu, orb and taskbar), and
+Modern, in a Light and a Dark scheme. Every element's colour can be set
+from the basic-colours palette or by its red, green and blue values, and
+title bars have a Color 2 for the far end of their gradient. The XP and 7
+chrome is cropped from screenshots and checked by diffing against them.
 
 ![Windows XP look: Luna windows, the two-column Start menu, Explorer, Task Manager and Display Properties](docs/windows-xp.png)
 
 ![Windows 7 Basic look: the orb, the Windows 7 Start menu and taskbar, with the Windows 7 icon set](docs/windows-7.png)
+
+Modern is for anyone who wants the desktop without the bevels: title bars
+in the window's own colour with thin Minimize, Maximize and Close glyphs
+(Close turns red when pressed), a one-pixel window border with rounded
+corners and an invisible six-pixel resize margin outside it, as Windows
+10 and 11 have, and flat rounded buttons everywhere -- in dialogs, on
+toolbars and on the taskbar, where a running window is marked by an
+accent-coloured line under its button and the default button in a dialog
+is filled with the accent colour. Modern Light is white and grey with a
+blue accent; Modern Dark the same on near-black. The Appearance page has
+a word for people who choose it.
+
+![Modern Light: the Run dialog, Calculator and Display Properties, with the taskbar](docs/modern-light.png)
+
+![Modern Dark: the same on near-black](docs/modern-dark.png)
 
 Icons come in five sets, from Display Properties > Appearance > Icons:
 Windows 2000 (the built-in artwork), Windows 98, Windows XP, Windows 7 and

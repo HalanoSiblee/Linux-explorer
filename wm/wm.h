@@ -20,7 +20,8 @@
  * pixels taller than Windows 2000, which is what their Start button
  * artwork is drawn for. */
 #define TASKBAR_ROW   (w2k_theme == THEME_CLASSIC ? 28 : \
-                       w2k_theme == THEME_BASIC7 ? (w2k_taskbar_small ? 30 : 40) : 30)
+                       w2k_theme == THEME_BASIC7 ? (w2k_taskbar_small ? 30 : 40) : \
+                       w2k_theme == THEME_MODERN ? 40 : 30)
 #define TASKBAR_H     (TASKBAR_ROW * w2k_taskbar_rows)
 int     taskbar_thickness(void);      /* height, or width when on a side */
 #define CORNER_GRAB   w2k_px(16)  /* diagonal resize hot-zone at each corner */

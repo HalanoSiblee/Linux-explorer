@@ -245,9 +245,37 @@ static void strip_draw(Drawable d, W2kSkin *s, int sy, int sh, int lcap,
  * ------------------------------------------------------------------ */
 #define XP_CAP_H 30
 
+/* The Modern look: a 31-row caption under a one-pixel outline, with the
+ * six-pixel invisible margin outside it that Windows 10 and 11 keep for
+ * the resize cursor; caption buttons 46 by 30 like theirs, the glyphs
+ * ten pixels wide in a one-pixel stroke. */
+#define MD_CAP_H   31
+#define MD_MARGIN  6
+#define MD_BTN_W   46
+#define MD_BTN_H   30
+#define MD_GLYPH   10
+
+int w2k_theme_modern_margin(void) { return w2k_px(MD_MARGIN); }
+
+/* An rgb triple as a foreground. */
+static void fg_rgb(const int c[3])
+{
+    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(c[0], c[1], c[2]));
+}
+
 void w2k_theme_caption(Drawable d, int x, int y, int w, int h, int active,
                        int theme)
 {
+    if (theme == THEME_MODERN) {
+        /* The caption colour, flat, with the outline along its top and
+         * down both sides; the sides carry on below it in the frame. */
+        int t = w2k_scale_raw ? w2k_th(1) : 1;
+        w2k_fill(d, x, y, w, h, active ? C_ACTIVETITLE : C_INACTIVETITLE);
+        w2k_fill(d, x, y, w, t, C_WINDOWFRAME);
+        w2k_fill(d, x, y, t, h, C_WINDOWFRAME);
+        w2k_fill(d, x + w - t, y, t, h, C_WINDOWFRAME);
+        return;
+    }
     if (theme == THEME_BASIC7) {
         W2kSkin *s = skin("w7-caption.png", 256);
         if (s && w2k_skin_w(s) == W7_CAP_LCAP + 1 + W7_CAP_RCAP &&
@@ -289,6 +317,7 @@ int w2k_theme_caption_h(int theme)
     /* Windows XP: 30 rows from the frame's top edge to the client, of
      * which 4 are the frame border. Windows 7 Basic: 31, of which 10. */
     if (theme == THEME_BASIC7) return W7_CAP_H - W7_BORDER;
+    if (theme == THEME_MODERN) return MD_CAP_H;
     return XP_CAP_H - 4;
 }
 
@@ -299,6 +328,18 @@ int w2k_theme_caption_h(int theme)
 void w2k_theme_frame_edges(Drawable d, int fw, int fh, int b, int active,
                            int theme)
 {
+    if (theme == THEME_MODERN) {
+        /* One line, inside the invisible margin (which is shaped away,
+         * so nothing is drawn there). */
+        (void)active;
+        int t = w2k_scale_raw ? w2k_th(1) : 1;
+        int m = b - t;
+        if (m < 0) m = 0;
+        w2k_fill(d, m, m, t, fh - 2 * m, C_WINDOWFRAME);
+        w2k_fill(d, fw - m - t, m, t, fh - 2 * m, C_WINDOWFRAME);
+        w2k_fill(d, m, fh - m - t, fw - 2 * m, t, C_WINDOWFRAME);
+        return;
+    }
     if (theme == THEME_BASIC7 && b == S(W7_BORDER)) {
         W2kSkin *fr = skin("w7-frame.png", 256), *bt = skin("w7-bottom.png", 256);
         if (fr && bt && w2k_skin_w(fr) == 20 && w2k_skin_h(fr) == 2 &&
@@ -355,13 +396,13 @@ void w2k_theme_frame_edges(Drawable d, int fw, int fh, int b, int active,
  * ------------------------------------------------------------------ */
 int w2k_theme_capbtn_size(int theme)
 {
-    return theme == THEME_BASIC7 ? W7_BTN_H : 21;
+    return theme == THEME_BASIC7 ? W7_BTN_H : theme == THEME_MODERN ? MD_BTN_H : 21;
 }
 
 int w2k_theme_capbtn_w(int theme, int kind)
 {
     (void)kind;
-    return theme == THEME_BASIC7 ? W7_BTN_W : 21;   /* all three alike */
+    return theme == THEME_BASIC7 ? W7_BTN_W : theme == THEME_MODERN ? MD_BTN_W : 21;   /* all three alike */
 }
 
 /* Where the buttons sit on an XP caption, measured: 21 pixels square at
@@ -369,6 +410,15 @@ int w2k_theme_capbtn_w(int theme, int kind)
 void w2k_theme_capbtn_place(int theme, int fw, int *y, int *close_x,
                             int *max_x, int *min_x)
 {
+    if (theme == THEME_MODERN) {
+        /* Flush with the caption's right edge, inside its outline, and
+         * touching one another. */
+        *y = S(1);
+        *close_x = fw - S(1 + MD_BTN_W);
+        *max_x = *close_x - S(MD_BTN_W);
+        *min_x = *max_x - S(MD_BTN_W);
+        return;
+    }
     if (theme == THEME_BASIC7) {
         /* Measured: 32 wide, two apart, Close ten pixels in from the edge. */
         *y = S(W7_BTN_Y);
@@ -386,6 +436,52 @@ void w2k_theme_capbtn_place(int theme, int fw, int *y, int *close_x,
 void w2k_theme_capbtn(Drawable d, int x, int y, int w, int h, int kind,
                       int active, int pressed, int theme)
 {
+    if (theme == THEME_MODERN) {
+        /* No button until it is pressed: then a darker cell, or the red
+         * one for Close. The glyph is a one-pixel stroke in the title's
+         * colour, ten pixels across, centred. */
+        int t = w2k_scale_raw ? w2k_th(1) : 1;
+        int g[3];
+        const unsigned char *tc = w2k_scheme_rgb(active ? C_TITLETEXT
+                                                        : C_INACTIVETITLETEXT);
+        g[0] = tc[0]; g[1] = tc[1]; g[2] = tc[2];
+        if (pressed) {
+            if (kind == W2K_CAP_CLOSE) {
+                w2k_fill_rgb(d, x, y, w, h, 196, 43, 28);
+                g[0] = g[1] = g[2] = 255;
+            } else {
+                int f[3];
+                w2k_modern_rgb(MODERN_PRESSED, f);
+                w2k_fill_rgb(d, x, y, w, h, f[0], f[1], f[2]);
+            }
+        }
+        fg_rgb(g);
+        int n = S(MD_GLYPH);
+        int cx = x + (w - n) / 2, cy = y + (h - n) / 2;   /* the glyph's box */
+        switch (kind) {
+        case W2K_CAP_MIN:
+            w2k_fill_fg(d, cx, cy + n / 2, n, t);
+            break;
+        case W2K_CAP_MAX:
+            w2k_frame_fg(d, cx, cy, n, n);
+            break;
+        case W2K_CAP_RESTORE: {
+            /* Two overlapping frames: the back one's top and right sides
+             * show past the front one. */
+            int s = n - S(2);
+            w2k_fill_fg(d, cx + S(2), cy, s, t);
+            w2k_fill_fg(d, cx + n - t, cy, t, s);
+            w2k_frame_fg(d, cx, cy + S(2), s, s);
+            break;
+        }
+        default:
+            for (int i = 0; i < n; i++) {
+                w2k_fill_fg(d, cx + i, cy + i, t, t);
+                w2k_fill_fg(d, cx + n - t - i, cy + i, t, t);
+            }
+        }
+        return;
+    }
     if (theme == THEME_BASIC7) {
         W2kSkin *s = skin("w7-capbtn.png", pressed ? 200 : 256);
         if (s && w2k_skin_w(s) == 134 && w2k_skin_h(s) == 2 * W7_BTN_H &&
@@ -498,12 +594,31 @@ int w2k_theme_task_h(int theme)
     /* XP's task buttons: rows 573..597 of a 570..599 bar. Windows 7's
      * fill the bar, top line and all: forty rows, or thirty with small
      * icons. */
+    if (theme == THEME_MODERN) return 32;
     return theme == THEME_BASIC7 ? (w2k_taskbar_small ? 30 : W7_BAR_H) : 25;
 }
 
 void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
                           int theme)
 {
+    if (theme == THEME_MODERN) {
+        /* Windows 11's task buttons: nothing but a short accent line
+         * under a running window's icon, a rounded box behind it under
+         * the pointer, and a wider line on a fuller box for the active
+         * window. */
+        int f[3], l[3], a[3];
+        w2k_modern_rgb(MODERN_ACCENT, a);
+        w2k_modern_rgb(MODERN_BORDER, l);
+        if (state != W2K_TB_NORMAL) {
+            w2k_modern_rgb(state == W2K_TB_DOWN ? MODERN_HOT : MODERN_BUTTON, f);
+            w2k_round_rect_rgb(d, x, y, w, h, 4, f, l);
+        }
+        int lw = S(state == W2K_TB_DOWN ? 16 : 6), lh = S(3);
+        if (lw > w - S(4)) lw = w - S(4);
+        w2k_round_fill_rgb(d, x + (w - lw) / 2, y + h - lh - S(1), lw, lh, 1,
+                           a[0], a[1], a[2]);
+        return;
+    }
     if (theme == THEME_BASIC7) {
         /* Basic's buttons are pale framed boxes on the bar: a dark line,
          * a light one inside it, and a fill that lightens under the
@@ -600,6 +715,13 @@ void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
 
 void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
 {
+    if (theme == THEME_MODERN) {
+        /* The face, with the outline along its top. */
+        int t = w2k_scale_raw ? w2k_th(1) : 1;
+        w2k_fill(d, x, y, w, h, C_FACE);
+        w2k_fill(d, x, y, w, t, C_WINDOWFRAME);
+        return;
+    }
     if (theme == THEME_BASIC7) {
         /* The theme's own taskbar texture, both sizes of it, is one flat
          * colour: (167,192,220), every pixel. The Show Desktop sliver at

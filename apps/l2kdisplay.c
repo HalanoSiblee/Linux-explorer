@@ -73,22 +73,16 @@ presets[] = {
     /* The two modern schemes: flat. The bevel colours are chosen so a
      * button's outer ring is a thin grey outline and its inner ring the
      * face itself, which is as flat as a 3D edge can be made to look. */
-    { "Modern Light", S({C_FACE,243,243,243},{C_LIGHT,243,243,243},{C_HILIGHT,196,196,196},
-        {C_SHADOW,243,243,243},{C_DKSHADOW,196,196,196},{C_TEXT,27,27,27},{C_GRAYTEXT,140,140,140},
-        {C_WINDOW,255,255,255},{C_WINDOWTEXT,27,27,27},{C_WINDOWFRAME,196,196,196},
-        {C_ACTIVETITLE,0,103,192},{C_ACTIVETITLE2,0,103,192},{C_TITLETEXT,255,255,255},
-        {C_INACTIVETITLE,232,232,232},{C_INACTIVETITLE2,232,232,232},{C_INACTIVETITLETEXT,110,110,110},
-        {C_MENU,249,249,249},{C_MENUTEXT,27,27,27},{C_HIGHLIGHT,0,103,192},{C_HIGHLIGHTTEXT,255,255,255},
-        {C_DESKTOP,36,82,140},{C_SCROLLBAR,240,240,240},{C_TOOLTIP,255,255,255},{C_TOOLTIPTEXT,27,27,27},
-        {C_APPWORKSPACE,225,225,225}), 25 , -1 },
+    /* The Modern look's own scheme, and the same with the lights off. */
+    { "Modern Light", NULL, 0, THEME_MODERN },
     { "Modern Dark", S({C_FACE,32,32,32},{C_LIGHT,32,32,32},{C_HILIGHT,72,72,72},
         {C_SHADOW,32,32,32},{C_DKSHADOW,72,72,72},{C_TEXT,240,240,240},{C_GRAYTEXT,128,128,128},
         {C_WINDOW,25,25,25},{C_WINDOWTEXT,240,240,240},{C_WINDOWFRAME,72,72,72},
-        {C_ACTIVETITLE,43,43,43},{C_ACTIVETITLE2,43,43,43},{C_TITLETEXT,255,255,255},
+        {C_ACTIVETITLE,32,32,32},{C_ACTIVETITLE2,32,32,32},{C_TITLETEXT,255,255,255},
         {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,32,32,32},{C_INACTIVETITLETEXT,128,128,128},
         {C_MENU,40,40,40},{C_MENUTEXT,240,240,240},{C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},
         {C_DESKTOP,24,32,44},{C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
-        {C_APPWORKSPACE,25,25,25}), 25 , -1 },
+        {C_APPWORKSPACE,25,25,25}), 25 , THEME_MODERN },
     { "Brick", S({C_ACTIVETITLE,128,0,0},{C_ACTIVETITLE2,192,96,96},{C_INACTIVETITLE,128,128,64},
         {C_INACTIVETITLE2,192,192,128},{C_HIGHLIGHT,128,0,0},{C_DESKTOP,0,128,128},
         {C_FACE,192,192,192},{C_LIGHT,223,223,223},{C_MENU,192,192,192},{C_SCROLLBAR,192,192,192}), 10 , -1 },
@@ -561,18 +555,21 @@ static void on_iconset(void *u, int i)
 static int matching_preset(void)
 {
     for (int i = 0; i < NPRESET; i++) {
-        if (presets[i].theme >= 0) {
-            if (w2k_theme == presets[i].theme && presets[i].theme != THEME_CLASSIC)
-                return i;
-            if (presets[i].theme != THEME_CLASSIC) continue;
+        int th = presets[i].theme;
+        if (th >= 0 && th != THEME_CLASSIC && th != THEME_MODERN) {
+            if (w2k_theme == th) return i;
+            continue;
         }
-        if (w2k_theme != THEME_CLASSIC) continue;
+        /* The Modern presets are tints over the Modern table, the rest
+         * tints over Windows Standard. */
+        int base = th == THEME_MODERN ? THEME_MODERN : THEME_CLASSIC;
+        if (w2k_theme != base) continue;
         /* Every colour must be what this preset would set it to. */
         int ok = 1;
         for (int c = 0; c < N_COLORS && ok; c++) {
             if (c == C_BLACK || c == C_WHITE) continue;
             unsigned char want[3];
-            w2k_theme_colour(THEME_CLASSIC, c, want);
+            w2k_theme_colour(base, c, want);
             for (int k = 0; k < presets[i].n; k++)
                 if (presets[i].t[k].color == c) {
                     want[0] = presets[i].t[k].r;
@@ -941,9 +938,16 @@ static void draw_monitor_preview(Drawable d, int x, int y, int w, int h)
 
 /* Minimize, Maximize and Close, right-aligned at `right`, with their
  * glyphs -- the shell's own, as the frames draw them. */
-static void caption_buttons(Drawable d, int right, int y)
+static void caption_buttons(Drawable d, int right, int y, int active)
 {
     int cx = right - 16, mx = cx - 2 - 16, mn = mx - 16;
+    if (w2k_theme == THEME_MODERN) {
+        /* Thin glyphs on the caption colour, as the Modern frames draw them. */
+        w2k_theme_capbtn(d, mn, y, 16, 14, W2K_CAP_MIN, active, 0, THEME_MODERN);
+        w2k_theme_capbtn(d, mx, y, 16, 14, W2K_CAP_MAX, active, 0, THEME_MODERN);
+        w2k_theme_capbtn(d, cx, y, 16, 14, W2K_CAP_CLOSE, active, 0, THEME_MODERN);
+        return;
+    }
     w2k_button(d, mn, y, 16, 14, 0);
     w2k_capglyph_min(d, mn, y, C_TEXT);
     w2k_button(d, mx, y, 16, 14, 0);
@@ -965,7 +969,7 @@ static void draw_appearance_preview(Drawable d, W2kRect r)
     w2k_edge(d, ix, iy, iw, ih, EDGE_RAISED, BF_RECT);
     w2k_gradient(d, ix + 4, iy + 4, iw - 8, 18, C_INACTIVETITLE, C_INACTIVETITLE2);
     w2k_text(d, F_UI_BOLD, ix + 8, iy + 6, "Inactive Window", C_INACTIVETITLETEXT);
-    caption_buttons(d, ix + iw - 6, iy + 6);
+    caption_buttons(d, ix + iw - 6, iy + 6, 0);
 
     /* active */
     int ax = r.x + 30, ay = r.y + 36, aw = r.w - 60, ah = r.h - 60;
@@ -973,7 +977,7 @@ static void draw_appearance_preview(Drawable d, W2kRect r)
     w2k_edge(d, ax, ay, aw, ah, EDGE_RAISED, BF_RECT);
     w2k_gradient(d, ax + 4, ay + 4, aw - 8, 18, C_ACTIVETITLE, C_ACTIVETITLE2);
     w2k_text(d, F_UI_BOLD, ax + 8, ay + 6, "Active Window", C_TITLETEXT);
-    caption_buttons(d, ax + aw - 6, ay + 6);
+    caption_buttons(d, ax + aw - 6, ay + 6, 1);
     /* menu bar */
     w2k_fill(d, ax + 4, ay + 22, aw - 8, 19, C_MENU);
     w2k_text(d, F_UI, ax + 10, ay + 25, "Normal", C_MENUTEXT);
@@ -995,8 +999,12 @@ static void draw_appearance_preview(Drawable d, W2kRect r)
     w2k_edge(d, mx, my, mw, mh, EDGE_RAISED, BF_RECT);
     w2k_gradient(d, mx + 3, my + 3, mw - 6, 18, C_ACTIVETITLE, C_ACTIVETITLE2);
     w2k_text(d, F_UI_BOLD, mx + 7, my + 5, "Message Box", C_TITLETEXT);
-    w2k_button(d, mx + mw - 5 - 16, my + 5, 16, 14, 0);
-    w2k_capglyph_close(d, mx + mw - 5 - 16, my + 5, C_TEXT);
+    if (w2k_theme == THEME_MODERN)
+        w2k_theme_capbtn(d, mx + mw - 5 - 16, my + 5, 16, 14, W2K_CAP_CLOSE, 1, 0, THEME_MODERN);
+    else {
+        w2k_button(d, mx + mw - 5 - 16, my + 5, 16, 14, 0);
+        w2k_capglyph_close(d, mx + mw - 5 - 16, my + 5, C_TEXT);
+    }
     w2k_text(d, F_UI, mx + 10, my + 26, "Message Text", C_TEXT);
     W2kRect ok = { mx + mw / 2 - 30, my + mh - 26, 60, 20 };
     w2k_draw_pushbutton(d, &ok, "OK", BS_DEFAULT);

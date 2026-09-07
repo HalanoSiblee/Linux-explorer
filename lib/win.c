@@ -495,6 +495,35 @@ void w2k_draw_pushbutton(Drawable d, const W2kRect *r, const char *text,
 {
     int x = r->x, y = r->y, w = r->w, h = r->h;
 
+    if (w2k_theme == THEME_MODERN) {
+        /* A rounded box with a hairline; the default button is filled
+         * with the accent colour and lettered in white, as Windows 11
+         * marks it, rather than ringed in black. */
+        int pressed = (state & BS_PRESSED) != 0;
+        int accent = (state & BS_DEFAULT) && !(state & BS_DISABLED);
+        int f[3], l[3];
+        if (accent) {
+            w2k_modern_rgb(MODERN_ACCENT, f);
+            if (pressed) for (int i = 0; i < 3; i++) f[i] = f[i] * 4 / 5;
+            l[0] = f[0]; l[1] = f[1]; l[2] = f[2];
+        } else {
+            w2k_modern_rgb(pressed ? MODERN_PRESSED : MODERN_BUTTON, f);
+            w2k_modern_rgb(MODERN_BORDER, l);
+        }
+        w2k_round_rect_rgb(d, x, y, w, h, 4, f, l);
+        if (text && *text) {
+            int tw = w2k_mnemonic_width(F_UI, text);
+            int tx = x + (w - tw) / 2;
+            int ty = y + (h - w2k_font_height(F_UI)) / 2;
+            int col = (state & BS_DISABLED) ? C_GRAYTEXT
+                    : accent ? C_HIGHLIGHTTEXT : C_TEXT;
+            w2k_text_mnemonic(d, F_UI, tx, ty, text, col, 1);
+        }
+        if (state & BS_FOCUS)
+            w2k_focus_rect(d, x + 3, y + 3, w - 6, h - 6);
+        return;
+    }
+
     if (state & BS_DEFAULT) {
         /* The default button wears an extra hard black ring. */
         w2k_frame(d, x, y, w, h, C_WINDOWFRAME);

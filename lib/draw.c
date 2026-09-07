@@ -175,9 +175,100 @@ void w2k_edge(Drawable d, int x, int y, int w, int h, int style, int flags)
     }
 }
 
+/* ------------------------------------------------------------------ *
+ * The Modern look
+ * ------------------------------------------------------------------ */
+int w2k_modern_dark(void)
+{
+    const unsigned char *f = w2k_scheme_rgb(C_FACE);
+    return (f[0] * 299 + f[1] * 587 + f[2] * 114) / 1000 < 128;
+}
+
+/* The handful of tones the look is drawn in, beside the scheme's own
+ * colours: a button is a shade lighter than the face in Light and a
+ * shade lighter than it in Dark too, pressed goes the other way, and
+ * the outline is the scheme's frame grey. */
+void w2k_modern_rgb(int what, int rgb[3])
+{
+    static const unsigned char light[][3] = {
+        [MODERN_BUTTON]  = { 251, 251, 251 }, [MODERN_PRESSED] = { 225, 225, 225 },
+        [MODERN_HOT]     = { 235, 235, 235 }, [MODERN_BORDER]  = { 209, 209, 209 },
+        [MODERN_ACCENT]  = {   0, 103, 192 },
+    };
+    static const unsigned char dark[][3] = {
+        [MODERN_BUTTON]  = {  45,  45,  45 }, [MODERN_PRESSED] = {  38,  38,  38 },
+        [MODERN_HOT]     = {  54,  54,  54 }, [MODERN_BORDER]  = {  62,  62,  62 },
+        [MODERN_ACCENT]  = {   0, 120, 212 },
+    };
+    const unsigned char *t = (w2k_modern_dark() ? dark : light)[what];
+    rgb[0] = t[0]; rgb[1] = t[1]; rgb[2] = t[2];
+}
+
+/* How far in from the corner's edge row i (0 at the outer edge) of a
+ * quarter circle of radius r begins: the largest run of pixels whose
+ * centres fall inside the circle. Integer arithmetic in half-pixels. */
+int w2k_round_inset(int r, int i)
+{
+    if (r <= 0 || i >= r) return 0;
+    int dy = 2 * (r - i) - 1;                   /* twice the row centre's height */
+    for (int ins = 0; ins < r; ins++) {
+        int dx = 2 * (r - ins) - 1;
+        if (dx * dx + dy * dy <= 4 * r * r) return ins;
+    }
+    return r;
+}
+
+/* Fill a rounded rectangle. The corners are laid out in device pixels,
+ * whatever the scale, so the curve is smooth at 200% rather than a copy
+ * of the 100% staircase. */
+void w2k_round_fill_rgb(Drawable d, int x, int y, int w, int h, int r,
+                        int R, int G, int B)
+{
+    if (w <= 0 || h <= 0) return;
+    int x0 = w2k_cx(x), y0 = w2k_cx(y), x1 = w2k_cx(x + w), y1 = w2k_cx(y + h);
+    int pw = x1 - x0, ph = y1 - y0;
+    if (pw <= 0 || ph <= 0) return;
+    int pr = w2k_scale_raw ? r : w2k_px(r);
+    if (2 * pr > pw) pr = pw / 2;
+    if (2 * pr > ph) pr = ph / 2;
+    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(R, G, B));
+    if (ph > 2 * pr)
+        XFillRectangle(w2k.dpy, d, w2k.gc, x0, y0 + pr, (unsigned)pw,
+                       (unsigned)(ph - 2 * pr));
+    for (int i = 0; i < pr; i++) {
+        int ins = w2k_round_inset(pr, i);
+        if (2 * ins >= pw) continue;
+        XFillRectangle(w2k.dpy, d, w2k.gc, x0 + ins, y0 + i, (unsigned)(pw - 2 * ins), 1);
+        XFillRectangle(w2k.dpy, d, w2k.gc, x0 + ins, y1 - 1 - i, (unsigned)(pw - 2 * ins), 1);
+    }
+}
+
+/* A rounded box: the outline colour under a fill inset by one line. */
+void w2k_round_rect_rgb(Drawable d, int x, int y, int w, int h, int r,
+                        const int fill[3], const int line[3])
+{
+    if (w <= 0 || h <= 0) return;
+    int t = w2k_scale_raw ? w2k_th(1) : 1;
+    w2k_round_fill_rgb(d, x, y, w, h, r, line[0], line[1], line[2]);
+    int ri = w2k_scale_raw ? r - t : r - 1;
+    w2k_round_fill_rgb(d, x + t, y + t, w - 2 * t, h - 2 * t, ri < 0 ? 0 : ri,
+                       fill[0], fill[1], fill[2]);
+}
+
 void w2k_button(Drawable d, int x, int y, int w, int h, int pressed)
 {
     if (w <= 0 || h <= 0) return;
+    if (w2k_theme == THEME_MODERN) {
+        /* A flat rounded box; the corners keep whatever is behind. */
+        int f[3], l[3];
+        w2k_modern_rgb(pressed ? MODERN_PRESSED : MODERN_BUTTON, f);
+        w2k_modern_rgb(MODERN_BORDER, l);
+        int r = w2k_scale_raw ? w2k_px(4) : 4;
+        int lim = (w < h ? w : h) / 4;
+        if (r > lim) r = lim;
+        w2k_round_rect_rgb(d, x, y, w, h, r, f, l);
+        return;
+    }
     /* The face first, over the whole rectangle, then the edge on top: at
      * a fractional scale an inset fill and the rings would not meet. */
     w2k_fill(d, x, y, w, h, C_FACE);

@@ -360,7 +360,7 @@ void     w2k_skin_tile(Drawable d, W2kSkin *s, int x, int y, int w, int h,
  * Windows XP's Luna. The theme decides the colour table and the handful
  * of things XP draws differently -- gradient taskbar, skinned Start
  * button, the two-column Start menu. */
-enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, N_THEMES };
+enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, THEME_MODERN, N_THEMES };
 extern const char *w2k_theme_name(int theme);
 extern int w2k_theme;
 void w2k_theme_colours(int theme);   /* load that theme's colour table */
@@ -514,6 +514,22 @@ int  w2k_edge_size(int style);
 
 /* A full pushbutton face: edge + filled interior. `pressed` sinks it. */
 void w2k_button(Drawable d, int x, int y, int w, int h, int pressed);
+
+/* ---- The Modern look ----------------------------------------------- *
+ * Flat rounded boxes with a one-pixel outline and no bevel at all, in
+ * the manner of Windows 11: thin glyphs for the caption buttons, a
+ * one-pixel window border with an invisible resize margin outside it,
+ * and a plain bar. It comes in two schemes, Modern Light and Modern
+ * Dark; which is in force is read off the face colour. */
+enum { MODERN_BUTTON, MODERN_PRESSED, MODERN_HOT, MODERN_BORDER, MODERN_ACCENT };
+int  w2k_modern_dark(void);            /* the face is dark: Modern Dark */
+void w2k_modern_rgb(int what, int rgb[3]);
+int  w2k_round_inset(int r, int i);    /* a corner's inset on its i-th row */
+void w2k_round_fill_rgb(Drawable d, int x, int y, int w, int h, int r,
+                        int R, int G, int B);
+void w2k_round_rect_rgb(Drawable d, int x, int y, int w, int h, int r,
+                        const int fill[3], const int line[3]);
+int  w2k_theme_modern_margin(void);    /* the invisible margin, in pixels */
 
 /* Horizontal two-stop gradient, used by title bars. */
 void w2k_gradient(Drawable d, int x, int y, int w, int h, int c1, int c2);

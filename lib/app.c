@@ -351,6 +351,40 @@ void w2k_color_set(int color, int r, int g, int b)
 }
 
 /* Which of the built-in schemes the shell is wearing. */
+/* The Modern look's own table, which is Modern Light; Modern Dark is a
+ * tint scheme over it (see Display Properties). The bevel colours are the
+ * face and its outline, so anything still drawn as a 3D edge comes out
+ * as a one-pixel line. */
+static const unsigned char modern[N_COLORS][3] = {
+    [C_FACE]              = { 243, 243, 243 },
+    [C_HILIGHT]           = { 196, 196, 196 },
+    [C_LIGHT]             = { 243, 243, 243 },
+    [C_SHADOW]            = { 243, 243, 243 },
+    [C_DKSHADOW]          = { 196, 196, 196 },
+    [C_TEXT]              = {  27,  27,  27 },
+    [C_GRAYTEXT]          = { 140, 140, 140 },
+    [C_WINDOW]            = { 255, 255, 255 },
+    [C_WINDOWTEXT]        = {  27,  27,  27 },
+    [C_WINDOWFRAME]       = { 196, 196, 196 },
+    [C_ACTIVETITLE]       = { 243, 243, 243 },
+    [C_ACTIVETITLE2]      = { 243, 243, 243 },
+    [C_INACTIVETITLE]     = { 243, 243, 243 },
+    [C_INACTIVETITLE2]    = { 243, 243, 243 },
+    [C_TITLETEXT]         = {  27,  27,  27 },
+    [C_INACTIVETITLETEXT] = { 140, 140, 140 },
+    [C_MENU]              = { 249, 249, 249 },
+    [C_MENUTEXT]          = {  27,  27,  27 },
+    [C_HIGHLIGHT]         = {   0, 103, 192 },
+    [C_HIGHLIGHTTEXT]     = { 255, 255, 255 },
+    [C_DESKTOP]           = {  36,  82, 140 },
+    [C_SCROLLBAR]         = { 240, 240, 240 },
+    [C_TOOLTIP]           = { 255, 255, 255 },
+    [C_TOOLTIPTEXT]       = {  27,  27,  27 },
+    [C_APPWORKSPACE]      = { 225, 225, 225 },
+    [C_BLACK]             = {   0,   0,   0 },
+    [C_WHITE]             = { 255, 255, 255 },
+};
+
 int w2k_theme = THEME_CLASSIC;
 
 const char *w2k_theme_name(int theme)
@@ -358,6 +392,7 @@ const char *w2k_theme_name(int theme)
     switch (theme) {
     case THEME_XP:     return "Windows XP";
     case THEME_BASIC7: return "Windows 7 Basic";
+    case THEME_MODERN: return "Modern";
     }
     return "Windows Standard";
 }
@@ -365,7 +400,8 @@ const char *w2k_theme_name(int theme)
 void w2k_theme_colour(int theme, int color, unsigned char rgb[3])
 {
     const unsigned char (*t)[3] = theme == THEME_XP    ? luna :
-                                  theme == THEME_BASIC7 ? basic7 : standard;
+                                  theme == THEME_BASIC7 ? basic7 :
+                                  theme == THEME_MODERN ? modern : standard;
     if (color < 0 || color >= N_COLORS) { rgb[0] = rgb[1] = rgb[2] = 0; return; }
     rgb[0] = t[color][0];
     rgb[1] = t[color][1];
@@ -375,7 +411,8 @@ void w2k_theme_colour(int theme, int color, unsigned char rgb[3])
 void w2k_theme_colours(int theme)
 {
     const unsigned char (*t)[3] = theme == THEME_XP    ? luna :
-                                  theme == THEME_BASIC7 ? basic7 : standard;
+                                  theme == THEME_BASIC7 ? basic7 :
+                                  theme == THEME_MODERN ? modern : standard;
     for (int i = 0; i < N_COLORS; i++)
         w2k_color_set(i, t[i][0], t[i][1], t[i][2]);
 }
@@ -512,7 +549,8 @@ int w2k_scheme_load(const char *path)
         if (strncasecmp(line, "Theme=", 6)) continue;
         const char *val = line + 6;
         w2k_theme = !strncasecmp(val, "xp", 2)     ? THEME_XP :
-                    !strncasecmp(val, "basic7", 6) ? THEME_BASIC7
+                    !strncasecmp(val, "basic7", 6) ? THEME_BASIC7 :
+                    !strncasecmp(val, "modern", 6) ? THEME_MODERN
                                                    : THEME_CLASSIC;
         w2k_theme_colours(w2k_theme);
         break;
@@ -788,7 +826,8 @@ int w2k_scheme_save(const char *path)
     fx[N_EFFECTS] = 0;
     fprintf(f, "Effects=%s\n", fx);
     fprintf(f, "Theme=%s\n", w2k_theme == THEME_XP ? "xp" :
-            w2k_theme == THEME_BASIC7 ? "basic7" : "classic");
+            w2k_theme == THEME_BASIC7 ? "basic7" :
+            w2k_theme == THEME_MODERN ? "modern" : "classic");
     fprintf(f, "IconSet=%s\n", w2k_icon_set);
     fprintf(f, "UiScale=%d\n", w2k_ui_scale_pref);
     fprintf(f, "Resample=%s\n", w2k_resample == RS_NEAREST ? "nearest"

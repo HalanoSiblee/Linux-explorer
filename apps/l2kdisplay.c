@@ -419,6 +419,8 @@ typedef struct {
     int       down;
     int       dirty;                        /* something to Apply */
     int       mon_dirty;                    /* a Settings-tab change to apply */
+    unsigned char *sample;                  /* the resampling sample's source */
+    int       sample_w, sample_h;
 
     /* Background */
     W2kList  *walls;
@@ -1088,6 +1090,55 @@ static W2kRect mon_box(int i)
     };
 }
 
+/* The resampling sample's source: 40 by 13 pixels from the middle of
+ * the wallpaper, or, with no wallpaper, a pattern with an edge, a curve
+ * and a thin line -- what shows the methods apart. */
+static void sample_load(void)
+{
+    if (dl.sample) return;
+    int sw = 40, sh = 13;
+    dl.sample_w = sw; dl.sample_h = sh;
+    dl.sample = calloc((size_t)sw * sh, 4);
+    if (!dl.sample) return;
+    int iw = 0, ih = 0;
+    unsigned char *img = w2k_wallpaper[0] ? w2k_image_load(w2k_wallpaper, &iw, &ih) : NULL;
+    if (img && iw >= sw && ih >= sh) {
+        /* The busiest patch of the picture -- a sky shows nothing -- on a
+         * coarse grid, by the spread of its brightness. */
+        long best = -1;
+        int bx = (iw - sw) / 2, by = (ih - sh) / 2;
+        for (int oy = 0; oy + sh <= ih; oy += sh)
+            for (int ox = 0; ox + sw <= iw; ox += sw) {
+                long sum = 0, sq = 0;
+                for (int y = 0; y < sh; y++)
+                    for (int x = 0; x < sw; x++) {
+                        const unsigned char *q = img + ((size_t)(oy + y) * iw + ox + x) * 4;
+                        long l = (q[0] * 30 + q[1] * 59 + q[2] * 11) / 100;
+                        sum += l; sq += l * l;
+                    }
+                long n = (long)sw * sh, var = sq / n - (sum / n) * (sum / n);
+                if (var > best) { best = var; bx = ox; by = oy; }
+            }
+        if (best > 150) {
+            for (int y = 0; y < sh; y++)
+                memcpy(dl.sample + (size_t)y * sw * 4, img + ((size_t)(by + y) * iw + bx) * 4, (size_t)sw * 4);
+            free(img);
+            return;
+        }
+    }
+    free(img);
+    for (int y = 0; y < sh; y++)
+        for (int x = 0; x < sw; x++) {
+            unsigned char *p = dl.sample + ((size_t)y * sw + x) * 4;
+            int r = 255, g = 255, b = 255;
+            if (x < 12 && x + y < 16) { r = 0; g = 0; b = 128; }              /* a slanted edge */
+            int dx = x - 24, dy = (y - 6) * 3;
+            if (dx * dx + dy * dy < 9 * 9 * 1) { r = 0; g = 128; b = 0; }      /* a disc */
+            if (x == 34) { r = 128; g = 0; b = 0; }                              /* a thin line */
+            p[0] = (unsigned char)r; p[1] = (unsigned char)g; p[2] = (unsigned char)b; p[3] = 255;
+        }
+}
+
 static void draw_monitor_layout(Drawable d, W2kRect r)
 {
     dl.layout_box = r;
@@ -1234,6 +1285,21 @@ static void paint(W2kWin *w, Drawable d)
         w2k_combo_draw(d, dl.method);
         w2k_text_mnemonic(d, F_UI, c.x + 10, dl.resample->r.y + (21 - fh) / 2, "Resa&mpling:", C_TEXT, 1);
         w2k_combo_draw(d, dl.resample);
+        /* The sample: a piece of the wallpaper (or a pattern) drawn three
+         * times over with the method chosen, so the choice can be seen
+         * before Apply redraws the desktop. */
+        sample_load();
+        int sy = dl.resample->r.y + 30;
+        w2k_text(d, F_UI, c.x + 10, sy + (39 - fh) / 2, "Sample (3x):", C_TEXT);
+        unsigned char *sc = w2k_rgba_resample(dl.sample, dl.sample_w, dl.sample_h,
+                                              dl.sample_w * 3, dl.sample_h * 3, w2k_resample);
+        int sx = dl.resample->r.x;
+        w2k_edge(d, sx - 1, sy - 1, dl.sample_w * 3 + 2, dl.sample_h * 3 + 2, EDGE_SUNKEN, BF_RECT);
+        if (sc) { w2k_rgba_draw(d, sx, sy, sc, dl.sample_w * 3, dl.sample_h * 3); free(sc); }
+        w2k_text(d, F_UI, sx + dl.sample_w * 3 + 10, sy + (39 - fh) / 2 - fh / 2 - 1,
+                 "Shapes the wallpaper when it is", C_GRAYTEXT);
+        w2k_text(d, F_UI, sx + dl.sample_w * 3 + 10, sy + (39 - fh) / 2 + fh / 2 + 1,
+                 "stretched, and icons when scaled.", C_GRAYTEXT);
         if (valid) {
             char info[200];
             int mw, mh;
@@ -1609,12 +1675,14 @@ int main(int argc, char **argv)
         w2k_fini();
         return 1;
     }
-    int W = 420, H = 486;
+    int W = 420, H = 540;
     dl.win = w2k_win_new("Display Properties", "l2kdisplay", W, H, 0);
     dl.win->paint = paint;
     dl.win->event = event;
 
     dl.tabs = w2k_tabs_new(NULL, on_tab);
+    /* Development aid: W2K_RENDER_TAB=n renders that page. */
+    if (getenv("W2K_RENDER_TAB") && getenv("W2K_RENDER")) dl.tabs->sel = atoi(getenv("W2K_RENDER_TAB")) % 4;
     w2k_tabs_add(dl.tabs, "Background");
     w2k_tabs_add(dl.tabs, "Appearance");
     w2k_tabs_add(dl.tabs, "Settings");

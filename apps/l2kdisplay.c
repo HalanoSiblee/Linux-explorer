@@ -1244,7 +1244,8 @@ static void paint(W2kWin *w, Drawable d)
                 how = "";
             else if (scale_method == SCALE_XRANDR)
                 how = want == 200 ? " (screen scaled, every pixel doubled)"
-                                  : " (screen scaled by xrandr; a little soft)";
+                    : w2k_resample == RS_NEAREST ? " (screen scaled by xrandr, nearest: blocks)"
+                                                 : " (screen scaled by xrandr, bilinear: a little soft)";
             else if (scale_method == SCALE_SUPER)
                 how = want == render ? " (desktop drawn at 200%; next logon)"
                                      : " (drawn at 200%, shown shrunk: sharp; next logon)";

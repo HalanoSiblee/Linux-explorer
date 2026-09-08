@@ -69,7 +69,9 @@ multiplies on the way to the screen:
 What the desktop enlarges itself -- icons from their 32-pixel art, the
 XP and 7 chrome sheets, the pointer, the wallpaper, Imaging's picture --
 goes through a resampler of the user's choice (Display Properties >
-Settings > Resampling): Lanczos-3, a Catmull-Rom cubic spline (the
+Settings > Resampling; on a screen-scaled monitor xrandr has only two
+filters, so Nearest there is xrandr's nearest and every other choice is
+its bilinear): Lanczos-3, a Catmull-Rom cubic spline (the
 default), bilinear, or nearest neighbour. It is separable and
 phase-correct, works in premultiplied colour so transparent edges do not
 bleed, and widens its kernel when shrinking. A whole-number enlargement

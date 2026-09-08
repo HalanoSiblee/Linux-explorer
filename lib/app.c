@@ -33,7 +33,11 @@ double w2k_scale_transform(int mode, int render, int want, const char **filter)
 {
     if (want <= 0) want = 100;
     if (render <= 0) render = 100;
-    const char *flt = "bilinear";
+    /* xrandr stretches with one of two filters. It follows the Resampling
+     * choice -- Nearest is blocks, anything else is xrandr's bilinear, the
+     * only smooth one it has -- and an exact doubling is always nearest,
+     * which loses nothing. */
+    const char *flt = w2k_resample == RS_NEAREST ? "nearest" : "bilinear";
     double f;
     if (mode == SCALE_XRANDR) {
         f = 100.0 / want;

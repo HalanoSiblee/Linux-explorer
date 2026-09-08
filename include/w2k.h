@@ -470,6 +470,12 @@ extern int w2k_scale_mode;           /* SCALE_XRANDR / SCALE_DESKTOP / SCALE_SUP
  * l2kscaler, which scales every monitor with EWA Lanczos-sharp on the
  * GPU. Compositor=nested in the scheme; l2k-session acts on it. */
 extern int w2k_compositor;
+/* Its filter and manners, kept in the scheme and changeable while it
+ * runs (the _L2K_SCALER property on the root; see apps/l2kscaler.c). */
+extern char w2k_compositor_filter[32];   /* nearest .. ewa_lanczossharp */
+extern int  w2k_compositor_light;        /* 1: sigmoidised linear light */
+extern int  w2k_compositor_antiring;     /* 1: the anti-ringing clamp */
+void w2k_compositor_push(void);          /* tell a running l2kscaler */
 /* Screen: xrandr stretches a smaller virtual screen (nearest at 200%).
  * Desktop: the desktop renders at the scale, the screen is left alone.
  * Super: the desktop renders at 200% and xrandr shrinks it to the scale

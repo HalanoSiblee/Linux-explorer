@@ -476,6 +476,7 @@ typedef struct {
     int       dirty;                        /* something to Apply */
     int       mon_dirty;                    /* a Settings-tab change to apply */
     W2kRect   compositor_box;               /* the experimental nested compositor */
+    W2kRect   filter_btn;                   /* its filter, a dialog of its own */
     int       compositor;
 
     /* Background */
@@ -1293,8 +1294,9 @@ static void paint(W2kWin *w, Drawable d)
         w2k_text_mnemonic(d, F_UI, c.x + 10, dl.resample->r.y + (21 - fh) / 2, "Resa&mpling:", C_TEXT, 1);
         w2k_combo_draw(d, dl.resample);
         w2k_draw_checkbox(d, dl.compositor_box.x, dl.compositor_box.y,
-                          "E&xperimental: scale the whole picture through the nested compositor",
+                          "E&xperimental: the nested compositor scales the whole picture",
                           dl.compositor, 0, 0);
+        w2k_draw_pushbutton(d, &dl.filter_btn, "&Filter...", dl.down == 5 ? BS_PRESSED : 0);
         if (valid) {
             char info[200];
             int mw, mh;
@@ -1380,6 +1382,137 @@ static void record_monitors(void)
     }
     w2k_scale_mode = scale_method;
     w2k_ui_scale_pref = pending_render();
+}
+
+/* ------------------------------------------------------------------ *
+ * The compositor's filter: a small sheet of its own. Every change goes
+ * to the running scaler at once, through the root property, so the
+ * picture changes as the box is changed; OK keeps them for the scheme
+ * (saved with Apply), Cancel puts back what was there.
+ * ------------------------------------------------------------------ */
+static const struct { const char *name, *label; } filters[] = {
+    { "nearest",          "Nearest (blocks)" },
+    { "bilinear",         "Bilinear (soft, what xrandr does)" },
+    { "bicubic",          "Bicubic (Catmull-Rom)" },
+    { "lanczos",          "Lanczos-3 (separable)" },
+    { "ewa_lanczos",      "EWA Lanczos (polar jinc)" },
+    { "ewa_lanczossharp", "EWA Lanczos-sharp (mpv's; default)" },
+};
+#define NFILTERS ((int)(sizeof filters / sizeof *filters))
+
+typedef struct {
+    W2kWin   *win;
+    W2kCombo *filter;
+    W2kRect   antiring_box, linear_box, ok, cancel;
+    int       antiring, linear, down;
+    char      was_filter[32];
+    int       was_light, was_antiring;
+} FilterDlg;
+
+static void fd_push(FilterDlg *fd)
+{
+    int i = fd->filter->sel;
+    if (i >= 0 && i < NFILTERS)
+        snprintf(w2k_compositor_filter, sizeof w2k_compositor_filter, "%s", filters[i].name);
+    w2k_compositor_light = fd->linear;
+    w2k_compositor_antiring = fd->antiring;
+    w2k_compositor_push();
+    dl.dirty = 1;
+}
+
+static void fd_on_filter(void *u, int i) { (void)i; fd_push(u); }
+
+static void fd_paint(W2kWin *w, Drawable d)
+{
+    FilterDlg *fd = w->user;
+    int fh = w2k_font_height(F_UI);
+    w2k_text_mnemonic(d, F_UI, 12, fd->filter->r.y - fh - 4, "&Upscaling filter for the scaled monitors:", C_TEXT, 1);
+    w2k_combo_draw(d, fd->filter);
+    w2k_draw_checkbox(d, fd->antiring_box.x, fd->antiring_box.y,
+                      "&Anti-ringing clamp (no halos at hard edges)", fd->antiring, 0, 0);
+    w2k_draw_checkbox(d, fd->linear_box.x, fd->linear_box.y,
+                      "Filter in &linear light (truer for photographs; thin text looks lighter)",
+                      fd->linear, 0, 0);
+    int y = fd->linear_box.y + 30;
+    w2k_text(d, F_UI, 12, y, "Changes show on the screen at once while the compositor runs.", C_GRAYTEXT); y += fh;
+    w2k_text(d, F_UI, 12, y, "OK keeps them; Apply on the Settings page saves them for the next logon.", C_GRAYTEXT); y += fh;
+    w2k_text(d, F_UI, 12, y, "From a terminal: l2kscaler --set \"filter=lanczos\"", C_GRAYTEXT);
+    w2k_draw_pushbutton(d, &fd->ok, "OK", BS_DEFAULT | (fd->down == 1 ? BS_PRESSED : 0));
+    w2k_draw_pushbutton(d, &fd->cancel, "Cancel", fd->down == 2 ? BS_PRESSED : 0);
+}
+
+static void fd_revert(FilterDlg *fd)
+{
+    snprintf(w2k_compositor_filter, sizeof w2k_compositor_filter, "%s", fd->was_filter);
+    w2k_compositor_light = fd->was_light;
+    w2k_compositor_antiring = fd->was_antiring;
+    w2k_compositor_push();
+}
+
+static int fd_event(W2kWin *w, XEvent *e)
+{
+    FilterDlg *fd = w->user;
+    switch (e->type) {
+    case ButtonPress: {
+        int x = e->xbutton.x, y = e->xbutton.y;
+        if (w2k_combo_press(fd->filter, &e->xbutton)) { w2k_win_dirty(w); return 1; }
+        if (w2k_rect_hit(&fd->antiring_box, x, y)) { fd->antiring = !fd->antiring; fd_push(fd); }
+        else if (w2k_rect_hit(&fd->linear_box, x, y)) { fd->linear = !fd->linear; fd_push(fd); }
+        else if (w2k_rect_hit(&fd->ok, x, y)) fd->down = 1;
+        else if (w2k_rect_hit(&fd->cancel, x, y)) fd->down = 2;
+        w2k_win_dirty(w);
+        return 1;
+    }
+    case ButtonRelease: {
+        int b = fd->down, x = e->xbutton.x, y = e->xbutton.y;
+        fd->down = 0;
+        if (b == 1 && w2k_rect_hit(&fd->ok, x, y)) w2k_win_close(w, ID_OK);
+        else if (b == 2 && w2k_rect_hit(&fd->cancel, x, y)) { fd_revert(fd); w2k_win_close(w, ID_CANCEL); }
+        w2k_win_dirty(w);
+        return 1;
+    }
+    case KeyPress: {
+        KeySym ks = XLookupKeysym(&e->xkey, 0);
+        if (ks == XK_Escape) { fd_revert(fd); w2k_win_close(w, ID_CANCEL); return 1; }
+        if (ks == XK_Return || ks == XK_KP_Enter) { w2k_win_close(w, ID_OK); return 1; }
+        if (w2k_combo_key(fd->filter, &e->xkey)) { w2k_win_dirty(w); return 1; }
+        return 1;
+    }
+    }
+    return 0;
+}
+
+static void compositor_dialog(void)
+{
+    FilterDlg fd;
+    memset(&fd, 0, sizeof fd);
+    int cw = 420, chh = 236, fh = w2k_font_height(F_UI);
+    W2kWin *w = w2k_win_new("Compositor Filter", "l2kdisplay", cw, chh, 0);
+    fd.win = w;
+    w->user = &fd;
+    w->paint = fd_paint;
+    w->event = fd_event;
+    snprintf(fd.was_filter, sizeof fd.was_filter, "%s", w2k_compositor_filter);
+    fd.was_light = w2k_compositor_light;
+    fd.was_antiring = w2k_compositor_antiring;
+    fd.linear = w2k_compositor_light;
+    fd.antiring = w2k_compositor_antiring;
+    fd.filter = w2k_combo_new(0);
+    fd.filter->user = &fd;
+    fd.filter->on_change = fd_on_filter;
+    fd.filter->sel = NFILTERS - 1;
+    for (int i = 0; i < NFILTERS; i++) {
+        w2k_combo_add(fd.filter, filters[i].label);
+        if (!strcasecmp(filters[i].name, w2k_compositor_filter)) fd.filter->sel = i;
+    }
+    fd.filter->r = (W2kRect){ 12, 12 + fh + 6, cw - 24, 21 };
+    fd.antiring_box = (W2kRect){ 12, fd.filter->r.y + 34, cw - 24, 16 };
+    fd.linear_box   = (W2kRect){ 12, fd.antiring_box.y + 24, cw - 24, 16 };
+    int by = chh - 12 - 23;
+    fd.cancel = (W2kRect){ cw - 12 - 75, by, 75, 23 };
+    fd.ok     = (W2kRect){ cw - 12 - 75 * 2 - 6, by, 75, 23 };
+    w2k_win_center(w, dl.win);
+    w2k_win_modal(w);
 }
 
 static void do_apply(void)
@@ -1495,6 +1628,11 @@ static int event(W2kWin *w, XEvent *e)
                 w2k_win_dirty(w);
                 return 1;
             }
+            if (w2k_rect_hit(&dl.filter_btn, x, y)) {
+                dl.down = 5;
+                w2k_win_dirty(w);
+                return 1;
+            }
             if (w2k_rect_hit(&dl.compositor_box, x, y)) {
                 dl.compositor = !dl.compositor;
                 dl.dirty = dl.mon_dirty = 1;
@@ -1593,6 +1731,7 @@ static int event(W2kWin *w, XEvent *e)
         if (d == 1 && w2k_rect_hit(&dl.ok, x, y)) { do_apply(); w2k_win_close(w, ID_OK); }
         else if (d == 2 && w2k_rect_hit(&dl.cancel, x, y)) do_cancel();
         else if (d == 3 && w2k_rect_hit(&dl.apply, x, y)) do_apply();
+        else if (d == 5 && w2k_rect_hit(&dl.filter_btn, x, y)) compositor_dialog();
         else if (d == 4 && w2k_rect_hit(&dl.browse, x, y)) {
             char p[1024];
             if (w2k_wallpaper[0]) snprintf(p, sizeof p, "%s", w2k_wallpaper);
@@ -1723,6 +1862,8 @@ int main(int argc, char **argv)
     dl.win->event = event;
 
     dl.tabs = w2k_tabs_new(NULL, on_tab);
+    /* Development aid: W2K_RENDER_COMPOSITOR=1 renders the filter sheet. */
+    if (getenv("W2K_RENDER_COMPOSITOR") && getenv("W2K_RENDER")) { compositor_dialog(); w2k_fini(); return 0; }
     /* Development aid: W2K_RENDER_TAB=n renders that page. */
     if (getenv("W2K_RENDER_TAB") && getenv("W2K_RENDER")) dl.tabs->sel = atoi(getenv("W2K_RENDER_TAB")) % 4;
     w2k_tabs_add(dl.tabs, "Background");
@@ -1833,7 +1974,8 @@ int main(int argc, char **argv)
     dl.resample->sel = w2k_resample == RS_LANCZOS ? 0 : w2k_resample == RS_CUBIC ? 1
                      : w2k_resample == RS_BILINEAR ? 2 : 3;
     dl.resample->r = (W2kRect){ c.x + 100, c.y + 352, c.w - 110, 21 };
-    dl.compositor_box = (W2kRect){ c.x + 10, c.y + 384, c.w - 20, 16 };
+    dl.compositor_box = (W2kRect){ c.x + 10, c.y + 384, c.w - 20 - 80, 16 };
+    dl.filter_btn = (W2kRect){ c.x + c.w - 10 - 70, c.y + 381, 70, 21 };
     dl.compositor = w2k_compositor;
     fill_monitor_combos();
 

@@ -167,7 +167,12 @@ if [ "$(sed -n 's/^Compositor=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)"
             [ "$nested_kind" = xephyr ] && \
                 [ "$(sed -n 's/^CompositorCapture=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)" = pixmap ] && \
                 scaler_args="--nested-window l2k-nested"
-            [ "$(sed -n 's/^CompositorLight=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)" = linear ] && scaler_args="$scaler_args --linear-light"
+            c_filter=$(sed -n 's/^CompositorFilter=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)
+            c_light=$(sed -n 's/^CompositorLight=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)
+            c_ar=$(sed -n 's/^CompositorAntiring=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)
+            [ -n "$c_filter" ] && scaler_args="$scaler_args --filter $c_filter"
+            [ "$c_light" = linear ] && scaler_args="$scaler_args --linear-light"
+            [ "$c_ar" = 0 ] && scaler_args="$scaler_args --antiring 0"
             # shellcheck disable=SC2086
             DISPLAY=$host_display l2kscaler --nested ":$n" --layout "$n_layout" $scaler_args >>"$LOG" 2>&1 &
             SCALER_PID=$!

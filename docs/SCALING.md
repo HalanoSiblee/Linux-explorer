@@ -78,9 +78,21 @@ Xephyr the scaler can instead bind the nested window's own pixmap into
 its texture on the GPU (`CompositorCapture=pixmap` in the scheme; no copy
 at all), but some drivers take that badly, so it is off unless asked.
 
-The filter works in gamma space, which is what text weight is drawn for;
-`CompositorLight=linear` filters in sigmoidised linear light as mpv does,
-truer for photographs but thin dark text comes out lighter.
+The filter is chosen with the **Filter...** button beside the box, and
+changes on the screen the moment it is picked while the compositor
+runs: nearest (blocks), bilinear (what xrandr does), bicubic
+(Catmull-Rom), Lanczos-3, EWA Lanczos (the polar jinc) and EWA
+Lanczos-sharp (the same blurred a hair, mpv's default and ours). Two
+manners go with it: the anti-ringing clamp, which keeps the sharper
+filters from haloing hard edges, and linear light, off by default --
+the filter works in gamma space, which is what text weight is drawn for;
+sigmoidised linear light as mpv does it is truer for photographs but
+thin dark text comes out lighter. OK keeps a choice, Apply on the
+Settings page saves it (`CompositorFilter=`, `CompositorLight=`,
+`CompositorAntiring=`). From a terminal inside the session,
+`l2kscaler --set "filter=lanczos;antiring=0;light=gamma"` does the same
+through the `_L2K_SCALER` property on the root window, which is how the
+sheet talks to the running scaler; `l2kscaler --list-filters` names them.
 
 Inside the nested session Display Properties lists the real monitors
 (the session tells the desktop where they are, `W2K_MONITORS`), and

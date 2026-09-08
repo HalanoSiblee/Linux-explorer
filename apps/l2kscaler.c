@@ -15,7 +15,15 @@
  * no GPU), which a desktop bears and a game does not.
  *
  *   l2kscaler --nested :1 --layout "name,hW,hH,hX,hY,nW,nH,nX,nY;..."
- *             [--nested-window TITLE] [--linear-light] [--window] [--no-input]
+ *             [--nested-window TITLE] [--filter NAME] [--antiring 0|1]
+ *             [--linear-light] [--window] [--no-input]
+ *   l2kscaler --set "filter=NAME;light=gamma|linear;antiring=0|1"
+ *
+ * The filters: nearest, bilinear, bicubic (Catmull-Rom), lanczos (3),
+ * ewa_lanczos and ewa_lanczossharp (the default). They change while it
+ * runs: the settings live in the _L2K_SCALER string property on the
+ * nested server's root, which --set writes from inside the session and
+ * Display Properties writes as its box is changed.
  *
  * Each layout entry is one monitor: its window on this display (size and
  * position) and the rectangle of the nested screen it shows; hW/nW is the
@@ -50,6 +58,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 /* ------------------------------------------------------------------ *
@@ -91,6 +100,9 @@ static void   (*p_glXReleaseTexImageEXT)(Display *, GLXDrawable, int);
 #define GL_TEXTURE0 0x84C0
 #define GL_TEXTURE2 0x84C2
 #define GL_TEXTURE3 0x84C3
+#endif
+#ifndef GL_TEXTURE4
+#define GL_TEXTURE4 0x84C4
 #endif
 #ifndef GL_FRAGMENT_SHADER
 #define GL_FRAGMENT_SHADER 0x8B30
@@ -146,11 +158,11 @@ static double jinc(double x)
     return 2.0 * j1(px) / px;
 }
 
-static void make_lut(float *lut)
+static void make_lut(float *lut, double blur)
 {
     for (int i = 0; i < LUT_N; i++) {
         double d = EWA_RADIUS * i / (LUT_N - 1);   /* distance in source pixels */
-        double x = d / EWA_BLUR;
+        double x = d / blur;
         double k = jinc(x) * jinc(x * JINC_ZERO1 / EWA_RADIUS);
         lut[i] = (float)k;
     }
@@ -195,10 +207,16 @@ static const char *vert_src =
     "void main() { p = gl_MultiTexCoord0.xy; gl_Position = gl_Vertex; }\n";
 
 /* Scaled pass: writes one output pixel from the nested texture. */
+/* Scaled pass: writes one output pixel from the nested texture, by the
+ * method chosen -- switchable while running (see the _L2K_SCALER
+ * property). Nearest and bilinear are what xrandr offers; Catmull-Rom
+ * and Lanczos-3 are the separable classics; EWA Lanczos is the polar
+ * jinc, and EWA Lanczos-sharp the same blurred a hair, mpv's choice. */
 static const char *ewa_src =
     "#version 120\n"
     "uniform sampler2D tex;\n"           /* the nested screen, sRGB bytes */
-    "uniform sampler1D lut;\n"           /* jinc kernel by distance / radius */
+    "uniform sampler1D lut;\n"           /* EWA Lanczos kernel by distance / radius */
+    "uniform sampler1D lut2;\n"          /* the same, sharp */
     "uniform sampler1D sig;\n"           /* sRGB byte -> sigmoid linear */
     "uniform sampler1D unsig;\n"         /* sigmoid linear -> sRGB */
     "uniform vec2 texsize;\n"
@@ -207,6 +225,8 @@ static const char *ewa_src =
     "uniform float radius;\n"
     "uniform float linlight;\n"          /* 1: filter in sigmoidised linear light */
     "uniform float texflip;\n"           /* 1: the texture's row 0 is the bottom */
+    "uniform float antiring;\n"          /* 1: clamp toward the four neighbours */
+    "uniform int method;\n"              /* 0 nearest 1 bilinear 2 cubic 3 lanczos 4 ewa 5 ewa sharp */
     "varying vec2 p;\n"
     "vec3 fetch(vec2 j) {\n"
     "    vec2 t = (j + 0.5) / texsize;\n"
@@ -215,27 +235,60 @@ static const char *ewa_src =
     "    if (linlight < 0.5) return c;\n"
     "    return vec3(texture1D(sig, c.r).r, texture1D(sig, c.g).r, texture1D(sig, c.b).r);\n"
     "}\n"
+    "float cubic_w(float x) {\n"         /* Catmull-Rom, a = -1/2 */
+    "    x = abs(x);\n"
+    "    if (x < 1.0) return 1.5 * x * x * x - 2.5 * x * x + 1.0;\n"
+    "    if (x < 2.0) return -0.5 * x * x * x + 2.5 * x * x - 4.0 * x + 2.0;\n"
+    "    return 0.0;\n"
+    "}\n"
+    "float sinc(float x) { if (abs(x) < 1e-5) return 1.0; float px = 3.14159265 * x; return sin(px) / px; }\n"
+    "float lanczos_w(float x) { x = abs(x); if (x >= 3.0) return 0.0; return sinc(x) * sinc(x / 3.0); }\n"
     "void main() {\n"
     "    vec2 src = origin + p / scale;\n"          /* continuous nested coords */
     "    vec2 c = src - 0.5;\n"                      /* pixel-index space */
     "    vec2 base = floor(c);\n"
-    "    vec3 acc = vec3(0.0); float wsum = 0.0;\n"
-    "    for (int dy = -3; dy <= 3; dy++)\n"
-    "        for (int dx = -3; dx <= 3; dx++) {\n"
-    "            vec2 j = base + vec2(float(dx), float(dy));\n"
-    "            float d = distance(j, c);\n"
-    "            if (d < radius) {\n"
-    "                float w = texture1D(lut, d / radius).r;\n"
-    "                acc += w * fetch(j); wsum += w;\n"
+    "    vec2 f = c - base;\n"
+    "    vec3 res;\n"
+    "    if (method == 0) {\n"
+    "        res = fetch(floor(src));\n"
+    "    } else if (method == 1) {\n"
+    "        vec3 a = fetch(base), b = fetch(base + vec2(1.0, 0.0));\n"
+    "        vec3 cc = fetch(base + vec2(0.0, 1.0)), d4 = fetch(base + vec2(1.0, 1.0));\n"
+    "        res = mix(mix(a, b, f.x), mix(cc, d4, f.x), f.y);\n"
+    "    } else if (method == 2 || method == 3) {\n"
+    "        int R = method == 2 ? 2 : 3;\n"
+    "        vec3 acc = vec3(0.0); float wsum = 0.0;\n"
+    "        for (int dy = -2; dy <= 3; dy++)\n"
+    "            for (int dx = -2; dx <= 3; dx++) {\n"
+    "                if (dx < 1 - R || dx > R || dy < 1 - R || dy > R) continue;\n"
+    "                float wx = method == 2 ? cubic_w(float(dx) - f.x) : lanczos_w(float(dx) - f.x);\n"
+    "                float wy = method == 2 ? cubic_w(float(dy) - f.y) : lanczos_w(float(dy) - f.y);\n"
+    "                float w = wx * wy;\n"
+    "                acc += w * fetch(base + vec2(float(dx), float(dy))); wsum += w;\n"
     "            }\n"
-    "        }\n"
-    "    vec3 res = wsum != 0.0 ? acc / wsum : fetch(base);\n"
+    "        res = wsum != 0.0 ? acc / wsum : fetch(base);\n"
+    "    } else {\n"
+    "        vec3 acc = vec3(0.0); float wsum = 0.0;\n"
+    "        for (int dy = -3; dy <= 3; dy++)\n"
+    "            for (int dx = -3; dx <= 3; dx++) {\n"
+    "                vec2 j = base + vec2(float(dx), float(dy));\n"
+    "                float d = distance(j, c);\n"
+    "                if (d < radius) {\n"
+    "                    float w = method == 5 ? texture1D(lut2, d / radius).r : texture1D(lut, d / radius).r;\n"
+    "                    acc += w * fetch(j); wsum += w;\n"
+    "                }\n"
+    "            }\n"
+    "        res = wsum != 0.0 ? acc / wsum : fetch(base);\n"
+    "    }\n"
     /* Anti-ringing: pull the result toward the range of the four pixels
-     * around the sample point, most of the way. */
-    "    vec3 a = fetch(base), b = fetch(base + vec2(1.0, 0.0)),\n"
-    "         cc = fetch(base + vec2(0.0, 1.0)), d4 = fetch(base + vec2(1.0, 1.0));\n"
-    "    vec3 lo = min(min(a, b), min(cc, d4)), hi = max(max(a, b), max(cc, d4));\n"
-    "    res = mix(res, clamp(res, lo, hi), 0.8);\n"
+     * around the sample point, most of the way. Nearest and bilinear
+     * cannot ring. */
+    "    if (antiring > 0.5 && method >= 2) {\n"
+    "        vec3 a = fetch(base), b = fetch(base + vec2(1.0, 0.0)),\n"
+    "             cc = fetch(base + vec2(0.0, 1.0)), d4 = fetch(base + vec2(1.0, 1.0));\n"
+    "        vec3 lo = min(min(a, b), min(cc, d4)), hi = max(max(a, b), max(cc, d4));\n"
+    "        res = mix(res, clamp(res, lo, hi), 0.8);\n"
+    "    }\n"
     "    res = clamp(res, 0.0, 1.0);\n"
     "    if (linlight < 0.5) { gl_FragColor = vec4(res, 1.0); return; }\n"
     "    gl_FragColor = vec4(texture1D(unsig, res.r).r, texture1D(unsig, res.g).r,\n"
@@ -279,7 +332,59 @@ static int NW, NH;                  /* nested screen size */
 static Mon mons[8];
 static int nmons;
 static int windowed, no_input;   /* --window and --no-input: for trying it out */
-static int linear_light;         /* --linear-light */
+static int linear_light;         /* --linear-light, or light=linear */
+static int antiring = 1;         /* --antiring 0|1, or antiring=0|1 */
+static int method = 5;           /* --filter NAME, or filter=NAME; see methods[] */
+static const char *const methods[] = { "nearest", "bilinear", "bicubic", "lanczos",
+                                       "ewa_lanczos", "ewa_lanczossharp" };
+#define NMETHODS 6
+static Atom a_scaler;            /* _L2K_SCALER on the nested root: settings, changed live */
+
+static int method_by_name(const char *n)
+{
+    for (int i = 0; i < NMETHODS; i++) if (!strcasecmp(n, methods[i])) return i;
+    return -1;
+}
+
+/* "filter=NAME;light=gamma|linear;antiring=0|1", any of them. Returns
+ * 1 when something changed. */
+static int apply_settings(const char *spec)
+{
+    int changed = 0;
+    char *dup = strdup(spec), *save = NULL;
+    for (char *tok = strtok_r(dup, ";\n", &save); tok; tok = strtok_r(NULL, ";\n", &save)) {
+        char *eq = strchr(tok, '=');
+        if (!eq) continue;
+        *eq = 0;
+        const char *val = eq + 1;
+        if (!strcasecmp(tok, "filter")) {
+            int m = method_by_name(val);
+            if (m >= 0 && m != method) { method = m; changed = 1; }
+        } else if (!strcasecmp(tok, "light")) {
+            int l = !strcasecmp(val, "linear");
+            if (l != linear_light) { linear_light = l; changed = 1; }
+        } else if (!strcasecmp(tok, "antiring")) {
+            int ar = atoi(val) != 0;
+            if (ar != antiring) { antiring = ar; changed = 1; }
+        }
+    }
+    free(dup);
+    return changed;
+}
+
+/* Read the settings property off the nested root, if anyone set one. */
+static void settings_from_property(void)
+{
+    Atom type; int fmt; unsigned long n, after; unsigned char *data = NULL;
+    if (XGetWindowProperty(nd, nroot, a_scaler, 0, 256, False, XA_STRING, &type, &fmt, &n, &after, &data) == Success && data) {
+        if (n && apply_settings((const char *)data))
+            for (int i = 0; i < nmons; i++) {
+                mons[i].dirty = 1;
+                if (mons[i].fbo) { mons[i].fbo_x0 = 0; mons[i].fbo_y0 = 0; mons[i].fbo_x1 = mons[i].hw; mons[i].fbo_y1 = mons[i].hh; }
+            }
+        XFree(data);
+    }
+}
 static const char *nested_title; /* --nested-window: Xephyr's window on this display */
 static Window xwin;              /* that window */
 static Pixmap xpix;              /* its pixmap, named by Composite */
@@ -291,7 +396,7 @@ static volatile sig_atomic_t quit;
 
 static GLXContext ctx;
 static XVisualInfo *vi;
-static GLuint desk_tex, lut_tex, sig_tex, unsig_tex, cur_tex;
+static GLuint desk_tex, lut_tex, lut2_tex, sig_tex, unsig_tex, cur_tex;
 static GLuint prog_ewa, prog_blit;
 static XShmSegmentInfo shm;
 static XImage *shmimg;
@@ -454,9 +559,11 @@ static void gl_after_context(void)
         glXMakeCurrent(hd, mons[0].win, ctx);
     }
     float lut[LUT_N], sfwd[256], sinv[1024];
-    make_lut(lut);
+    make_lut(lut, 1.0);
     make_sigmoid_luts(sfwd, sinv);
     lut_tex = tex1d(lut, LUT_N);
+    make_lut(lut, EWA_BLUR);
+    lut2_tex = tex1d(lut, LUT_N);
     sig_tex = tex1d(sfwd, 256);
     unsig_tex = tex1d(sinv, 1024);
     desk_tex = tex2d(NW, NH, GL_NEAREST);
@@ -688,9 +795,13 @@ static void draw_mon(Mon *m)
         p_glUniform1i(p_glGetUniformLocation(prog_ewa, "sig"), 2);
         p_glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_1D, unsig_tex);
         p_glUniform1i(p_glGetUniformLocation(prog_ewa, "unsig"), 3);
+        p_glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_1D, lut2_tex);
+        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "lut2"), 4);
         p_glUniform1f(p_glGetUniformLocation(prog_ewa, "radius"), (float)EWA_RADIUS);
         p_glUniform1f(p_glGetUniformLocation(prog_ewa, "linlight"), linear_light ? 1.0f : 0.0f);
         p_glUniform1f(p_glGetUniformLocation(prog_ewa, "texflip"), tex_flip ? 1.0f : 0.0f);
+        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "antiring"), antiring ? 1.0f : 0.0f);
+        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "method"), method);
         p_glActiveTexture(GL_TEXTURE0);
         glEnable(GL_SCISSOR_TEST);
         /* The framebuffer texture is y-up; our quad is y-down, so the
@@ -820,6 +931,10 @@ static void host_event(XEvent *e)
 
 static void nested_event(XEvent *e)
 {
+    if (e->type == PropertyNotify && e->xproperty.atom == a_scaler) {
+        settings_from_property();
+        return;
+    }
     if (e->type == damage_base + XDamageNotify) {
         XDamageNotifyEvent *d = (XDamageNotifyEvent *)e;
         int x0 = d->area.x, y0 = d->area.y, x1 = x0 + d->area.width, y1 = y0 + d->area.height;
@@ -840,7 +955,10 @@ static void nested_event(XEvent *e)
  * ------------------------------------------------------------------ */
 static void usage(void)
 {
-    fprintf(stderr, "usage: l2kscaler --nested DISPLAY --layout \"name,hW,hH,hX,hY,nW,nH,nX,nY;...\" [--nested-window TITLE] [--linear-light] [--window] [--no-input]\n");
+    fprintf(stderr, "usage: l2kscaler --nested DISPLAY --layout \"name,hW,hH,hX,hY,nW,nH,nX,nY;...\" [--nested-window TITLE]\n"
+                    "                 [--filter NAME] [--antiring 0|1] [--linear-light] [--window] [--no-input]\n"
+                    "       l2kscaler --set \"filter=NAME;light=gamma|linear;antiring=0|1\"   (while one runs)\n"
+                    "       l2kscaler --list-filters\n");
     exit(2);
 }
 
@@ -853,6 +971,26 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--window")) windowed = 1;
         else if (!strcmp(argv[i], "--no-input")) no_input = 1;
         else if (!strcmp(argv[i], "--linear-light")) linear_light = 1;
+        else if (!strcmp(argv[i], "--filter") && i + 1 < argc) {
+            method = method_by_name(argv[++i]);
+            if (method < 0) { fprintf(stderr, "l2kscaler: no filter called %s\n", argv[i]); usage(); }
+        }
+        else if (!strcmp(argv[i], "--antiring") && i + 1 < argc) antiring = atoi(argv[++i]) != 0;
+        else if (!strcmp(argv[i], "--set") && i + 1 < argc) {
+            /* Change the running scaler's settings: the property on this
+             * display's root, which is the nested one from inside. */
+            Display *d = XOpenDisplay(NULL);
+            if (!d) { fprintf(stderr, "l2kscaler: cannot open the display\n"); return 1; }
+            Atom a = XInternAtom(d, "_L2K_SCALER", False);
+            XChangeProperty(d, DefaultRootWindow(d), a, XA_STRING, 8, PropModeReplace,
+                            (unsigned char *)argv[i + 1], (int)strlen(argv[i + 1]));
+            XCloseDisplay(d);
+            return 0;
+        }
+        else if (!strcmp(argv[i], "--list-filters")) {
+            for (int k = 0; k < NMETHODS; k++) puts(methods[k]);
+            return 0;
+        }
         else if (!strcmp(argv[i], "--nested-window") && i + 1 < argc) nested_title = argv[++i];
         else usage();
     }
@@ -895,6 +1033,9 @@ int main(int argc, char **argv)
 
     if (!xwin) damage = XDamageCreate(nd, nroot, XDamageReportBoundingBox);
     XFixesSelectCursorInput(nd, nroot, XFixesDisplayCursorNotifyMask);
+    a_scaler = XInternAtom(nd, "_L2K_SCALER", False);
+    XSelectInput(nd, nroot, PropertyChangeMask);
+    settings_from_property();
     dmg_x0 = 0; dmg_y0 = 0; dmg_x1 = NW; dmg_y1 = NH; dmg_any = 1;
     fetch_cursor();
 

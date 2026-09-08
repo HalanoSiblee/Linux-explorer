@@ -15,6 +15,21 @@ int w2k_scale_raw = 0;
 int w2k_ui_scale_pref = 100;
 int w2k_scale_mode = SCALE_XRANDR;
 int w2k_compositor = 0;
+char w2k_compositor_filter[32] = "ewa_lanczossharp";
+int  w2k_compositor_light = 0;
+int  w2k_compositor_antiring = 1;
+
+void w2k_compositor_push(void)
+{
+    if (!w2k.dpy) return;
+    char spec[96];
+    snprintf(spec, sizeof spec, "filter=%s;light=%s;antiring=%d", w2k_compositor_filter,
+             w2k_compositor_light ? "linear" : "gamma", w2k_compositor_antiring ? 1 : 0);
+    Atom a = XInternAtom(w2k.dpy, "_L2K_SCALER", False);
+    XChangeProperty(w2k.dpy, w2k.root, a, XA_STRING, 8, PropModeReplace,
+                    (unsigned char *)spec, (int)strlen(spec));
+    XFlush(w2k.dpy);
+}
 
 int w2k_scale_render(int mode, const int *wants, int n, int primary)
 {
@@ -462,6 +477,9 @@ void w2k_scheme_reset(void)
     w2k_start_banner_gradient = 1;
     w2k_modern_classic_frame = 0;
     w2k_compositor = 0;
+    snprintf(w2k_compositor_filter, sizeof w2k_compositor_filter, "ewa_lanczossharp");
+    w2k_compositor_light = 0;
+    w2k_compositor_antiring = 1;
     w2k_start_icon = SI_FLAG;
     w2k_start_search = 1;
     w2k_start_panel = 0;
@@ -728,6 +746,18 @@ int w2k_scheme_load(const char *path)
             w2k_compositor = !strcasecmp(val, "nested");
             continue;
         }
+        if (!strcasecmp(line, "CompositorFilter")) {
+            snprintf(w2k_compositor_filter, sizeof w2k_compositor_filter, "%s", val);
+            continue;
+        }
+        if (!strcasecmp(line, "CompositorLight")) {
+            w2k_compositor_light = !strcasecmp(val, "linear");
+            continue;
+        }
+        if (!strcasecmp(line, "CompositorAntiring")) {
+            w2k_compositor_antiring = atoi(val) != 0;
+            continue;
+        }
         if (!strcasecmp(line, "ModernFrame")) {
             w2k_modern_classic_frame = !strncasecmp(val, "classic", 7);
             continue;
@@ -975,6 +1005,9 @@ int w2k_scheme_save(const char *path)
             w2k_theme == THEME_VISTA ? "vista" : "classic");
     fprintf(f, "ModernFrame=%s\n", w2k_modern_classic_frame ? "classic" : "modern");
     fprintf(f, "Compositor=%s\n", w2k_compositor ? "nested" : "none");
+    fprintf(f, "CompositorFilter=%s\n", w2k_compositor_filter);
+    fprintf(f, "CompositorLight=%s\n", w2k_compositor_light ? "linear" : "gamma");
+    fprintf(f, "CompositorAntiring=%d\n", w2k_compositor_antiring);
     fprintf(f, "IconSet=%s\n", w2k_icon_set);
     fprintf(f, "UiScale=%d\n", w2k_ui_scale_pref);
     fprintf(f, "Resample=%s\n", w2k_resample == RS_NEAREST ? "nearest"

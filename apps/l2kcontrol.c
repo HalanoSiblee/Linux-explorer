@@ -54,6 +54,8 @@ static const Applet applets[] = {
       ICO_CP_MOUSE, NULL },
     { "Network and Dial-up Connections", "Connects to other computers, networks, and the Internet.",
       ICO_CP_NETWORK, "l2knetwork" },
+    { "Performance Options", "Chooses the visual effects the desktop uses -- smooth icons, menu shadows, animation -- and weighs looks against speed.",
+      ICO_SETTINGS, NULL },
     { "Power Options", "Configures energy-saving settings for your computer.",
       ICO_CP_POWER, NULL },
     { "Sounds and Multimedia", "Assigns sounds to events and configures sound devices.",
@@ -416,7 +418,7 @@ static void open_performance(void)
  * server on OK (see lib/input.c) and remembered in ~/.w2k/scheme.
  * ------------------------------------------------------------------ */
 enum { AP_DATETIME = 0, AP_DEFAULTS, AP_DEVMGR, AP_DISPLAY, AP_FOLDER,
-       AP_FONTS, AP_KEYBOARD, AP_MOUSE, AP_NETWORK, AP_POWER, AP_SOUNDS,
+       AP_FONTS, AP_KEYBOARD, AP_MOUSE, AP_NETWORK, AP_PERF, AP_POWER, AP_SOUNDS,
        AP_SYSTEM, AP_TASKMGR, AP_STARTMENU, AP_USERS };
 
 #define MAX_SLIDERS 4
@@ -2258,6 +2260,7 @@ static void open_applet(int i)
     case AP_SOUNDS:   open_sounds(); break;
     case AP_FONTS:    open_fonts(); break;
     case AP_DATETIME: open_datetime(); break;
+    case AP_PERF:     open_performance(); break;
     case AP_POWER:    open_power(); break;
     case AP_USERS:    open_users(); break;
     }

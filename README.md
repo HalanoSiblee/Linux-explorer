@@ -103,7 +103,8 @@ Try it nested first, without logging out of anything:
     l2kcontrol     Control Panel, the Windows 2000 folder with its web-view
                    pane: Date/Time, Default Programs, Device Manager, Display,
                    Folder Options, Fonts, Keyboard, Mouse, Network and Dial-up
-                   Connections, Power Options (Power Schemes: turn off the
+                   Connections, Performance Options (the visual effects,
+                   Smooth edges of icons among them), Power Options (Power Schemes: turn off the
                    monitor, stand by, hibernate after idle minutes; Advanced:
                    what the lid and the power button do, through logind;
                    the Power Meter; Brightness for the backlight), Sounds and

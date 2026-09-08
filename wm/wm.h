@@ -292,6 +292,7 @@ void     programs_collapse_all(void);
 void    desktop_init(void);
 void    desktop_paint(void);
 void    desktop_reload(void);         /* colours / wallpaper changed */
+void    desktop_wall_copy(Drawable d, int sx, int sy, int w, int h, int dx, int dy);
 void    desktop_bin_tick(void);       /* has the Recycle Bin filled up? */
 /* How long the shell may sleep before each part needs attention again.
  * The main loop sleeps for the smallest of them instead of waking on a

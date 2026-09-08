@@ -29,8 +29,8 @@
 #define BTN_TOP      ((TASKBAR_ROW - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0))
 #define W7_SLIVER    15       /* Windows 7's Show Desktop, at the bar's far end: measured */
 #define W7_ORB_W     58       /* the orb's artwork, and how much of it shows over the big and small bars */
-#define W7_ORB_H     51
-#define W7_ORB_SMALL 45
+#define W7_ORB_H     46
+#define W7_ORB_SMALL 43
 #define W7_ARROW     14       /* the "show hidden icons" arrow and its air */
 #define TRAY_PAD      6
 
@@ -80,6 +80,8 @@ static int    tb_shown = 1;        /* only meaningful when auto-hiding */
 static Window orb;                 /* Windows 7's orb, risen above the bar: a shaped window of its own */
 static int    orb_mapped, orb_pw, orb_ph;
 static void   orb_paint(void);
+static Pixmap tb_pm;                    /* the bar's back buffer, kept between repaints */
+static int    tb_pm_w, tb_pm_h;
 static char   clock_text[32];
 static char   clock_date[40];     /* Windows 7 shows the date under the time */
 
@@ -801,17 +803,14 @@ void taskbar_paint(void)
     int h = tb_h;
     /* Kept between repaints: the bar redraws on every focus change, every
      * clock tick and every task appearing or going away. */
-    static Pixmap pm;
-    static int pm_w;
-    static int pm_h;
-    if (pm && (pm_w != tb_w || pm_h != h)) { w2k_free_pixmap(pm); pm = 0; }
-    if (!pm) {
-        pm = XCreatePixmap(w2k.dpy, tb, (unsigned)tb_pw, (unsigned)tb_ph, w2k.depth);
-        pm_w = tb_w;
-        pm_h = h;
+    if (tb_pm && (tb_pm_w != tb_w || tb_pm_h != h)) { w2k_free_pixmap(tb_pm); tb_pm = 0; }
+    if (!tb_pm) {
+        tb_pm = XCreatePixmap(w2k.dpy, tb, (unsigned)tb_pw, (unsigned)tb_ph, w2k.depth);
+        tb_pm_w = tb_w;
+        tb_pm_h = h;
     }
-    taskbar_draw(pm, h);
-    XCopyArea(w2k.dpy, pm, tb, w2k.gc, 0, 0, (unsigned)tb_pw, (unsigned)tb_ph, 0, 0);
+    taskbar_draw(tb_pm, h);
+    XCopyArea(w2k.dpy, tb_pm, tb, w2k.gc, 0, 0, (unsigned)tb_pw, (unsigned)tb_ph, 0, 0);
     orb_paint();
 }
 
@@ -1076,8 +1075,16 @@ static void orb_paint(void)
     static int opm_w, opm_h;
     if (opm && (opm_w != orb_pw || opm_h != orb_ph)) { w2k_free_pixmap(opm); opm = 0; }
     if (!opm) { opm = XCreatePixmap(w2k.dpy, orb, (unsigned)orb_pw, (unsigned)orb_ph, w2k.depth); opm_w = orb_pw; opm_h = orb_ph; }
-    /* What shows through the rim's few soft pixels: the bar's colour. */
-    w2k_fill_rgb(opm, 0, 0, W7_ORB_W, W7_ORB_H, 129, 148, 170);
+    /* Under the orb: the wallpaper where it rises above the bar, and the
+     * bar itself -- its top line and all -- where it sits on it. The rim's
+     * soft pixels blend into whichever they are over. (A window whose
+     * bottom edge runs under the orb's overhang is not seen through it;
+     * the wallpaper is what shows there.) */
+    int vis = w2k_px(w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
+    int above = orb_ph - vis;
+    if (above > 0) desktop_wall_copy(opm, tb_x + w2k_px(2), tb_y - above, orb_pw, above, 0, 0);
+    if (tb_pm) XCopyArea(w2k.dpy, tb_pm, opm, w2k.gc, w2k_px(2), 0, (unsigned)orb_pw, (unsigned)vis, 0, above);
+    else w2k_fill_rgb(opm, 0, 0, W7_ORB_W, W7_ORB_H, 129, 148, 170);
     int sw = w2k_skin_w(skin), sh = w2k_skin_h(skin) / 3;
     int state = startmenu_is_open() ? 2 : (start_hot ? 1 : 0);
     if (state != 2 && orb_frames[0]) w2k_skin_draw(opm, orb_frames[orb_frame], 0, 0, 0, 0, sw, sh);

@@ -486,6 +486,20 @@ static void apply_background(void)
     XClearWindow(w2k.dpy, dw);
 }
 
+/* A piece of the wallpaper, in root pixels, on to `d` at (dx, dy): what
+ * lies under something drawn over the desktop. The desktop colour when
+ * there is no wallpaper. */
+void desktop_wall_copy(Drawable d, int sx, int sy, int w, int h, int dx, int dy)
+{
+    if (w <= 0 || h <= 0) return;
+    if (wall) {
+        XCopyArea(w2k.dpy, wall, d, w2k.gc, sx, sy, (unsigned)w, (unsigned)h, dx, dy);
+        return;
+    }
+    XSetForeground(w2k.dpy, w2k.gc, w2k.col[C_DESKTOP]);
+    XFillRectangle(w2k.dpy, d, w2k.gc, dx, dy, (unsigned)w, (unsigned)h);
+}
+
 void desktop_reload(void)
 {
     build_wallpaper();

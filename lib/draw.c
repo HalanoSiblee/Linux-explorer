@@ -4,7 +4,6 @@
  * fill, exactly as USER32/COMCTL32 built theirs from DrawEdge().
  */
 #include "w2k.h"
-#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -325,38 +324,6 @@ void w2k_bar_gradient(Drawable d, int x, int y, int w, int h, int theme)
                                a->b + (b->b - a->b) * t / 255));
         XFillRectangle(w2k.dpy, d, w2k.gc, px, py + i, (unsigned)pw, 1);
     }
-}
-
-void w2k_rgba_draw(Drawable d, int x, int y, const unsigned char *rgba, int w, int h)
-{
-    if (!rgba || w < 1 || h < 1) return;
-    int px = w2k_cx(x), py = w2k_cx(y), pw = w2k_cw(x, w), ph = w2k_cw(y, h);
-    if (pw < 1 || ph < 1) return;
-    const unsigned char *src = rgba;
-    unsigned char *scaled = NULL;
-    if (pw != w || ph != h) {
-        scaled = w2k_rgba_resample(rgba, w, h, pw, ph, w2k_resample);
-        if (!scaled) return;
-        src = scaled;
-    }
-    char *pixels = malloc((size_t)pw * ph * 4);
-    XImage *im = pixels ? XCreateImage(w2k.dpy, w2k.visual, w2k.depth, ZPixmap, 0,
-                                       pixels, (unsigned)pw, (unsigned)ph, 32, 0) : NULL;
-    if (im) {
-        for (int yy = 0; yy < ph; yy++)
-            for (int xx = 0; xx < pw; xx++) {
-                const unsigned char *p = src + ((size_t)yy * pw + xx) * 4;
-                int a = p[3];
-                XPutPixel(im, xx, yy, w2k_rgb((p[0] * a + 255 * (255 - a)) / 255,
-                                              (p[1] * a + 255 * (255 - a)) / 255,
-                                              (p[2] * a + 255 * (255 - a)) / 255));
-            }
-        XPutImage(w2k.dpy, d, w2k.gc, im, 0, 0, px, py, (unsigned)pw, (unsigned)ph);
-        XDestroyImage(im);
-    } else {
-        free(pixels);
-    }
-    free(scaled);
 }
 
 void w2k_gradient(Drawable d, int x, int y, int w, int h, int c1, int c2)

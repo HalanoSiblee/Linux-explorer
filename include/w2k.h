@@ -538,9 +538,6 @@ void w2k_round_rect_rgb(Drawable d, int x, int y, int w, int h, int r,
                         const int fill[3], const int line[3]);
 int  w2k_theme_modern_margin(void);    /* the invisible margin, in pixels */
 
-/* Draw an RGBA picture at (x, y), `w` by `h` logical pixels, opaque (its
- * alpha is laid over white); resampled to the size it takes on screen. */
-void w2k_rgba_draw(Drawable d, int x, int y, const unsigned char *rgba, int w, int h);
 /* Horizontal two-stop gradient, used by title bars. */
 void w2k_gradient(Drawable d, int x, int y, int w, int h, int c1, int c2);
 /* The themed taskbar background (THEME_XP, THEME_BASIC7). */

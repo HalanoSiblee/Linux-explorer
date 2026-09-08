@@ -130,7 +130,7 @@ Try it nested first, without logging out of anything:
                    root from then on, each change confirmed first
     l2ktaskmgr     Task Manager: applications, processes, and a Performance
                    page in the Windows 2000 layout -- LED meters, the green
-                   grid graphs with kernel time in red, page-file usage, the
+                   grid graphs with kernel time in red, memory usage, the
                    figures in K; Handles/Threads/Processes, Page File
     l2kpaint       Paint: pencil, brush, eraser, line, rectangle, ellipse,
                    fill, picker and text tools, layers, undo, zoom, the

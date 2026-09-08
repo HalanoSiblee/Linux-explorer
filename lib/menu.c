@@ -124,16 +124,19 @@ void w2k_menu_free(W2kMenu *m)
 /* ------------------------------------------------------------------ *
  * Metrics
  * ------------------------------------------------------------------ */
-/* The Start menu's big row height, unless small icons are switched on. */
-static int menu_big(W2kMenu *m)
+/* The Start menu's icon size -- 32 as Windows 2000 drew it, 24, or 16,
+ * the Taskbar and Start Menu page's choice; every other menu is 16. */
+static int menu_icon(W2kMenu *m)
 {
-    return m->banner && !w2k_start_small_icons;
+    return m->banner ? w2k_start_icon_size : 16;
 }
+static int menu_big(W2kMenu *m) { return menu_icon(m) > 16; }
 
 static int item_h(W2kMenu *m, Item *it)
 {
     if (it->separator) return SEP_H;
-    return menu_big(m) ? BIG_ITEM_H : ITEM_H;
+    int sz = menu_icon(m);
+    return sz == 32 ? BIG_ITEM_H : sz == 24 ? 26 : ITEM_H;
 }
 
 /* Windows 2000 set its Start menu out wider than Windows 98: a 22-pixel
@@ -142,7 +145,9 @@ static int item_h(W2kMenu *m, Item *it)
 static int wide(W2kMenu *m) { return m->banner && w2k_start_width; }
 static int icon_col(W2kMenu *m)
 {
-    if (!menu_big(m)) return ICON_COL;
+    int sz = menu_icon(m);
+    if (sz == 16) return ICON_COL;
+    if (sz == 24) return wide(m) ? 34 : 30;
     return wide(m) ? 42 : BIG_ICON_COL;
 }
 static int banner_w(W2kMenu *m) { return m->banner ? (w2k_start_width ? 22 : BANNER_W) : 0; }
@@ -400,7 +405,7 @@ static void menu_paint(W2kMenu *m, Window win, int w, int h, int sel)
         if (hot)
             w2k_fill(pm, left, iy, w - left, ih, C_HIGHLIGHT);
 
-        int isz = menu_big(m) ? 32 : 16;
+        int isz = menu_icon(m);
         int ix = left + (icol - isz) / 2, icy = iy + (ih - isz) / 2;
         if (it->checked && it->icon < 0) {
             /* A checked item without an icon gets a sunken, dithered well. */
@@ -412,7 +417,8 @@ static void menu_paint(W2kMenu *m, Window win, int w, int h, int sel)
                                       it->disabled ? C_GRAYTEXT : C_MENUTEXT);
         } else if (it->icon >= 0) {
             if (it->disabled)      w2k_icon_draw_disabled(pm, ix, icy, it->icon);
-            else if (menu_big(m))  w2k_bigicon_draw(pm, ix, icy, it->icon);
+            else if (isz == 32)    w2k_bigicon_draw(pm, ix, icy, it->icon);
+            else if (isz == 24)    w2k_icon_draw_scaled(pm, ix, icy, it->icon, 24);
             else                   w2k_icon_draw(pm, ix, icy, it->icon);
         }
 

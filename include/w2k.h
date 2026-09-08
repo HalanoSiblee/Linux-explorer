@@ -217,7 +217,8 @@ extern int  w2k_start_banner_gradient;  /* off: one colour, as Windows 95 */
 extern int  w2k_start_icon;
 extern int  w2k_start_search;   /* type in the Start menu to search */
 extern int  w2k_start_panel;    /* two-column Start menu (XP style) */
-extern int  w2k_start_small_icons;
+extern int  w2k_start_small_icons;      /* kept for older schemes: 16-pixel icons */
+extern int  w2k_start_icon_size;        /* 32 (Windows 2000), 24 or 16 */
 /* The classic Start menu's columns: 1 = Windows 2000's, measured off a
  * 640x480 capture (banner 22, icon column 42, arrow gutter 20), 0 =
  * Windows 98's narrower ones (21, 38, 14). */

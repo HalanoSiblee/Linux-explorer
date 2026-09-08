@@ -163,14 +163,14 @@ typedef struct {
     W2kRect  text_radio[3], icon_radio[3], dither_box, gradient_box, search_box;
     W2kRect  ontop_box, autohide_box, clock_box;
     W2kRect  labels_box, small_box;   /* Windows 7's button options */
-    W2kRect  smallicons_box, personalized_box;
+    W2kRect  iconsize_radio[3], personalized_box;   /* large, medium, small */
     W2kRect  style_radio[2];
     W2kRect  width_radio[2];          /* Windows 2000 / Windows 98 columns */
     int      width;
     W2kRect  preview;                 /* the General page's picture      */
     W2kRect  preview2;                /* the Start Menu page's banner    */
     int      mode, icon, dither, gradient, search;   /* edited copies    */
-    int      ontop, autohide, showclock, smallicons, personalized;
+    int      ontop, autohide, showclock, iconsize, personalized;   /* iconsize: 0 large 1 medium 2 small */
     int      labels, tsmall;
     int      panel;            /* two-column Start menu */
     int      col[2][3];
@@ -199,7 +199,8 @@ static void startdlg_commit(StartDlg *sd)
     w2k_taskbar_showclock = sd->showclock;
     w2k_taskbar_labels = sd->labels;
     w2k_taskbar_small = sd->tsmall;
-    w2k_start_small_icons = sd->smallicons;
+    w2k_start_icon_size = sd->iconsize == 2 ? 16 : sd->iconsize == 1 ? 24 : 32;
+    w2k_start_small_icons = w2k_start_icon_size == 16;
     w2k_start_panel = sd->panel;
     w2k_start_personalized = sd->personalized;
     w2k_start_width = sd->width;
@@ -299,8 +300,9 @@ static void startdlg_preview(StartDlg *sd, Drawable d)
     }
 
     /* The Start menu above the button. */
-    int big = !sd->smallicons;
-    int row = big ? 34 : 18, icol = big ? 38 : 20;
+    int isz = sd->iconsize == 2 ? 16 : sd->iconsize == 1 ? 24 : 32;
+    int big = isz > 16;
+    int row = isz == 32 ? 34 : isz == 24 ? 26 : 18, icol = isz == 32 ? 38 : isz == 24 ? 30 : 20;
     const char *items[] = { "Programs", "Documents", "Settings", "Search", "Help", "Run...", "Shut Down..." };
     const int icons[] = { ICO_PROGRAMS, ICO_DOCUMENTS, ICO_SETTINGS, ICO_SEARCH, ICO_HELP, ICO_RUN, ICO_SHUTDOWN };
     int n = 7;
@@ -330,8 +332,9 @@ static void startdlg_preview(StartDlg *sd, Drawable d)
         int y = my + 3;
         for (int i = 0; i < n; i++) {
             int ix = mx + 3 + 21;
-            if (big) w2k_bigicon_draw(d, ix + 3, y + 1, icons[i]);
-            else     w2k_icon_draw(d, ix + 2, y + 1, icons[i]);
+            if (isz == 32)      w2k_bigicon_draw(d, ix + 3, y + 1, icons[i]);
+            else if (isz == 24) w2k_icon_draw_scaled(d, ix + 3, y + 1, icons[i], 24);
+            else                w2k_icon_draw(d, ix + 2, y + 1, icons[i]);
             w2k_text(d, F_UI, ix + icol, y + (row - w2k_font_height(F_UI)) / 2, items[i],
                      C_MENUTEXT);
             if (i < 4) {
@@ -423,8 +426,11 @@ static void startdlg_paint(W2kWin *w, Drawable d)
                            sd->icon == i, 0, 0);
         w2k_draw_checkbox(d, sd->search_box.x, sd->search_box.y,
                           "&Search for programs when you type in the Start menu", sd->search, 0, 0);
-        w2k_draw_checkbox(d, sd->smallicons_box.x, sd->smallicons_box.y,
-                          "Show small &icons in Start menu", sd->smallicons, 0, 0);
+        w2k_text(d, F_UI, sd->iconsize_radio[0].x - 90, sd->iconsize_radio[0].y + 1, "Start menu icons:", C_TEXT);
+        const char *sizes[3] = { "&Large", "&Medium", "Sma&ll" };
+        for (int i = 0; i < 3; i++)
+            w2k_draw_radio(d, sd->iconsize_radio[i].x, sd->iconsize_radio[i].y, sizes[i],
+                           sd->iconsize == i, 0, 0);
         w2k_draw_checkbox(d, sd->personalized_box.x, sd->personalized_box.y,
                           "Use &Personalized Menus", sd->personalized, 0, 0);
         w2k_draw_radio(d, sd->width_radio[0].x, sd->width_radio[0].y,
@@ -482,9 +488,10 @@ static int startdlg_event(W2kWin *w, XEvent *e)
             if (w2k_rect_hit(&sd->search_box, x, y)) {
                 sd->search = !sd->search; sd->dirty = 1; w2k_win_dirty(w); return 1;
             }
-            if (w2k_rect_hit(&sd->smallicons_box, x, y)) {
-                sd->smallicons = !sd->smallicons; sd->dirty = 1; w2k_win_dirty(w); return 1;
-            }
+            for (int i = 0; i < 3; i++)
+                if (w2k_rect_hit(&sd->iconsize_radio[i], x, y)) {
+                    sd->iconsize = i; sd->dirty = 1; w2k_win_dirty(w); return 1;
+                }
             if (w2k_rect_hit(&sd->personalized_box, x, y)) {
                 sd->personalized = !sd->personalized; sd->dirty = 1; w2k_win_dirty(w); return 1;
             }
@@ -593,7 +600,7 @@ void wm_startmenu_dialog(void)
     sd.showclock = w2k_taskbar_showclock;
     sd.labels = w2k_taskbar_labels;
     sd.tsmall = w2k_taskbar_small;
-    sd.smallicons = w2k_start_small_icons;
+    sd.iconsize = w2k_start_icon_size == 16 ? 2 : w2k_start_icon_size == 24 ? 1 : 0;
     sd.panel = w2k_start_panel;
     sd.personalized = w2k_start_personalized;
     sd.width = w2k_start_width;
@@ -646,7 +653,8 @@ void wm_startmenu_dialog(void)
     for (int i = 0; i < 3; i++)
         sd.icon_radio[i] = (W2kRect){ c.x + 20, y5 + i * (fh + 6), c.w - 60, fh + 4 };
     sd.search_box       = (W2kRect){ c.x + 20, y5 + 3 * (fh + 6) + 2, c.w - 40, 16 };
-    sd.smallicons_box   = (W2kRect){ c.x + 20, y5 + 4 * (fh + 6) + 2, c.w - 40, 16 };
+    for (int i = 0; i < 3; i++)      /* one row: the label, then Large / Medium / Small */
+        sd.iconsize_radio[i] = (W2kRect){ c.x + 20 + 90 + i * 72, y5 + 4 * (fh + 6) + 2, 66, 16 };
     sd.personalized_box = (W2kRect){ c.x + 20, y5 + 5 * (fh + 6) + 2, c.w - 40, 16 };
     sd.width_radio[0] = (W2kRect){ c.x + 20, y5 + 6 * (fh + 6) + 4, c.w - 60, fh + 4 };
     sd.width_radio[1] = (W2kRect){ c.x + 20, y5 + 7 * (fh + 6) + 4, c.w - 60, fh + 4 };

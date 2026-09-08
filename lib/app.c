@@ -228,6 +228,7 @@ int  w2k_start_search = 1;
  * classic single column of Windows 2000. */
 int  w2k_start_panel;
 int  w2k_start_small_icons;
+int  w2k_start_icon_size = 32;
 int w2k_start_width = 1;         /* Windows 2000 columns */
 int  w2k_start_personalized;
 int  w2k_taskbar_ontop = 1;
@@ -484,6 +485,7 @@ void w2k_scheme_reset(void)
     w2k_start_search = 1;
     w2k_start_panel = 0;
     w2k_start_small_icons = 0;
+    w2k_start_icon_size = 32;
     w2k_start_personalized = 0;
     w2k_taskbar_ontop = 1;
     w2k_taskbar_autohide = 0;
@@ -882,8 +884,16 @@ int w2k_scheme_load(const char *path)
             continue;
         }
         if (!strcasecmp(line, "StartWidth")) { w2k_start_width = atoi(val) != 0; continue; }
+        if (!strcasecmp(line, "StartIconSize")) {
+            int v = atoi(val);
+            w2k_start_icon_size = v == 16 || v == 24 ? v : 32;
+            w2k_start_small_icons = w2k_start_icon_size == 16;
+            continue;
+        }
         if (!strcasecmp(line, "StartSmallIcons")) {
+            /* The old two-way key; StartIconSize, written after it, wins. */
             w2k_start_small_icons = atoi(val) != 0;
+            w2k_start_icon_size = w2k_start_small_icons ? 16 : 32;
             continue;
         }
         if (!strcasecmp(line, "StartPersonalized")) {
@@ -992,7 +1002,8 @@ int w2k_scheme_save(const char *path)
     fprintf(f, "StartBannerGradient=%d\n", w2k_start_banner_gradient);
     fprintf(f, "StartSearch=%d\n", w2k_start_search);
     fprintf(f, "StartPanel=%d\n", w2k_start_panel);
-    fprintf(f, "StartSmallIcons=%d\n", w2k_start_small_icons);
+    fprintf(f, "StartSmallIcons=%d\n", w2k_start_icon_size == 16);
+    fprintf(f, "StartIconSize=%d\n", w2k_start_icon_size);
     fprintf(f, "StartWidth=%d\n", w2k_start_width);
     fprintf(f, "StartPersonalized=%d\n", w2k_start_personalized);
     char fx[N_EFFECTS + 1];

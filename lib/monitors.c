@@ -32,11 +32,34 @@ static void one_big_screen(void)
     nmon = 1;
 }
 
+/* Inside the nested compositor (l2k-session sets W2K_MONITORS) the
+ * server has one big screen; the real monitors are told to us:
+ * "name:WxH+X+Y:primary;..." in the nested screen's pixels. */
+static int monitors_from_env(void)
+{
+    const char *env = getenv("W2K_MONITORS");
+    if (!env || !*env) return 0;
+    char *dup = strdup(env), *save = NULL;
+    for (char *tok = strtok_r(dup, ";", &save); tok && nmon < MAX_MON; tok = strtok_r(NULL, ";", &save)) {
+        W2kMonitor *m = &mon[nmon];
+        memset(m, 0, sizeof *m);
+        int pri = 0;
+        if (sscanf(tok, "%63[^:]:%dx%d+%d+%d:%d", m->name, &m->w, &m->h, &m->x, &m->y, &pri) < 5 ||
+            m->w <= 0 || m->h <= 0) continue;
+        m->primary = pri != 0;
+        nmon++;
+    }
+    free(dup);
+    return nmon > 0;
+}
+
 void w2k_monitors_refresh(void)
 {
     nmon = 0;
 
-    if (rr_base >= 0) {
+    if (monitors_from_env()) {
+        /* told, not asked */
+    } else if (rr_base >= 0) {
         int n = 0;
         XRRMonitorInfo *mi = XRRGetMonitors(w2k.dpy, w2k.root, True, &n);
         if (mi) {
@@ -179,6 +202,8 @@ const W2kMonitor *w2k_monitor_of_pointer(void)
  * since is skipped rather than have the whole command refused. */
 int w2k_monitors_apply_saved(void)
 {
+    /* The nested compositor fixed the layout when the session began. */
+    if (getenv("W2K_MONITORS") && *getenv("W2K_MONITORS")) return 0;
     if (!w2k_monitor_cfg_n) return 0;
 
     char connected[8][64];

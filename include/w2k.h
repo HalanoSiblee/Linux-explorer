@@ -466,6 +466,10 @@ extern int w2k_ui_scale;
 extern int w2k_scale_raw;
 extern int w2k_ui_scale_pref;        /* what the scheme asks for, per cent */
 extern int w2k_scale_mode;           /* SCALE_XRANDR / SCALE_DESKTOP / SCALE_SUPER / SCALE_SUPER2 */
+/* Experimental: the desktop runs in a nested server shown through
+ * l2kscaler, which scales every monitor with EWA Lanczos-sharp on the
+ * GPU. Compositor=nested in the scheme; l2k-session acts on it. */
+extern int w2k_compositor;
 /* Screen: xrandr stretches a smaller virtual screen (nearest at 200%).
  * Desktop: the desktop renders at the scale, the screen is left alone.
  * Super: the desktop renders at 200% and xrandr shrinks it to the scale

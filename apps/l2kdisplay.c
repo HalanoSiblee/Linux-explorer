@@ -419,6 +419,8 @@ typedef struct {
     int       down;
     int       dirty;                        /* something to Apply */
     int       mon_dirty;                    /* a Settings-tab change to apply */
+    W2kRect   compositor_box;               /* the experimental nested compositor */
+    int       compositor;
 
     /* Background */
     W2kList  *walls;
@@ -1234,6 +1236,9 @@ static void paint(W2kWin *w, Drawable d)
         w2k_combo_draw(d, dl.method);
         w2k_text_mnemonic(d, F_UI, c.x + 10, dl.resample->r.y + (21 - fh) / 2, "Resa&mpling:", C_TEXT, 1);
         w2k_combo_draw(d, dl.resample);
+        w2k_draw_checkbox(d, dl.compositor_box.x, dl.compositor_box.y,
+                          "E&xperimental: scale the whole picture through the nested compositor",
+                          dl.compositor, 0, 0);
         if (valid) {
             char info[200];
             int mw, mh;
@@ -1255,6 +1260,8 @@ static void paint(W2kWin *w, Drawable d)
             else
                 how = want == render ? " (desktop drawn larger; takes effect at the next logon)"
                                      : " (desktop scale follows the primary; the screen makes up the rest)";
+            if (getenv("W2K_MONITORS") && *getenv("W2K_MONITORS"))
+                how = " (shown through the nested compositor; layout changes take the next logon)";
             snprintf(info, sizeof info, "%s -- %d x %d at %d, %d%s",
                      mons[cur].name, mw, mh, mons[cur].px, mons[cur].py, how);
             w2k_text(d, F_UI, c.x + 10, c.y + c.h - fh - 6, info, C_GRAYTEXT);
@@ -1348,9 +1355,12 @@ static void do_apply(void)
         }
     }
     if (monitors) record_monitors();
+    w2k_compositor = dl.compositor;
     w2k_scheme_save(NULL);
     w2k_scheme_broadcast();
-    if (monitors) apply_monitors();
+    /* Inside the nested compositor the layout is the session's; xrandr
+     * there would only confuse it. The scheme still records the wish. */
+    if (monitors && !(getenv("W2K_MONITORS") && *getenv("W2K_MONITORS"))) apply_monitors();
     dl.dirty = dl.mon_dirty = 0;
     w2k_win_dirty(dl.win);
     int wanted = w2k_scale_mode != SCALE_XRANDR ? w2k_ui_scale_pref : 100;
@@ -1426,6 +1436,22 @@ static int event(W2kWin *w, XEvent *e)
                 for (int i = 0; i < nmons; i++) mons[i].want_primary = (i == cur);
                 fill_monitor_combos();      /* the "(primary)" label moved */
                 dl.dirty = 1;
+                w2k_win_dirty(w);
+                return 1;
+            }
+            if (w2k_rect_hit(&dl.compositor_box, x, y)) {
+                dl.compositor = !dl.compositor;
+                dl.dirty = dl.mon_dirty = 1;
+                if (dl.compositor)
+                    w2k_msgbox(w, "Display Properties",
+                               "This is experimental.\n\nAt the next logon the desktop will run inside a "
+                               "software X server (Xvfb) at each monitor's logical size, and l2kscaler will "
+                               "show it on the real screen, scaled on the GPU with EWA Lanczos-sharp -- the "
+                               "filter mpv uses -- instead of xrandr's bilinear blur.\n\nThe price: programs "
+                               "lose 3D acceleration (everything renders in software), the monitor layout is "
+                               "fixed for the session, and it needs Xvfb and l2kscaler installed. If either "
+                               "is missing the desktop starts plainly. Turn it off here to go back.",
+                               MB_OK | MB_ICONWARNING);
                 w2k_win_dirty(w);
                 return 1;
             }
@@ -1635,12 +1661,14 @@ int main(int argc, char **argv)
         w2k_fini();
         return 1;
     }
-    int W = 420, H = 486;
+    int W = 420, H = 510;
     dl.win = w2k_win_new("Display Properties", "l2kdisplay", W, H, 0);
     dl.win->paint = paint;
     dl.win->event = event;
 
     dl.tabs = w2k_tabs_new(NULL, on_tab);
+    /* Development aid: W2K_RENDER_TAB=n renders that page. */
+    if (getenv("W2K_RENDER_TAB") && getenv("W2K_RENDER")) dl.tabs->sel = atoi(getenv("W2K_RENDER_TAB")) % 4;
     w2k_tabs_add(dl.tabs, "Background");
     w2k_tabs_add(dl.tabs, "Appearance");
     w2k_tabs_add(dl.tabs, "Settings");
@@ -1749,6 +1777,8 @@ int main(int argc, char **argv)
     dl.resample->sel = w2k_resample == RS_LANCZOS ? 0 : w2k_resample == RS_CUBIC ? 1
                      : w2k_resample == RS_BILINEAR ? 2 : 3;
     dl.resample->r = (W2kRect){ c.x + 100, c.y + 352, c.w - 110, 21 };
+    dl.compositor_box = (W2kRect){ c.x + 10, c.y + 384, c.w - 20, 16 };
+    dl.compositor = w2k_compositor;
     fill_monitor_combos();
 
     /* Programs */

@@ -25,6 +25,12 @@ WM_OBJ  := $(WM_SRC:.c=.o)
 
 # l2kswatch is a development scratch tool: buildable, never installed.
 APPS    := $(filter-out bin/l2kswatch,$(patsubst apps/%.c,bin/%,$(wildcard apps/*.c)))
+# The nested compositor draws with OpenGL and needs the GLX, XTest, Damage
+# and Fixes headers; without them it is left out and the option is absent.
+ifeq ($(wildcard /usr/include/GL/glx.h),)
+APPS    := $(filter-out bin/l2kscaler,$(APPS))
+endif
+bin/l2kscaler: LDLIBS += -lGL -lXtst -lXdamage -lXfixes
 # The display manager needs PAM; without its header it still builds, as the
 # picture alone (W2K_RENDER).
 ifneq ($(wildcard /usr/include/security/pam_appl.h),)

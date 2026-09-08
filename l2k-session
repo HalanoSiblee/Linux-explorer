@@ -81,6 +81,73 @@ if command -v qt6ct >/dev/null 2>&1; then export QT_QPA_PLATFORMTHEME=qt6ct
 elif command -v qt5ct >/dev/null 2>&1; then export QT_QPA_PLATFORMTHEME=qt5ct
 fi
 
+# ------------------------------------------------------------------
+# The nested compositor (experimental)
+# ------------------------------------------------------------------
+# Compositor=nested in the scheme: the desktop runs inside Xvfb at each
+# monitor's logical size, and l2kscaler shows that screen on the real one
+# through its GPU scaler (docs/SCALING.md). Only when some monitor is
+# scaled, and only with both programs present; otherwise the session runs
+# plainly and says why in the log.
+NESTED_PID= SCALER_PID=
+if [ "$(sed -n 's/^Compositor=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)" = nested ]; then
+    # From the Monitor= lines (name mode x y primary enabled rate scale):
+    # each monitor's window on the real screen, its logical rectangle in
+    # the nested one, the nested screen's size, and the plain xrandr layout.
+    plan=$(awk -F'[ =]' '/^Monitor=/ {
+        name=$2; mode=$3; split(mode, wh, "x"); W=wh[1]+0; H=wh[2]+0; x=$4+0; y=$5+0; pri=$6+0; en=$7+0; sc=$9+0
+        if (sc <= 0) sc = 100; if (en != 1 || W <= 0 || H <= 0) next
+        lw = int(W * 100 / sc + 0.5); lh = int(H * 100 / sc + 0.5)
+        layout = layout name "," W "," H "," x "," y "," lw "," lh "," x "," y ";"
+        mon = mon name ":" lw "x" lh "+" x "+" y ":" pri ";"
+        if (x + lw > nw) nw = x + lw; if (y + lh > nh) nh = y + lh
+        xr = xr " --output " name " --mode " mode " --pos " x "x" y " --scale 1x1 --filter bilinear" (pri == 1 ? " --primary" : "")
+        if (sc > 100) any = 1
+    } END { print layout; print mon; print nw + 0; print nh + 0; print xr; print any + 0 }' "$HOME/.w2k/scheme")
+    n_layout=$(printf '%s\n' "$plan" | sed -n 1p)
+    n_mon=$(printf '%s\n' "$plan" | sed -n 2p)
+    n_w=$(printf '%s\n' "$plan" | sed -n 3p)
+    n_h=$(printf '%s\n' "$plan" | sed -n 4p)
+    n_xr=$(printf '%s\n' "$plan" | sed -n 5p)
+    n_any=$(printf '%s\n' "$plan" | sed -n 6p)
+    if [ "$n_any" != 1 ] || [ -z "$n_layout" ]; then
+        echo "l2k-session: nested compositor: no scaled monitor in the scheme; running plainly"
+    elif ! command -v Xvfb >/dev/null 2>&1 || ! command -v l2kscaler >/dev/null 2>&1; then
+        echo "l2k-session: nested compositor: needs Xvfb and l2kscaler; running plainly"
+    else
+        host_display=$DISPLAY
+        # The real screen: every monitor at its own size, nothing scaled.
+        # shellcheck disable=SC2086
+        xrandr $n_xr >/dev/null 2>&1 || echo "l2k-session: xrandr refused the plain layout; carrying on"
+        n=1; while [ -e "/tmp/.X11-unix/X$n" ] && [ "$n" -lt 20 ]; do n=$((n + 1)); done
+        nauth=
+        if command -v xauth >/dev/null 2>&1 && command -v mcookie >/dev/null 2>&1; then
+            xauth add ":$n" . "$(mcookie)" 2>/dev/null && nauth="-auth ${XAUTHORITY:-$HOME/.Xauthority}"
+        fi
+        # shellcheck disable=SC2086
+        Xvfb ":$n" -screen 0 "${n_w}x${n_h}x24" -nolisten tcp -noreset -dpi 96 $nauth >>"$LOG" 2>&1 &
+        NESTED_PID=$!
+        i=0; while [ ! -e "/tmp/.X11-unix/X$n" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+        if [ ! -e "/tmp/.X11-unix/X$n" ]; then
+            echo "l2k-session: Xvfb did not come up; running plainly"
+            kill "$NESTED_PID" 2>/dev/null; NESTED_PID=
+        else
+            echo "    nested : :$n at ${n_w}x${n_h}; layout $n_layout"
+            # The same keyboard in both servers, so keycodes sent through mean the same.
+            xkbcomp "$host_display" - 2>/dev/null | xkbcomp - ":$n" >/dev/null 2>&1
+            # Tell the nested server's RandR about the monitors too, for programs that ask.
+            printf '%s\n' "$n_mon" | tr ';' '\n' | while IFS=: read -r mname mgeo mpri; do
+                [ -n "$mname" ] || continue
+                mw=${mgeo%%x*}; rest=${mgeo#*x}; mh=${rest%%+*}; rest=${rest#*+}; mx=${rest%%+*}; my=${rest#*+}
+                xrandr --display ":$n" --setmonitor "$mname" "${mw}/0x${mh}/0+${mx}+${my}" none >/dev/null 2>&1
+            done
+            DISPLAY=$host_display l2kscaler --nested ":$n" --layout "$n_layout" >>"$LOG" 2>&1 &
+            SCALER_PID=$!
+            export DISPLAY=":$n" W2K_MONITORS="$n_mon" W2K_UI_SCALE=100
+        fi
+    fi
+fi
+
 # Hand the lot to D-Bus, or anything it launches starts with none of it.
 dbus-update-activation-environment --systemd \
     DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE QT_STYLE_OVERRIDE \
@@ -130,6 +197,8 @@ fi
 l2kwm -- "$@"
 rc=$?
 echo "=== $(date) : l2kwm exited with $rc ==="
+[ -n "$SCALER_PID" ] && kill "$SCALER_PID" 2>/dev/null
+[ -n "$NESTED_PID" ] && kill "$NESTED_PID" 2>/dev/null
 case $rc in
     0)  ;;
     10) systemctl poweroff 2>/dev/null || loginctl poweroff 2>/dev/null || poweroff ;;

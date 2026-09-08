@@ -14,6 +14,7 @@ int w2k_ui_scale = 100;
 int w2k_scale_raw = 0;
 int w2k_ui_scale_pref = 100;
 int w2k_scale_mode = SCALE_XRANDR;
+int w2k_compositor = 0;
 
 int w2k_scale_render(int mode, const int *wants, int n, int primary)
 {
@@ -460,6 +461,7 @@ void w2k_scheme_reset(void)
     w2k_start_banner_dither = 0;
     w2k_start_banner_gradient = 1;
     w2k_modern_classic_frame = 0;
+    w2k_compositor = 0;
     w2k_start_icon = SI_FLAG;
     w2k_start_search = 1;
     w2k_start_panel = 0;
@@ -722,6 +724,10 @@ int w2k_scheme_load(const char *path)
             w2k_start_banner_gradient = atoi(val) != 0;
             continue;
         }
+        if (!strcasecmp(line, "Compositor")) {
+            w2k_compositor = !strcasecmp(val, "nested");
+            continue;
+        }
         if (!strcasecmp(line, "ModernFrame")) {
             w2k_modern_classic_frame = !strncasecmp(val, "classic", 7);
             continue;
@@ -968,6 +974,7 @@ int w2k_scheme_save(const char *path)
             w2k_theme == THEME_MODERN ? "modern" :
             w2k_theme == THEME_VISTA ? "vista" : "classic");
     fprintf(f, "ModernFrame=%s\n", w2k_modern_classic_frame ? "classic" : "modern");
+    fprintf(f, "Compositor=%s\n", w2k_compositor ? "nested" : "none");
     fprintf(f, "IconSet=%s\n", w2k_icon_set);
     fprintf(f, "UiScale=%d\n", w2k_ui_scale_pref);
     fprintf(f, "Resample=%s\n", w2k_resample == RS_NEAREST ? "nearest"

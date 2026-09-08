@@ -745,6 +745,13 @@ int main(int argc, char **argv)
     /* On a scaled desktop the toolkits of other programs are told the
      * scale the same way a real desktop tells them, so a GTK or Qt window
      * comes up the size of ours. Xft.dpi covers the rest. */
+    char dpi_mark[1100];
+    snprintf(dpi_mark, sizeof dpi_mark, "%s/.w2k/.xft-dpi-set", getenv("HOME") ? getenv("HOME") : "/");
+    if (w2k_ui_scale == 100 && access(dpi_mark, F_OK) == 0) {
+        /* A scaled session set Xft.dpi on this server; put it back. */
+        if (system("printf 'Xft.dpi: 96\\n' | xrdb -merge - 2>/dev/null") != 0) { }
+        unlink(dpi_mark);
+    }
     if (w2k_ui_scale != 100) {
         char buf[64];
         int whole = w2k_ui_scale / 100;
@@ -762,6 +769,8 @@ int main(int argc, char **argv)
         snprintf(cmd, sizeof cmd, "printf 'Xft.dpi: %d\\n' | xrdb -merge - 2>/dev/null",
                  96 * w2k_ui_scale / 100);
         if (system(cmd) != 0) { /* no xrdb: the environment still carries it */ }
+        FILE *mk = fopen(dpi_mark, "w");
+        if (mk) fclose(mk);
     }
     w2k_dnd_on_drop = shell_dnd_drop;
     w2k_dnd_will_accept = shell_dnd_accept;

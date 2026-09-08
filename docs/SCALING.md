@@ -125,7 +125,9 @@ Programs the desktop starts are told the scale the way their own
 desktops would: `GDK_SCALE` and `GDK_DPI_SCALE` (GTK), `QT_SCALE_FACTOR`
 (Qt), `XCURSOR_SIZE`, and `Xft.dpi` in the X resources. GTK 3 renders
 whole scales only, so at 150% it draws at 1x with 1.5x fonts, as it does
-on any other X11 desktop.
+on any other X11 desktop. The desktop remembers having set `Xft.dpi` and
+puts it back to 96 when it next logs on unscaled, so switching scaling
+off does not leave other programs large.
 
 ### What it does not do
 

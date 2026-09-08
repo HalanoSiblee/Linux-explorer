@@ -410,6 +410,7 @@ typedef struct {
     W2kRect   ok, cancel, apply;
     int       down;
     int       dirty;                        /* something to Apply */
+    int       mon_dirty;                    /* a Settings-tab change to apply */
 
     /* Background */
     W2kList  *walls;
@@ -887,7 +888,7 @@ static void on_mode(void *u, int i)
     /* The box in the layout changes size with the mode; keep the screens
      * touching rather than leaving a hole where the old size was. */
     snap_monitor(dl.mon->sel);
-    dl.dirty = 1;
+    dl.dirty = dl.mon_dirty = 1;
     w2k_win_dirty(dl.win);
 }
 
@@ -896,7 +897,7 @@ static void on_rate(void *u, int i)
     (void)u;
     if (dl.mon->sel < 0 || dl.mon->sel >= nmons) return;
     mons[dl.mon->sel].rate_sel = i;
-    dl.dirty = 1;
+    dl.dirty = dl.mon_dirty = 1;
     w2k_win_dirty(dl.win);
 }
 
@@ -906,7 +907,7 @@ static void on_method(void *u, int i)
     if (i < 0 || i > 2) return;
     scale_method = method_modes[i];
     for (int k = 0; k < nmons; k++) snap_monitor(k);   /* virtual sizes change */
-    dl.dirty = 1;
+    dl.dirty = dl.mon_dirty = 1;
     w2k_win_dirty(dl.win);
 }
 
@@ -916,7 +917,7 @@ static void on_resample(void *u, int i)
     static const int methods[4] = { RS_LANCZOS, RS_CUBIC, RS_BILINEAR, RS_NEAREST };
     if (i < 0 || i > 3) return;
     w2k_resample = methods[i];
-    dl.dirty = 1;
+    dl.dirty = dl.mon_dirty = 1;
     w2k_win_dirty(dl.win);
 }
 
@@ -926,7 +927,7 @@ static void on_scale(void *u, int i)
     if (dl.mon->sel < 0 || dl.mon->sel >= nmons || i < 0 || i >= NSCALES) return;
     mons[dl.mon->sel].want_scale = scales[i];
     snap_monitor(dl.mon->sel);      /* the virtual size changed with it */
-    dl.dirty = 1;
+    dl.dirty = dl.mon_dirty = 1;
     w2k_win_dirty(dl.win);
 }
 
@@ -1303,13 +1304,15 @@ static void record_monitors(void)
 
 static void do_apply(void)
 {
-    int monitors = dl.tabs->sel == 2 && nmons;
+    /* Settings-tab changes apply whichever tab is showing when OK or Apply
+     * is pressed; before, switching tabs after choosing a scale lost it. */
+    int monitors = nmons && (dl.tabs->sel == 2 || dl.mon_dirty);
     int running = w2k_ui_scale;
     if (monitors) record_monitors();
     w2k_scheme_save(NULL);
     w2k_scheme_broadcast();
     if (monitors) apply_monitors();
-    dl.dirty = 0;
+    dl.dirty = dl.mon_dirty = 0;
     w2k_win_dirty(dl.win);
     int wanted = w2k_scale_mode != SCALE_XRANDR ? w2k_ui_scale_pref : 100;
     if (monitors && wanted != running)
@@ -1445,7 +1448,7 @@ static int event(W2kWin *w, XEvent *e)
                 to_screen(nx - dl.layout_ox);
             mons[dl.drag_mon].py = dl.layout_miny +
                 to_screen(ny - dl.layout_oy);
-            dl.dirty = 1;
+            dl.dirty = dl.mon_dirty = 1;
             w2k_win_dirty(w);
             return 1;
         }

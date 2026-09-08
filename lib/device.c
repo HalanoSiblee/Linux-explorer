@@ -77,8 +77,6 @@ static void fill_common(W2kDevice *d,const char *sysfs,const char *name)
     if(z>0){target[z]=0;base_name(target,d->driver,sizeof d->driver);}
     if(!d->driver[0]){snprintf(p,sizeof p,"%s/driver_override",sysfs);readfile(p,d->driver,sizeof d->driver);}
     if(d->driver[0]){
-        char mi[4096]={0}; const char *av[]={"modinfo","--",d->driver,NULL};
-        if(runv(av,mi,sizeof mi)==0){char *save=NULL;for(char *line=strtok_r(mi,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){char*c=strchr(line,':');if(!c)continue;*c=0;char*val=c+1;while(*val==' '||*val=='\t')val++;if(!strcmp(line,"version"))cp(d->driver_version,sizeof d->driver_version,val);else if(!strcmp(line,"author"))cp(d->driver_author,sizeof d->driver_author,val);}}
         char dk[PATH_MAX];snprintf(dk,sizeof dk,"/var/lib/dkms/%s",d->driver);if(exists(dk)){d->is_dkms=1;struct stat st;if(stat(dk,&st)==0){struct tm*t=localtime(&st.st_mtime);if(t)strftime(d->driver_date,sizeof d->driver_date,"%Y-%m-%d",t);}}
         d->disabled=module_blacklisted(d->driver); if(d->disabled)cp(d->status,sizeof d->status,"This device is disabled.");
     }
@@ -92,6 +90,33 @@ static void attr_path(char *dst, size_t n, const char *root, const char *attr)
 static void read_attr(const char *root, const char *attr, char *out, size_t n)
 {
     char p[PATH_MAX]; attr_path(p, sizeof p, root, attr); readfile(p, out, n);
+}
+
+/* lspci is asked once for every device and each device's line is found
+ * by its address: a process per slot was most of the manager's start-up. */
+static const char *lspci_line(const char *addr, char *out, size_t n)
+{
+    static char *all; static int tried;
+    if (!tried) {
+        tried = 1;
+        all = malloc(65536);
+        const char *av[] = {"lspci", "-D", "-nn", NULL};
+        if (all && (runv(av, all, 65536) != 0 || !all[0])) { free(all); all = NULL; }
+    }
+    if (!all) return NULL;
+    size_t al = strlen(addr);
+    for (const char *l = all; *l; ) {
+        const char *e = strchr(l, '\n');
+        size_t len = e ? (size_t)(e - l) : strlen(l);
+        if (len > al && !strncmp(l, addr, al) && l[al] == ' ') {
+            if (len > n - 1) len = n - 1;
+            memcpy(out, l, len); out[len] = 0;
+            return out;
+        }
+        if (!e) break;
+        l = e + 1;
+    }
+    return NULL;
 }
 
 static void human_pci_name(W2kDevice *d, const char *p, const char *addr, const char *cls)
@@ -115,16 +140,14 @@ static void human_pci_name(W2kDevice *d, const char *p, const char *addr, const 
 
     /* lspci is only an optional name database. sysfs remains the authoritative
        inventory, so the manager still works when pciutils is not installed. */
-    const char *av[] = {"lspci", "-D", "-nn", "-s", addr, NULL};
-    if (runv(av, lspci, sizeof lspci) == 0 && lspci[0]) {
-        char *line=lspci, *colon=strchr(line, ':');
-        if (colon) {
-            char *name=colon+1; while (*name==' '||*name=='\t') name++;
-            char *br=strrchr(name, '[');
-            if (br) {
-                char *close=strchr(br, ']');
-                if (close) *close=0;
-            }
+    if (lspci_line(addr, lspci, sizeof lspci)) {
+        /* "0000:00:03.1 PCI bridge [0604]: Vendor Device [vvvv:dddd] (rev 01)":
+           the name is what follows the class, less the numeric ids. */
+        char *name = strstr(lspci, "]: ");
+        if (name) {
+            name += 3;
+            char *br = strrchr(name, '[');
+            if (br && strlen(br) >= 11 && br[5] == ':' && br[10] == ']') *br = 0;
             trim(name);
             if (name[0]) cp(label, sizeof label, name);
         }
@@ -337,6 +360,13 @@ static int runv(const char *const av[], char *err, size_t n)
     return WIFEXITED(st)?WEXITSTATUS(st):-1;
 }
 
+void w2k_device_driver_details(W2kDevice *d)
+{
+    if(!d||d->driver_info_done||!d->driver[0])return;
+    d->driver_info_done=1;
+    char mi[4096]={0}; const char *av[]={"modinfo","--",d->driver,NULL};
+    if(runv(av,mi,sizeof mi)==0){char *save=NULL;for(char *line=strtok_r(mi,"\n",&save);line;line=strtok_r(NULL,"\n",&save)){char*c=strchr(line,':');if(!c)continue;*c=0;char*val=c+1;while(*val==' '||*val=='\t')val++;if(!strcmp(line,"version"))cp(d->driver_version,sizeof d->driver_version,val);else if(!strcmp(line,"author"))cp(d->driver_author,sizeof d->driver_author,val);}}
+}
 int w2k_device_modinfo(const char *m,char*out,size_t n)
 {
     if(!m||!m[0]||!strcmp(m,"(kernel)")){cp(out,n,"module: (built into kernel)\n");return 0;}
@@ -421,7 +451,7 @@ int w2k_device_monitor_open(void){
 int w2k_device_monitor_poll(void){
     if(uevent_fd<0 && w2k_device_monitor_open()<0)return 0;
     int changed=0; char b[4096];
-    for(;;){ssize_t n=recv(uevent_fd,b,sizeof b,MSG_DONTWAIT);if(n<0){if(errno==EAGAIN||errno==EWOULDBLOCK)break;break;}if(n>0)changed=1;}
+    for(;;){ssize_t n=recv(uevent_fd,b,sizeof b,MSG_DONTWAIT);if(n<0){if(errno==EAGAIN)break;break;}if(n>0)changed=1;}
     return changed;
 }
 void w2k_device_monitor_close(void){if(uevent_fd>=0){close(uevent_fd);uevent_fd=-1;}}

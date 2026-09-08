@@ -30,7 +30,12 @@ typedef struct {
     int is_dkms;
     int no_driver_needed;
     int airpods_battery;
+    int driver_info_done;             /* modinfo has been asked */
 } W2kDevice;
+
+/* The driver's version and author, from modinfo, fetched when a
+ * properties sheet wants them rather than for every device at scan. */
+void w2k_device_driver_details(W2kDevice *d);
 
 typedef struct {
     char name[W2K_DEV_STR];

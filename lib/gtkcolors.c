@@ -419,14 +419,13 @@ int w2k_gtk_theme_installed(const char *name)
 {
     if (!name || !*name) return 0;
     const char *home = getenv("HOME") ? getenv("HOME") : "/";
-    const char *fmt[] = { "%s/.themes/%s", "%s/.local/share/themes/%s",
-                          "/usr/share/themes/%s", "/usr/local/share/themes/%s" };
-    for (int i = 0; i < 4; i++) {
-        char p[1200];
-        if (i < 2) snprintf(p, sizeof p, fmt[i], home, name);
-        else       snprintf(p, sizeof p, fmt[i], name);
-        if (dir_has(p, "gtk-3.0") || dir_has(p, "gtk-2.0") || dir_has(p, "gtk-4.0")) return 1;
-    }
+    char p[4][1200];
+    snprintf(p[0], sizeof p[0], "%s/.themes/%s", home, name);
+    snprintf(p[1], sizeof p[1], "%s/.local/share/themes/%s", home, name);
+    snprintf(p[2], sizeof p[2], "/usr/share/themes/%s", name);
+    snprintf(p[3], sizeof p[3], "/usr/local/share/themes/%s", name);
+    for (int i = 0; i < 4; i++)
+        if (dir_has(p[i], "gtk-3.0") || dir_has(p[i], "gtk-2.0") || dir_has(p[i], "gtk-4.0")) return 1;
     return 0;
 }
 
@@ -434,14 +433,13 @@ int w2k_icon_theme_installed(const char *name)
 {
     if (!name || !*name) return 0;
     const char *home = getenv("HOME") ? getenv("HOME") : "/";
-    const char *fmt[] = { "%s/.icons/%s", "%s/.local/share/icons/%s",
-                          "/usr/share/icons/%s", "/usr/local/share/icons/%s" };
-    for (int i = 0; i < 4; i++) {
-        char p[1200];
-        if (i < 2) snprintf(p, sizeof p, fmt[i], home, name);
-        else       snprintf(p, sizeof p, fmt[i], name);
-        if (dir_has(p, "index.theme")) return 1;
-    }
+    char p[4][1200];
+    snprintf(p[0], sizeof p[0], "%s/.icons/%s", home, name);
+    snprintf(p[1], sizeof p[1], "%s/.local/share/icons/%s", home, name);
+    snprintf(p[2], sizeof p[2], "/usr/share/icons/%s", name);
+    snprintf(p[3], sizeof p[3], "/usr/local/share/icons/%s", name);
+    for (int i = 0; i < 4; i++)
+        if (dir_has(p[i], "index.theme")) return 1;
     return 0;
 }
 

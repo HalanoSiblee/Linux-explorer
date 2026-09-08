@@ -676,6 +676,7 @@ int      w2k_menu_count(W2kMenu *m);
 /* Runs a modal loop with a pointer+keyboard grab. Returns the chosen
  * command id, or 0 if the menu was dismissed. */
 int      w2k_menu_popup(W2kMenu *m, int x, int y, int flags);
+void     w2k_menu_banner_fill(Drawable d, int x, int y, int w, int h);
 
 /* While a menu is modal the rest of the desktop still needs to repaint.
  * The window manager points this at its own event handler. */
@@ -815,6 +816,7 @@ int  w2k_icon_sets(char names[][32], int max);  /* the sets available, win2k fir
 const char *w2k_icon_set_label(const char *name);  /* "Windows XP" for "winxp" */
 /* Override one icon from a file, or restore the built-in when path is NULL. */
 int  w2k_icon_load_file(int id, const char *path);
+void w2k_icon_cache_drop(int id);            /* forget a slot's pixmaps */
 int  w2k_icon_load_rgba(int id, const unsigned char *rgba, int w, int h);
 void w2k_icon_set_user(int id, unsigned char *i16, unsigned char *i32);
 int  w2k_distro_logo_path(char *buf, int n);   /* the distribution's logo PNG */

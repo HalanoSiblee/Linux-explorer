@@ -13,7 +13,10 @@ void (*w2k_win_foreign_event)(XEvent *e);
 /* ------------------------------------------------------------------ *
  * Timers
  * ------------------------------------------------------------------ */
-static struct { int ms; void (*fn)(void *); void *user; long due; } timers[8];
+/* Enough for a dialog full of edits, each blinking its own caret: the
+ * Control Panel's file-types page makes one per class. */
+#define MAX_TIMERS 32
+static struct { int ms; void (*fn)(void *); void *user; long due; } timers[MAX_TIMERS];
 static int ntimers;
 
 void w2k_add_timer(int ms, void (*fn)(void *), void *user)
@@ -25,7 +28,7 @@ void w2k_add_timer(int ms, void (*fn)(void *), void *user)
             timers[i].due = w2k_now_ms() + ms;
             return;
         }
-    if (ntimers >= 8) return;
+    if (ntimers >= MAX_TIMERS) return;
     timers[ntimers].ms = ms;
     timers[ntimers].fn = fn;
     timers[ntimers].user = user;

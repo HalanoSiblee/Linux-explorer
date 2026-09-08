@@ -1,4 +1,5 @@
 /* desktop.c -- the root surface: wallpaper colour and the desktop icons. */
+#include <stdint.h>
 #include "wm.h"
 #include "w2kui.h"
 #include <dirent.h>
@@ -366,6 +367,17 @@ static void draw_label(Drawable d, int cx, int y, const char *text, int selected
 /* Render the wallpaper once into a screen-sized pixmap (centre / tile /
  * stretch; the stretched styles go through the resampler the user chose
  * -- the 2000 shell used nearest neighbour, which is still on offer). */
+/* A row of a 32-bit ZPixmap image in the host's own byte order is written
+ * straight through; XPutPixel is a call and a branch ladder per pixel, eight
+ * million of them on a 4K desktop. Any other layout falls back to it. */
+static uint32_t *row32(XImage *im, int y)
+{
+    static const uint32_t one = 1;
+    int host_lsb = *(const unsigned char *)&one == 1;
+    if (im->bits_per_pixel != 32 || (im->byte_order == LSBFirst) != host_lsb) return NULL;
+    return (uint32_t *)(im->data + (size_t)y * im->bytes_per_line);
+}
+
 static void build_wallpaper(void)
 {
     if (wall) { w2k_free_pixmap(wall); wall = 0; }
@@ -421,7 +433,8 @@ static void build_wallpaper(void)
         } else if (st == 5 && span) {
             sc = span; scw = w2k.sw; sch = w2k.sh; offx = -m->x; offy = -m->y;
         }
-        for (int y = 0; y < H; y++)
+        for (int y = 0; y < H; y++) {
+            uint32_t *d32 = row32(im, y);
             for (int x = 0; x < W; x++) {
                 int sx, sy;
                 if (sc) {
@@ -431,7 +444,7 @@ static void build_wallpaper(void)
                         const unsigned char *p = sc + ((size_t)sy * scw + sx) * 4;
                         px = w2k_rgb(p[0], p[1], p[2]);
                     }
-                    XPutPixel(im, x, y, px);
+                    if (d32) d32[x] = (uint32_t)px; else XPutPixel(im, x, y, px);
                     continue;
                 }
                 if (st == 2) { sx = x * iw / W; sy = y * ih / H; }
@@ -452,8 +465,9 @@ static void build_wallpaper(void)
                     const unsigned char *p = rgba + ((size_t)sy * iw + sx) * 4;
                     px = w2k_rgb(p[0], p[1], p[2]);
                 }
-                XPutPixel(im, x, y, px);
+                if (d32) d32[x] = (uint32_t)px; else XPutPixel(im, x, y, px);
             }
+        }
         XPutImage(w2k.dpy, wall, w2k.gc, im, 0, 0, m->x, m->y, W, H);
         if (sc != span) free(sc);
         XDestroyImage(im);
@@ -582,7 +596,8 @@ int desktop_render(const char *path, int w, int h)
             char *pixels = sc ? malloc((size_t)pw * ph * 4) : NULL;
             XImage *im = pixels ? XCreateImage(w2k.dpy, w2k.visual, w2k.depth, ZPixmap, 0, pixels, pw, ph, 32, 0) : NULL;
             if (im) {
-                for (int y = 0; y < ph; y++)
+                for (int y = 0; y < ph; y++) {
+                    uint32_t *d32 = row32(im, y);
                     for (int x = 0; x < pw; x++) {
                         int sx = x - offx, sy = y - offy;
                         unsigned long px = w2k.col[C_DESKTOP];
@@ -590,8 +605,9 @@ int desktop_render(const char *path, int w, int h)
                             const unsigned char *q = sc + ((size_t)sy * scw + sx) * 4;
                             px = w2k_rgb(q[0], q[1], q[2]);
                         }
-                        XPutPixel(im, x, y, px);
+                        if (d32) d32[x] = (uint32_t)px; else XPutPixel(im, x, y, px);
                     }
+                }
                 XPutImage(w2k.dpy, pm, w2k.gc, im, 0, 0, 0, 0, (unsigned)pw, (unsigned)ph);
                 XDestroyImage(im);
             } else free(pixels);

@@ -15,7 +15,7 @@ static void draw(Window win, int W, int H)
     w2k_fill(pm, 0, 0, W, H, C_FACE);
 
     w2k_text(pm, F_UI_BOLD, 8, 6, "16x16", C_TEXT);
-    for (int i = 0; i < N_ICONS; i++) {
+    for (int i = 0; i < N_ICONS && i < (int)(sizeof names / sizeof *names); i++) {
         int col = i % 14, row = i / 14;
         int x = 8 + col * 52, y = 22 + row * 34;
         w2k_icon_draw(pm, x, y, i);

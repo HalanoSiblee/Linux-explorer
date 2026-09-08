@@ -3,7 +3,9 @@
 A pass over the whole tree (37,000 lines across the toolkit, the window
 manager and the programs) looking for bugs, rendering faults and slow
 paths, done on 5 September 2026 against 1.10.2. What was run, what was
-found, and what changed.
+found, and what changed. A [second pass](#second-pass-8-september-2026),
+over the scaling code and over the speed and memory of the whole tree,
+follows it.
 
 ## What was run
 
@@ -92,3 +94,103 @@ windows, the balloon — painted correctly in all three looks.
     make CFLAGS="-std=gnu11 -O1 -g -fsanitize=address,undefined -Iinclude \
         $(pkg-config --cflags xft freetype2 dbus-1)" LDFLAGS="-fsanitize=address,undefined"
     # then run the harnesses with W2K_RENDER=<file.ppm> [W2K_RENDER_DIALOG=...]
+
+# Second pass, 8 September 2026
+
+A second audit against 1.17.2: the scaling code -- every mode, the
+switching between them and the experimental desktop scaling -- read end
+to end, and the whole tree measured for time and memory. The same tools
+as the first pass, plus a comparison of 120 harness pictures (fifteen
+looks and resampling settings, two scales, four desktop dialogs)
+rendered before and after every change.
+
+## Scaling
+
+Read: `w2k_px`, `w2k_lp`, `w2k_cx`, `w2k_cw`, `w2k_th` and every caller;
+the three modes (screen, sharp and desktop) and the scheme keys that
+choose them; the logon path that applies a mode; and the Display
+Properties page that sets one. The rounding policy holds everywhere it
+was checked: logical to physical truncates, physical to logical rounds,
+and a span is the difference of its mapped ends, so neighbouring spans
+tile without a gap or an overlap at every whole and fractional scale.
+The sanitizer build was run through the harnesses at 100%, 150% and
+200% in five looks without a report. Two faults, both in switching:
+
+| Where | What | Fix |
+|---|---|---|
+| `wm/wm.c` | Turning scaling off left `Xft.dpi` in the X resources at the scaled value, so GTK and Qt programs stayed large at the next logon. | The desktop remembers having set it (`~/.w2k/.xft-dpi-set`) and merges `Xft.dpi: 96` back when it logs on at 100%. |
+| `apps/l2kdisplay.c` | A scale, method, mode, resolution or refresh-rate change was applied only if the Settings tab was still showing when OK or Apply was pressed; look at another tab first and it was dropped without a word. | The page keeps a Settings-tab flag and applies from whichever tab is up. |
+
+## Performance
+
+Every program was timed from start to first paint under the render
+harness and its peak memory taken. Most start in 20-40 ms in 7-13 MB.
+What did not, and what changed:
+
+| Where | Before | After |
+|---|---|---|
+| Desktop paint, 3840x2160, a 1920x1200 wallpaper filled (cubic) | 0.79 s, 305 MB | 0.47 s, 86 MB |
+| `w2k_rgba_resample`, 1920x1080 to 3840x2160, cubic | 0.38 s, 262 MB | 0.10 s, 43 MB |
+| same, Lanczos | 1.59 s, 262 MB | 0.10 s, 43 MB |
+| same, 3840x2160 down to 1920x1200, Lanczos | 1.27 s, 267 MB | 0.07 s, 43 MB |
+| Device Manager start | 0.41 s | 0.05 s |
+
+- **`lib/resample.c`** held three floating-point copies of the picture
+  and evaluated the kernel -- two sines for Lanczos -- for every tap of
+  every pixel. It now works out each axis's tap weights once and streams
+  the picture through a ring of across-filtered rows, holding one output
+  row's taps at a time. The pixels are the same, to a rounding tie: an
+  exact half, which a hard edge sampled at phase 1/2 gives at 150%, now
+  always rounds up instead of going with the order of a floating-point
+  sum. (The desktop paint's remaining 86 MB is the 4K X image and the
+  decoded picture, both freed after the paint.)
+- **`lib/device.c`** ran `modinfo` for every device with a driver at
+  start-up, though only the properties sheet shows the result, and
+  `lspci` once per PCI slot. `modinfo` runs when a sheet opens;
+  `lspci` runs once and each device finds its line by address.
+- **`lib/draw.c`** decomposed the visual's colour masks -- shift, width,
+  maximum for each channel -- inside `w2k_rgb()`, which is called for
+  every pixel of every picture. Once per visual now, with an 8-bit fast
+  path.
+- **`wm/desktop.c`** stored the wallpaper with `XPutPixel`, a call and a
+  branch ladder per pixel, eight million of them at 4K. A 32-bit image
+  in the host's byte order is written straight through.
+
+## Also fixed
+
+- `lib/device.c`: PCI devices were named with their slot and class
+  ("00:03.1 PCI bridge [0604]: ...") because the name was cut at the
+  first colon of the domain-qualified address; the name is now what
+  follows the class.
+- `lib/win.c`: the timer table held eight, and the ninth timer -- the
+  Control Panel's file-types page makes one per class for its caret --
+  was dropped in silence. Thirty-two.
+- `apps/l2kcontrol.c`: a null check the analyzer asked for;
+  `apps/l2kswatch.c`: an icon loop bounded by its table;
+  `lib/gtkcolors.c`, `include/w2k.h`: prototype and format warnings.
+
+## What was run
+
+- The warning set of the first pass: 17 warnings, all shadowed locals,
+  missing prototypes and one non-literal format; the prototypes and the
+  format fixed, the rest cosmetic.
+- The analyzer: 51 reports. The stack-overflow claims at
+  `apps/l2kcontrol.c:565` are bounded by `MAX_SLIDERS` and the fixed
+  radio and check tables; the null-dereference claims in
+  `lib/folderwin.c` are guarded a line above; the one in
+  `apps/l2kcontrol.c` is now checked.
+- AddressSanitizer and UndefinedBehaviorSanitizer through 191 harness
+  renders -- thirteen programs and four desktop dialogs, in the classic,
+  Windows XP, Windows 7, Windows Vista and Modern dark looks at 100%,
+  150% and 200% -- before and after the changes: no reports.
+- The 120-picture comparison: the only differences are the rounding
+  ties in scaled icons at 150% (563 pixels of 92 million) and the clock.
+
+## How to repeat it
+
+    # the resampler, old against new
+    gcc -O2 -Iinclude $(pkg-config --cflags xft freetype2) -o rsbench \
+        tools/rsbench.c lib/resample.c -lm && ./rsbench 1920 1080 3840 2160 2
+    # a desktop paint at 4K with the wallpaper in ~/.w2k/scheme
+    W2K_RENDER=desk.ppm W2K_RENDER_DIALOG=desktop W2K_RENDER_W=3840 \
+        W2K_RENDER_H=2160 bin/l2kwm

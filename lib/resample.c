@@ -1,12 +1,19 @@
-/* resample.c -- resizing pictures with a choice of filter.
+/* resample.c -- resizing RGBA pictures: the desktop's icons, the XP and
+ * Windows 7 chrome, the pointer, the wallpaper and Imaging's pictures.
  *
- * The desktop enlarges its own artwork -- icons, the XP and 7 chrome, the
- * pointer, the wallpaper -- when it is scaled by a fraction, and the
- * filter that does it is the user's choice: nearest neighbour (blocks),
- * bilinear (soft), a cubic spline (Catmull-Rom: crisp with a little ring)
- * or Lanczos-3 (crispest, rings more). Separable, phase-correct, in
- * premultiplied colour so transparent edges do not bleed black, and the
- * kernel widens when shrinking so nothing is skipped. */
+ * Separable and phase-correct: rows are filtered across, then the results
+ * down, each output sample centred where it belongs in the source; the
+ * kernel widens when shrinking so every source pixel counts. Colour is
+ * premultiplied by alpha through the filter so a transparent edge does
+ * not bleed its hidden colour. A whole-number enlargement is exact
+ * blocks whatever the method (the callers ask for nearest then).
+ *
+ * The filter weights for each output row and column are worked out once
+ * -- a kernel with a sine in it is evaluated a few thousand times, not a
+ * few hundred million -- and the picture streams through: a ring of
+ * across-filtered source rows, just enough for one output row's taps, is
+ * all that is held, so a 4K wallpaper costs well under a megabyte rather
+ * than three float copies of itself. */
 #include "w2k.h"
 #include <math.h>
 #include <stdlib.h>
@@ -40,31 +47,71 @@ static double support(int method)
     return method == RS_BILINEAR ? 1.0 : method == RS_LANCZOS ? 3.0 : 2.0;
 }
 
-/* One axis: `n_in` premultiplied float pixels (4 channels, `stride`
- * floats apart) to `n_out`. */
-static void pass(const float *in, int n_in, int in_stride,
-                 float *out, int n_out, int out_stride, int method)
+/* The taps of one axis: for every output position, the first source
+ * index and the normalised weights of the run that feeds it. */
+typedef struct { int j0, n; } Tap;
+
+typedef struct {
+    Tap   *tap;          /* n_out of them */
+    double *w;           /* n_out * stride weights */
+    int    stride;       /* the most taps any position has */
+} Taps;
+
+static int make_taps(Taps *t, int n_in, int n_out, int method)
 {
     double scale = (double)n_in / n_out;         /* source per dest */
     double widen = scale > 1.0 ? scale : 1.0;
     double sup = support(method) * widen;
+    int stride = (int)(2.0 * sup) + 3;
+    t->stride = stride;
+    t->tap = malloc((size_t)n_out * sizeof *t->tap);
+    t->w = malloc((size_t)n_out * stride * sizeof *t->w);
+    if (!t->tap || !t->w) { free(t->tap); free(t->w); t->tap = NULL; t->w = NULL; return 0; }
     for (int i = 0; i < n_out; i++) {
         double centre = (i + 0.5) * scale - 0.5;
         int j0 = (int)ceil(centre - sup), j1 = (int)floor(centre + sup);
         if (j0 < 0) j0 = 0;
         if (j1 > n_in - 1) j1 = n_in - 1;
-        double acc[4] = { 0, 0, 0, 0 }, wsum = 0;
+        if (j1 - j0 + 1 > stride) j1 = j0 + stride - 1;
+        double *w = t->w + (size_t)i * stride;
+        double wsum = 0;
+        int n = 0;
         for (int j = j0; j <= j1; j++) {
-            double w = kern(method, (j - centre) / widen);
-            if (w == 0.0) continue;
-            const float *p = in + (size_t)j * in_stride;
-            acc[0] += w * p[0]; acc[1] += w * p[1]; acc[2] += w * p[2]; acc[3] += w * p[3];
-            wsum += w;
+            double k = kern(method, (j - centre) / widen);
+            w[n++] = k;
+            wsum += k;
         }
-        float *o = out + (size_t)i * out_stride;
-        if (wsum == 0.0) { o[0] = o[1] = o[2] = o[3] = 0; continue; }
-        o[0] = (float)(acc[0] / wsum); o[1] = (float)(acc[1] / wsum);
-        o[2] = (float)(acc[2] / wsum); o[3] = (float)(acc[3] / wsum);
+        if (wsum != 0.0)
+            for (int k = 0; k < n; k++) w[k] /= wsum;
+        else
+            n = 0;
+        t->tap[i].j0 = j0;
+        t->tap[i].n = n;
+    }
+    return 1;
+}
+
+/* One source row, premultiplied and filtered across into `out`. */
+static void across(const unsigned char *src, int sw, double *srow,
+                   const Taps *hx, int dw, double *out)
+{
+    for (int x = 0; x < sw; x++) {
+        const unsigned char *p = src + (size_t)x * 4;
+        double al = p[3] / 255.0;
+        double *q = srow + (size_t)x * 4;
+        q[0] = p[0] * al; q[1] = p[1] * al; q[2] = p[2] * al; q[3] = p[3];
+    }
+    for (int x = 0; x < dw; x++) {
+        const Tap *t = &hx->tap[x];
+        const double *w = hx->w + (size_t)x * hx->stride;
+        double a0 = 0, a1 = 0, a2 = 0, a3 = 0;
+        const double *q = srow + (size_t)t->j0 * 4;
+        for (int k = 0; k < t->n; k++, q += 4) {
+            double wk = w[k];
+            a0 += wk * q[0]; a1 += wk * q[1]; a2 += wk * q[2]; a3 += wk * q[3];
+        }
+        double *o = out + (size_t)x * 4;
+        o[0] = a0; o[1] = a1; o[2] = a2; o[3] = a3;
     }
 }
 
@@ -78,39 +125,69 @@ unsigned char *w2k_rgba_resample(const unsigned char *src, int sw, int sh,
     if (method == RS_NEAREST || (sw == dw && sh == dh)) {
         for (int y = 0; y < dh; y++) {
             int sy = (int)((long)y * sh / dh);
+            const unsigned char *srow = src + (size_t)sy * sw * 4;
+            unsigned char *drow = dst + (size_t)y * dw * 4;
+            if (sw == dw) { memcpy(drow, srow, (size_t)dw * 4); continue; }
             for (int x = 0; x < dw; x++) {
                 int sx = (int)((long)x * sw / dw);
-                memcpy(dst + ((size_t)y * dw + x) * 4, src + ((size_t)sy * sw + sx) * 4, 4);
+                memcpy(drow + (size_t)x * 4, srow + (size_t)sx * 4, 4);
             }
         }
         return dst;
     }
 
-    /* Premultiply into floats, resample rows then columns. */
-    float *a = malloc((size_t)sw * sh * 4 * sizeof *a);
-    float *b = malloc((size_t)dw * sh * 4 * sizeof *b);
-    float *c = malloc((size_t)dw * dh * 4 * sizeof *c);
-    if (!a || !b || !c) { free(a); free(b); free(c); free(dst); return NULL; }
-    for (size_t i = 0; i < (size_t)sw * sh; i++) {
-        const unsigned char *p = src + i * 4;
-        float al = p[3] / 255.0f;
-        a[i * 4] = p[0] * al; a[i * 4 + 1] = p[1] * al; a[i * 4 + 2] = p[2] * al; a[i * 4 + 3] = p[3];
+    Taps hx = { 0 }, vy = { 0 };
+    if (!make_taps(&hx, sw, dw, method) || !make_taps(&vy, sh, dh, method)) {
+        free(hx.tap); free(hx.w); free(vy.tap); free(vy.w); free(dst);
+        return NULL;
     }
-    for (int y = 0; y < sh; y++)
-        pass(a + (size_t)y * sw * 4, sw, 4, b + (size_t)y * dw * 4, dw, 4, method);
-    for (int x = 0; x < dw; x++)
-        pass(b + (size_t)x * 4, sh, dw * 4, c + (size_t)x * 4, dh, dw * 4, method);
-    for (size_t i = 0; i < (size_t)dw * dh; i++) {
-        float al = c[i * 4 + 3];
-        if (al < 0) al = 0;
-        if (al > 255) al = 255;
-        unsigned char *o = dst + i * 4;
-        for (int k = 0; k < 3; k++) {
-            float v = al > 0.5f ? c[i * 4 + k] * 255.0f / al : 0.0f;
-            o[k] = (unsigned char)(v < 0 ? 0 : v > 255 ? 255 : v + 0.5f);
+    /* The ring of across-filtered source rows: one output row's taps
+     * plus one, addressed by source row number, so the rows a window
+     * shares with the next are filtered once. */
+    int ring = vy.stride + 1;
+    double *rows = malloc((size_t)ring * dw * 4 * sizeof *rows);
+    int *row_of = malloc((size_t)ring * sizeof *row_of);
+    double *srow = malloc((size_t)sw * 4 * sizeof *srow);
+    double *acc = malloc((size_t)dw * 4 * sizeof *acc);
+    if (!rows || !row_of || !srow || !acc) {
+        free(rows); free(row_of); free(srow); free(acc);
+        free(hx.tap); free(hx.w); free(vy.tap); free(vy.w); free(dst);
+        return NULL;
+    }
+    for (int i = 0; i < ring; i++) row_of[i] = -1;
+
+    for (int y = 0; y < dh; y++) {
+        const Tap *t = &vy.tap[y];
+        const double *w = vy.w + (size_t)y * vy.stride;
+        memset(acc, 0, (size_t)dw * 4 * sizeof *acc);
+        for (int k = 0; k < t->n; k++) {
+            int j = t->j0 + k;
+            int slot = j % ring;
+            if (row_of[slot] != j) {
+                across(src + (size_t)j * sw * 4, sw, srow, &hx, dw, rows + (size_t)slot * dw * 4);
+                row_of[slot] = j;
+            }
+            const double *r = rows + (size_t)slot * dw * 4;
+            double wk = w[k];
+            for (int x = 0; x < dw * 4; x++) acc[x] += wk * r[x];
         }
-        o[3] = (unsigned char)(al + 0.5f);
+        unsigned char *o = dst + (size_t)y * dw * 4;
+        for (int x = 0; x < dw; x++) {
+            /* Halves round up, and a little more than half of a unit is
+             * added so that an exact tie -- common at 150%, where a
+             * hard edge lands at phase 1/2 -- rounds the same way whatever
+             * the order the weights were summed in. */
+            double al = acc[x * 4 + 3];
+            if (al < 0) al = 0;
+            if (al > 255) al = 255;
+            for (int c = 0; c < 3; c++) {
+                double v = al > 0.5 ? acc[x * 4 + c] * 255.0 / al : 0.0;
+                o[x * 4 + c] = (unsigned char)(v < 0 ? 0 : v > 255 ? 255 : v + 0.5 + 1e-9);
+            }
+            o[x * 4 + 3] = (unsigned char)(al + 0.5 + 1e-9);
+        }
     }
-    free(a); free(b); free(c);
+    free(rows); free(row_of); free(srow); free(acc);
+    free(hx.tap); free(hx.w); free(vy.tap); free(vy.w);
     return dst;
 }

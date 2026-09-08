@@ -160,7 +160,7 @@ typedef struct {
     int      down, dirty;
     W2kEdit *custom;                  /* the "Custom" banner text        */
     W2kEdit *rgb[2][3];               /* top and bottom gradient colours */
-    W2kRect  text_radio[3], icon_radio[3], dither_box, search_box;
+    W2kRect  text_radio[3], icon_radio[3], dither_box, gradient_box, search_box;
     W2kRect  ontop_box, autohide_box, clock_box;
     W2kRect  labels_box, small_box;   /* Windows 7's button options */
     W2kRect  smallicons_box, personalized_box;
@@ -169,7 +169,7 @@ typedef struct {
     int      width;
     W2kRect  preview;                 /* the General page's picture      */
     W2kRect  preview2;                /* the Start Menu page's banner    */
-    int      mode, icon, dither, search;   /* edited copies              */
+    int      mode, icon, dither, gradient, search;   /* edited copies    */
     int      ontop, autohide, showclock, smallicons, personalized;
     int      labels, tsmall;
     int      panel;            /* two-column Start menu */
@@ -192,6 +192,7 @@ static void startdlg_commit(StartDlg *sd)
     w2k_start_banner_mode = sd->mode;
     w2k_start_icon = sd->icon;
     w2k_start_banner_dither = sd->dither;
+    w2k_start_banner_gradient = sd->gradient;
     w2k_start_search = sd->search;
     w2k_taskbar_ontop = sd->ontop;
     w2k_taskbar_autohide = sd->autohide;
@@ -226,7 +227,7 @@ static void startdlg_commit(StartDlg *sd)
  * rather than cut mid-word at the picture's edge. */
 static void startdlg_banner(StartDlg *sd, Drawable d, int x, int y, int w, int h, int visible)
 {
-    int save_dither = w2k_start_banner_dither, save_top[3], save_bot[3];
+    int save_dither = w2k_start_banner_dither, save_grad = w2k_start_banner_gradient, save_top[3], save_bot[3];
     for (int k = 0; k < 3; k++) {
         save_top[k] = w2k_start_banner_top[k];
         save_bot[k] = w2k_start_banner_bottom[k];
@@ -234,6 +235,7 @@ static void startdlg_banner(StartDlg *sd, Drawable d, int x, int y, int w, int h
         w2k_start_banner_bottom[k] = atoi(w2k_edit_text(sd->rgb[1][k]));
     }
     w2k_start_banner_dither = sd->dither;
+    w2k_start_banner_gradient = sd->gradient;
     w2k_menu_banner_fill(d, x, y, w, h);
     int save_mode = w2k_start_banner_mode;
     w2k_start_banner_mode = sd->mode;
@@ -246,6 +248,7 @@ static void startdlg_banner(StartDlg *sd, Drawable d, int x, int y, int w, int h
     w2k_clip_clear();
     w2k_start_banner_mode = save_mode;
     w2k_start_banner_dither = save_dither;
+    w2k_start_banner_gradient = save_grad;
     for (int k = 0; k < 3; k++) {
         w2k_start_banner_top[k] = save_top[k];
         w2k_start_banner_bottom[k] = save_bot[k];
@@ -406,8 +409,10 @@ static void startdlg_paint(W2kWin *w, Drawable d)
         const char *rgb_head[3] = { "Red", "Green", "Blue" };
         for (int k = 0; k < 3; k++)
             w2k_text(d, F_UI, sd->rgb[0][k]->r.x + 2, sd->rgb[0][0]->r.y - fh - 3, rgb_head[k], C_TEXT);
+        w2k_draw_checkbox(d, sd->gradient_box.x, sd->gradient_box.y,
+                          "&Gradient", sd->gradient, 0, 0);
         w2k_draw_checkbox(d, sd->dither_box.x, sd->dither_box.y,
-                          "Classic &dithered gradient", sd->dither, 0, 0);
+                          "Classic &dithered gradient", sd->dither, !sd->gradient, 0);
 
         W2kRect g3 = { pv.x, sd->icon_radio[0].y - 16, sd->preview.w,
                        (sd->width_radio[1].y + fh + 4 + 8) - (sd->icon_radio[0].y - 16) };
@@ -468,7 +473,10 @@ static int startdlg_event(W2kWin *w, XEvent *e)
                     sd->icon = i; sd->dirty = 1; w2k_win_dirty(w); return 1;
                 }
             }
-            if (w2k_rect_hit(&sd->dither_box, x, y)) {
+            if (w2k_rect_hit(&sd->gradient_box, x, y)) {
+                sd->gradient = !sd->gradient; sd->dirty = 1; w2k_win_dirty(w); return 1;
+            }
+            if (w2k_rect_hit(&sd->dither_box, x, y) && sd->gradient) {
                 sd->dither = !sd->dither; sd->dirty = 1; w2k_win_dirty(w); return 1;
             }
             if (w2k_rect_hit(&sd->search_box, x, y)) {
@@ -578,6 +586,7 @@ void wm_startmenu_dialog(void)
     sd.mode = w2k_start_banner_mode;
     sd.icon = w2k_start_icon;
     sd.dither = w2k_start_banner_dither;
+    sd.gradient = w2k_start_banner_gradient;
     sd.search = w2k_start_search;
     sd.ontop = w2k_taskbar_ontop;
     sd.autohide = w2k_taskbar_autohide;
@@ -630,7 +639,8 @@ void wm_startmenu_dialog(void)
             sd.rgb[i][k]->r = (W2kRect){ c.x + 74 + k * 46, y2 + i * 26, 40, 21 };
         }
     startdlg_sync_edits(&sd);
-    sd.dither_box = (W2kRect){ c.x + 20, y2 + 2 * 26 + 6, c.w - 40, 16 };
+    sd.gradient_box = (W2kRect){ c.x + 20, y2 + 2 * 26 + 6, 90, 16 };
+    sd.dither_box   = (W2kRect){ c.x + 110, y2 + 2 * 26 + 6, c.w - 130, 16 };
 
     int y5 = sd.dither_box.y + 16 + 8 + 8 + 16;
     for (int i = 0; i < 3; i++)

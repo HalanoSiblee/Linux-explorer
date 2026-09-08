@@ -191,6 +191,7 @@ char w2k_start_banner_custom[128];
 int  w2k_start_banner_top[3]    = { 0, 0,   0 };
 int  w2k_start_banner_bottom[3] = { 0, 0, 255 };
 int  w2k_start_banner_dither;
+int  w2k_start_banner_gradient = 1;
 int  w2k_start_icon = SI_FLAG;
 int  w2k_start_search = 1;
 /* The two-column Start menu, as Windows XP introduced it. Off is the
@@ -442,6 +443,7 @@ void w2k_scheme_reset(void)
     w2k_start_banner_bottom[1] = 0;
     w2k_start_banner_bottom[2] = 255;
     w2k_start_banner_dither = 0;
+    w2k_start_banner_gradient = 1;
     w2k_start_icon = SI_FLAG;
     w2k_start_search = 1;
     w2k_start_panel = 0;
@@ -700,6 +702,10 @@ int w2k_scheme_load(const char *path)
             w2k_start_banner_dither = atoi(val) != 0;
             continue;
         }
+        if (!strcasecmp(line, "StartBannerGradient")) {
+            w2k_start_banner_gradient = atoi(val) != 0;
+            continue;
+        }
         if (!strcasecmp(line, "Monitor")) {
             /* Monitor=<output> <mode|auto> <x> <y> <primary> <enabled>
              *         [<rate|auto> <scale%>] -- the last two since 1.7 */
@@ -926,6 +932,7 @@ int w2k_scheme_save(const char *path)
     fprintf(f, "StartBannerBottom=%d %d %d\n", w2k_start_banner_bottom[0],
             w2k_start_banner_bottom[1], w2k_start_banner_bottom[2]);
     fprintf(f, "StartBannerDither=%d\n", w2k_start_banner_dither);
+    fprintf(f, "StartBannerGradient=%d\n", w2k_start_banner_gradient);
     fprintf(f, "StartSearch=%d\n", w2k_start_search);
     fprintf(f, "StartPanel=%d\n", w2k_start_panel);
     fprintf(f, "StartSmallIcons=%d\n", w2k_start_small_icons);

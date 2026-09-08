@@ -213,6 +213,7 @@ extern char w2k_start_banner_custom[128];
 extern int  w2k_start_banner_top[3];            /* r, g, b */
 extern int  w2k_start_banner_bottom[3];
 extern int  w2k_start_banner_dither;
+extern int  w2k_start_banner_gradient;  /* off: one colour, as Windows 95 */
 extern int  w2k_start_icon;
 extern int  w2k_start_search;   /* type in the Start menu to search */
 extern int  w2k_start_panel;    /* two-column Start menu (XP style) */

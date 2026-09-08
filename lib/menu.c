@@ -282,6 +282,13 @@ void w2k_menu_banner_fill(Drawable d, int x, int y, int w, int h)
     x = w2k_cx(x); y = w2k_cx(y); w = pw; h = ph;
     if (h < 1 || w < 1) return;
 
+    if (!w2k_start_banner_gradient) {
+        /* One colour, halfway between the two -- with the standard black
+         * and blue that is Windows 95's navy. */
+        XSetForeground(w2k.dpy, w2k.gc, banner_shade(128));
+        XFillRectangle(w2k.dpy, d, w2k.gc, x, y, w, h);
+        return;
+    }
     if (!w2k_start_banner_dither) {
         for (int i = 0; i < h; i++) {
             XSetForeground(w2k.dpy, w2k.gc, banner_shade(banner_t(i, h)));

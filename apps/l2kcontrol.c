@@ -23,51 +23,66 @@ enum { ID_OPEN = 1, ID_CLOSE, ID_ABOUT };
 /* Which preset the radio buttons name, in the Performance Options dialog. */
 enum { PRESET_AUTO, PRESET_APPEARANCE, PRESET_PERFORMANCE, PRESET_CUSTOM };
 
-/* An applet either runs a program or opens a pane of our own. */
+/* An applet either runs a program or opens a pane of our own. Each row
+ * names its pane, so the table can be reordered or added to without
+ * anything else knowing its place -- an index list once drifted from it
+ * and Folder Options opened Fonts. */
+static void open_defaults(void);
+static void open_performance(void);
+static void open_folder_options(void);
+static void open_mouse(void);
+static void open_keyboard(void);
+static void open_sounds(void);
+static void open_fonts(void);
+static void open_datetime(void);
+static void open_power(void);
+static void open_users(void);
+
 typedef struct {
     const char *name;
     const char *desc;
     int         icon;
-    const char *cmd;                 /* NULL: handled in here */
+    const char *cmd;                 /* a program to run, or NULL */
+    void      (*open)(void);         /* a pane of our own, or NULL */
 } Applet;
 
 static const Applet applets[] = {
     /* Alphabetical, as the shell lists them; the descriptions are the
      * ones Windows 2000 shows in the web-view pane. */
     { "Date/Time", "Set the date, time and time zone for your computer.",
-      ICO_CP_DATETIME, NULL },
+      ICO_CP_DATETIME, NULL, open_datetime },
     { "Default Programs", "Choose which programs open which kinds of files.",
-      ICO_PROGRAMS, NULL },
+      ICO_PROGRAMS, NULL, open_defaults },
     { "Device Manager", "Shows the hardware installed in this computer and lets you change its drivers.",
-      ICO_MYCOMPUTER, "l2kdevmgmt" },
+      ICO_MYCOMPUTER, "l2kdevmgmt", NULL },
     { "Disk Management", "Partitions and formats the disks in this computer, and mounts their volumes.",
-      ICO_DRIVE_HDD, "l2kdiskmgmt" },
+      ICO_DRIVE_HDD, "l2kdiskmgmt", NULL },
     { "Display", "Customize your desktop display and screen saver.",
-      ICO_CP_DISPLAY, "l2kdisplay" },
+      ICO_CP_DISPLAY, "l2kdisplay", NULL },
     { "Folder Options", "Customizes the display of files and folders, changes file associations, and makes network files available offline.",
-      ICO_CP_FOLDEROPTS, NULL },
+      ICO_CP_FOLDEROPTS, NULL, open_folder_options },
     { "Fonts", "Displays and manages fonts on your computer.",
-      ICO_FONTS_FOLDER, NULL },
+      ICO_FONTS_FOLDER, NULL, open_fonts },
     { "Keyboard", "Customizes your keyboard settings.",
-      ICO_CP_KEYBOARD, NULL },
+      ICO_CP_KEYBOARD, NULL, open_keyboard },
     { "Mouse", "Customizes your mouse settings.",
-      ICO_CP_MOUSE, NULL },
+      ICO_CP_MOUSE, NULL, open_mouse },
     { "Network and Dial-up Connections", "Connects to other computers, networks, and the Internet.",
-      ICO_CP_NETWORK, "l2knetwork" },
+      ICO_CP_NETWORK, "l2knetwork", NULL },
     { "Performance Options", "Chooses the visual effects the desktop uses -- smooth icons, menu shadows, animation -- and weighs looks against speed.",
-      ICO_SETTINGS, NULL },
+      ICO_SETTINGS, NULL, open_performance },
     { "Power Options", "Configures energy-saving settings for your computer.",
-      ICO_CP_POWER, NULL },
+      ICO_CP_POWER, NULL, open_power },
     { "Sounds and Multimedia", "Assigns sounds to events and configures sound devices.",
-      ICO_CP_SOUNDS, NULL },
+      ICO_CP_SOUNDS, NULL, open_sounds },
     { "System", "Provides system information and changes environment settings.",
-      ICO_CP_SYSTEM, NULL },
+      ICO_CP_SYSTEM, NULL, open_performance },
     { "Task Manager", "Shows the programs and processes running on your computer.",
-      ICO_TASKMGR, "l2ktaskmgr" },
+      ICO_TASKMGR, "l2ktaskmgr", NULL },
     { "Taskbar and Start Menu", "Customizes the Start Menu and the taskbar.",
-      ICO_TASKBAR, "@startmenu" },      /* @ = ask the shell, not a program */
+      ICO_TASKBAR, "@startmenu", NULL },      /* @ = ask the shell, not a program */
     { "User Accounts", "Changes the name and picture the Start menu shows for you.",
-      ICO_CP_USERS, NULL },
+      ICO_CP_USERS, NULL, open_users },
 };
 #define NAPPLETS ((int)(sizeof applets / sizeof *applets))
 
@@ -417,9 +432,7 @@ static void open_performance(void)
  * trackbars and check boxes over the input settings, applied to the X
  * server on OK (see lib/input.c) and remembered in ~/.w2k/scheme.
  * ------------------------------------------------------------------ */
-enum { AP_DATETIME = 0, AP_DEFAULTS, AP_DEVMGR, AP_DISPLAY, AP_FOLDER,
-       AP_FONTS, AP_KEYBOARD, AP_MOUSE, AP_NETWORK, AP_PERF, AP_POWER, AP_SOUNDS,
-       AP_SYSTEM, AP_TASKMGR, AP_STARTMENU, AP_USERS };
+static void open_folder_options(void) { w2k_folder_options(cp.win); }
 
 #define MAX_SLIDERS 4
 
@@ -2251,19 +2264,7 @@ static void open_applet(int i)
         else                                      spawn(applets[i].cmd);
         return;
     }
-    switch (i) {
-    case AP_DEFAULTS: open_defaults(); break;
-    case AP_SYSTEM:   open_performance(); break;
-    case AP_FOLDER:   w2k_folder_options(cp.win); break;
-    case AP_MOUSE:    open_mouse(); break;
-    case AP_KEYBOARD: open_keyboard(); break;
-    case AP_SOUNDS:   open_sounds(); break;
-    case AP_FONTS:    open_fonts(); break;
-    case AP_DATETIME: open_datetime(); break;
-    case AP_PERF:     open_performance(); break;
-    case AP_POWER:    open_power(); break;
-    case AP_USERS:    open_users(); break;
-    }
+    if (applets[i].open) applets[i].open();
 }
 
 /* The web-view pane: the folder's own words until an item is picked,
@@ -2358,6 +2359,13 @@ int main(int argc, char **argv)
 {
     if (w2k_init("l2kcontrol") < 0) return 1;
 
+    /* Development aid: W2K_RENDER_APPLET=n renders row n's pane. */
+    if (getenv("W2K_RENDER_APPLET") && getenv("W2K_RENDER")) {
+        int i = atoi(getenv("W2K_RENDER_APPLET"));
+        if (i >= 0 && i < NAPPLETS && applets[i].open) applets[i].open();
+        w2k_fini();
+        return 0;
+    }
     /* "l2kcontrol mouse" opens that applet straight away, the way
      * "control mouse" does in Windows -- the Start menu uses it, and so
      * can anything else. */

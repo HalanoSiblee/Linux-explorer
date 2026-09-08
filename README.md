@@ -218,8 +218,9 @@ XP set; Windows Vista and Windows 7 Basic switch to B00merang's Windows
 Vista and Windows-7 themes, the Windows-7 icons, the Windows 7 Kvantum
 theme for Qt (with Kvantum installed) and the Windows 7 icon set; Modern
 goes to Adwaita and Fusion; the classic schemes go back to Chicago95. The
-installer fetches all of these (`--no-theme` skips them), and each is
-used only when it is there. Display Properties > Programs still lets you
+installer fetches all of these (`--no-theme` skips them), and so does
+`sh tools/fetch-themes.sh` on its own, for a copy put in with `make
+install`; each is used only when it is there. Display Properties > Programs still lets you
 pick any GTK theme, icon theme and Qt style from what is installed; the
 choice is kept in the scheme (`GtkTheme=`, `IconTheme=`, `QtStyle=`,
 `KvantumTheme=`) and written to the GTK, qt5ct/qt6ct and Kvantum settings

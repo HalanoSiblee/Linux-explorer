@@ -105,6 +105,12 @@ static void frame_draw_raw(Client *c, Drawable d)
             w2k_fill(d, e2, e2, b - e2, fh - 2 * e2, C_FACE);        /* left   */
             w2k_fill(d, fw - b, e2, b - e2, fh - 2 * e2, C_FACE);    /* right  */
         }
+    } else if (frame_theme() == THEME_AERO) {
+        /* Glass: the borders and the bottom here, the caption band with
+         * the rest of the caption below. The wallpaper under the frame is
+         * what shows through, so the frame's place on the screen matters. */
+        int rx = c->x - b, ry = c->y - b - client_caption_h(c);
+        w2k_aero_frame(d, 0, 0, rx, ry, fw, fh, P(AERO_TOP), fh, active, -1, -1, 0, 0);
     } else {
         /* Luna's frame is the caption colour carried down both sides and
          * along the bottom, with a hairline where the client begins. */
@@ -135,7 +141,15 @@ static void frame_draw_raw(Client *c, Drawable d)
         w2k_gradient(pm, 0, 0, cap.w, cap.h,
                      active ? C_ACTIVETITLE  : C_INACTIVETITLE,
                      active ? C_ACTIVETITLE2 : C_INACTIVETITLE2);
-    else
+    else if (frame_theme() == THEME_AERO) {
+        /* The caption band of glass, buttons included: lit under the
+         * pointer, pressed under the button, grey when inactive. */
+        int rx = c->x - b, ry = c->y - b - client_caption_h(c);
+        int hot = c->btn_hot == HT_MINBUTTON ? 0 : c->btn_hot == HT_MAXBUTTON ? 1
+                : c->btn_hot == HT_CLOSE ? 2 : -1;
+        int down = c->btn_down && c->btn_down == c->btn_hot ? hot : -1;
+        w2k_aero_frame(pm, 0, 0, rx, ry, fw, fh, 0, cap.h, active, hot, down, mn.w == 0, 1);
+    } else
         w2k_theme_caption(pm, 0, 0, cap.w, cap.h, active, frame_theme());
 
     /* Windows 7 sets its icon two pixels in from the eight-pixel border
@@ -148,7 +162,7 @@ static void frame_draw_raw(Client *c, Drawable d)
         /* Measured off the artwork: the icon at (10,11), the title at 30.
          * Windows 11 sets the icon eight pixels in and the title eight
          * past it. */
-        w2k_icon_draw(pm, inset, seven ? P(11) : (cap.h - P(16)) / 2, c->icon);
+        w2k_icon_draw(pm, inset, frame_theme() == THEME_AERO ? P(10) : seven ? P(11) : (cap.h - P(16)) / 2, c->icon);
         tx = frame_theme() == THEME_CLASSIC ? inset + P(16 + 3)
            : modern ? inset + P(16 + 8) : P(seven ? 30 : 27);
     }
@@ -160,13 +174,17 @@ static void frame_draw_raw(Client *c, Drawable d)
         w2k_ellipsis(tfont, c->name, avail, buf, sizeof buf);
         int ty = (cap.h - w2k_font_height(tfont)) / 2 + P(1);
         if (seven) ty = P(10) + (P(21) - w2k_font_height(tfont)) / 2;   /* centred below the outline */
+        if (frame_theme() == THEME_AERO) ty = P(2) + (P(32) - w2k_font_height(tfont)) / 2;   /* the glass rows */
         if (frame_theme() == THEME_XP) {
             /* Luna sets the title in white over a soft shadow. */
             w2k_text_rgb(pm, F_UI_BOLD, tx + P(1), ty + P(1), buf,
                          active ? 0 : 90, active ? 40 : 110,
                          active ? 120 : 160);
         }
-        if (seven) {    /* black when active, grey when not */
+        if (frame_theme() == THEME_AERO) {
+            /* Aero: black in a white glow, so it reads over any picture. */
+            w2k_text_glow(pm, tfont, tx, ty, buf, 0, 0, 0, 255, 255, 255, active ? 210 : 150);
+        } else if (seven) {    /* black when active, grey when not */
             int g = active ? 0 : 153;
             w2k_text_rgb(pm, tfont, tx, ty, buf, g, g, g);
         }
@@ -175,6 +193,10 @@ static void frame_draw_raw(Client *c, Drawable d)
                      active ? C_TITLETEXT : C_INACTIVETITLETEXT);
     }
 
+    if (frame_theme() == THEME_AERO) {      /* the buttons came with the glass */
+        XCopyArea(w2k.dpy, pm, d, w2k.gc, 0, 0, cap.w, cap.h, cap.x, cap.y);
+        return;
+    }
     /* Buttons live on the caption pixmap, so shift into its coordinates. */
     int dx = -cap.x, dy = -cap.y;
     int themed = frame_theme() != THEME_CLASSIC;
@@ -267,6 +289,27 @@ void frame_shape(Client *c)
      * five, three, two, one, one -- so the shape and the artwork agree to
      * the pixel; a circle a pixel too tight left white specks outside the
      * curve. Basic's caption has no such corner, and keeps a small arc. */
+    if (frame_theme() == THEME_AERO && w2k_aero_corner_rows() > 0) {
+        /* Aero's corners, top and bottom, follow its corner art: the shape
+         * turns opaque where the art does. */
+        int n = w2k_aero_corner_rows();
+        Pixmap mask = XCreatePixmap(w2k.dpy, c->frame, (unsigned)fw, (unsigned)fh, 1);
+        GC g = XCreateGC(w2k.dpy, mask, 0, NULL);
+        XSetForeground(w2k.dpy, g, 0);
+        XFillRectangle(w2k.dpy, mask, g, 0, 0, (unsigned)fw, (unsigned)fh);
+        XSetForeground(w2k.dpy, g, 1);
+        if (fh > 2 * n)
+            XFillRectangle(w2k.dpy, mask, g, 0, n, (unsigned)fw, (unsigned)(fh - 2 * n));
+        for (int i = 0; i < n && i < fh; i++) {
+            int t = w2k_aero_corner_inset(i, 0), u = w2k_aero_corner_inset(i, 1);
+            if (2 * t < fw) XFillRectangle(w2k.dpy, mask, g, t, i, (unsigned)(fw - 2 * t), 1);
+            if (2 * u < fw) XFillRectangle(w2k.dpy, mask, g, u, fh - 1 - i, (unsigned)(fw - 2 * u), 1);
+        }
+        XShapeCombineMask(w2k.dpy, c->frame, ShapeBounding, 0, 0, mask, ShapeSet);
+        XFreeGC(w2k.dpy, g);
+        XFreePixmap(w2k.dpy, mask);
+        return;
+    }
     static const int luna[5] = { 5, 3, 2, 1, 1 };
     static const int basic[5] = { 3, 2, 1, 1, 0 };
     const int *ins = W2K_THEME_IS7(frame_theme()) ? basic : luna;

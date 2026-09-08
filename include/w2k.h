@@ -363,10 +363,13 @@ void     w2k_skin_tile(Drawable d, W2kSkin *s, int x, int y, int w, int h,
  * Windows XP's Luna. The theme decides the colour table and the handful
  * of things XP draws differently -- gradient taskbar, skinned Start
  * button, the two-column Start menu. */
-enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, THEME_MODERN, THEME_VISTA, N_THEMES };
+enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, THEME_MODERN, THEME_VISTA, THEME_AERO, N_THEMES };
 /* Windows Vista Basic shares Windows 7 Basic's frames; only the bar and
  * the Start menu are its own. */
-#define W2K_THEME_IS7(t) ((t) == THEME_BASIC7 || (t) == THEME_VISTA)
+#define W2K_THEME_IS7(t) ((t) == THEME_BASIC7 || (t) == THEME_VISTA || (t) == THEME_AERO)
+/* Windows 7 Aero: 7's look with glass frames, taskbar and Start menu
+ * (lib/aero.c). The Basic branches apply to it wherever nothing is said. */
+#define W2K_THEME_AERO(t) ((t) == THEME_AERO)
 extern const char *w2k_theme_name(int theme);
 extern int w2k_theme;
 /* Modern with the standard window frame: the classic caption, its buttons
@@ -562,6 +565,33 @@ int  w2k_theme_modern_margin(void);    /* the invisible margin, in pixels */
 
 /* Horizontal two-stop gradient, used by title bars. */
 void w2k_gradient(Drawable d, int x, int y, int w, int h, int c1, int c2);
+
+/* aero.c -- Windows 7 Aero's glass: the wallpaper blurred, coloured by a
+ * measured law. Frames, the taskbar and the Start menu draw themselves
+ * from it; the window manager keeps the source up to date. */
+typedef struct { unsigned char c0[3], cw[3]; float gamma, k; } W2kGlass;
+extern const W2kGlass w2k_glass_frame, w2k_glass_bar, w2k_glass_dark;
+void w2k_glass_source_begin(int sw, int sh, int r, int g, int b);
+void w2k_glass_source_put(int x, int y, int w, int h, XImage *im);
+void w2k_glass_source_end(void);
+void w2k_glass_source_free(void);
+int  w2k_glass_source_ready(void);
+unsigned char *w2k_glass_bg(int rx, int ry, int w, int h);
+void w2k_glass_law(const unsigned char *bg, unsigned char *out, size_t n, const W2kGlass *g);
+void w2k_rgb_put(Drawable d, int dx, int dy, const unsigned char *rgb, int w, int h);
+void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
+                    int row0, int row1, int active, int btn_hot, int btn_down,
+                    int close_only, int buttons);
+int  w2k_aero_corner_inset(int row, int bottom);
+int  w2k_aero_corner_rows(void);
+void w2k_aero_bar(Drawable d, int rx, int ry, int w, int h, int edge, int sliver);
+void w2k_aero_taskbutton(Drawable d, int x, int y, int w, int h, int state, int rx, int ry);
+void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h,
+                    int pane_x, int pane_y, int pane_w, int pane_h, int band_y);
+void w2k_aero_glass(Drawable d, int dx, int dy, int rx, int ry, int w, int h, const W2kGlass *g);
+#define AERO_BORDER   8       /* the frame: eight each side and along the bottom, */
+#define AERO_TOP     36       /* thirty-six from the top edge to the client */
+
 /* The themed taskbar background (THEME_XP, THEME_BASIC7). */
 void w2k_bar_gradient(Drawable d, int x, int y, int w, int h, int theme);
 
@@ -640,6 +670,12 @@ void w2k_text(Drawable d, int font, int x, int y, const char *s, int color);
 /* Text in a colour that is not one of the scheme's. */
 void w2k_text_rgb(Drawable d, int font, int x, int y, const char *s,
                   int r, int g, int b);
+/* Text with a soft glow behind it: Aero sets its titles black in a white
+ * halo, and the taskbar's white in a dark one. `strength` is the halo's
+ * alpha, 0..255. */
+void w2k_text_glow(Drawable d, int font, int x, int y, const char *s,
+                   int r, int g, int b, int gr, int gg, int gb, int strength);
+
 void w2k_textn(Drawable d, int font, int x, int y, const char *s, int len, int color);
 /* Greyed-out text: white offset copy underneath, as Windows does. */
 void w2k_text_disabled(Drawable d, int font, int x, int y, const char *s);

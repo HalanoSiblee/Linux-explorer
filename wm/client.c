@@ -29,6 +29,8 @@ int client_border(Client *c)
 {
     if (!c->decorate || c->fullscreen) return 0;
     /* Windows 7 Basic frames are ten pixels all round, dialogs included. */
+    /* Aero's are eight. */
+    if (frame_theme() == THEME_AERO) return w2k_px(AERO_BORDER);
     if (W2K_THEME_IS7(frame_theme())) return w2k_px(10);
     /* Modern: a one-pixel line with an invisible six-pixel margin
      * outside it, shaped away, that the resize cursor still finds. */

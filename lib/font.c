@@ -297,6 +297,46 @@ void w2k_text_rgb(Drawable d, int font, int x, int y, const char *s,
     XDrawString(w2k.dpy, d, w2k.gc, x, baseline, s, len);
 }
 
+void w2k_text_glow(Drawable d, int font, int x, int y, const char *s,
+                   int r, int g, int b, int gr, int gg, int gb, int strength)
+{
+    if (!s || !*s) return;
+    XftFont *fc = slot_face(font);
+    XftDraw *dr = fc ? draw_for(d) : NULL;
+    if (dr && strength > 0) {
+        /* The halo: the text again in the glow colour, translucent, at
+         * every offset within two pixels -- the near ring stronger. The
+         * colour is premultiplied, as XRender wants it. */
+        static const signed char off[20][3] = {
+            {1,0,100},{-1,0,100},{0,1,100},{0,-1,100},{1,1,70},{-1,1,70},{1,-1,70},{-1,-1,70},
+            {2,0,45},{-2,0,45},{0,2,45},{0,-2,45},{2,1,30},{2,-1,30},{-2,1,30},{-2,-1,30},
+            {1,2,30},{-1,2,30},{1,-2,30},{-1,-2,30}
+        };
+        int len = (int)strlen(s);
+        int px = w2k_cx(x), baseline = w2k_cx(y) + w2k_font_px_ascent(font);
+        int t = w2k_px(1) > 0 ? w2k_px(1) : 1;
+        if (w2k_clip_on) {
+            XRectangle rc = { (short)w2k_clip_x, (short)w2k_clip_y,
+                              (unsigned short)w2k_clip_w, (unsigned short)w2k_clip_h };
+            XftDrawSetClipRectangles(dr, 0, 0, &rc, 1);
+        } else {
+            XftDrawSetClip(dr, NULL);
+        }
+        for (int i = 0; i < 20; i++) {
+            int a = strength * off[i][2] / 100;
+            if (a <= 0) continue;
+            XRenderColor rc = { (unsigned short)(gr * a * 257 / 255), (unsigned short)(gg * a * 257 / 255),
+                                (unsigned short)(gb * a * 257 / 255), (unsigned short)(a * 257) };
+            XftColor c;
+            if (!XftColorAllocValue(w2k.dpy, w2k.visual, w2k.cmap, &rc, &c)) continue;
+            XftDrawStringUtf8(dr, &c, fc, px + off[i][0] * t, baseline + off[i][1] * t,
+                              (const FcChar8 *)s, len);
+            XftColorFree(w2k.dpy, w2k.visual, w2k.cmap, &c);
+        }
+    }
+    w2k_text_rgb(d, font, x, y, s, r, g, b);
+}
+
 /* Draw at a baseline, which is what both backends want. */
 void w2k_font_draw(Drawable d, int font, int x, int baseline,
                    const char *s, int len, int color)

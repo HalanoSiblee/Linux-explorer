@@ -321,6 +321,7 @@ int w2k_theme_caption_h(int theme)
 {
     /* Windows XP: 30 rows from the frame's top edge to the client, of
      * which 4 are the frame border. Windows 7 Basic: 31, of which 10. */
+    if (theme == THEME_AERO) return AERO_TOP - AERO_BORDER;      /* Aero: 36, of which 8 */
     if (W2K_THEME_IS7(theme)) return W7_CAP_H - W7_BORDER;
     if (theme == THEME_MODERN) return MD_CAP_H;
     return XP_CAP_H - 4;
@@ -401,11 +402,14 @@ void w2k_theme_frame_edges(Drawable d, int fw, int fh, int b, int active,
  * ------------------------------------------------------------------ */
 int w2k_theme_capbtn_size(int theme)
 {
+    if (theme == THEME_AERO) return 20;       /* the cluster is twenty rows tall */
     return W2K_THEME_IS7(theme) ? W7_BTN_H : theme == THEME_MODERN ? MD_BTN_H : 21;
 }
 
 int w2k_theme_capbtn_w(int theme, int kind)
 {
+    /* Aero, measured: Minimise 30, Maximise 28, Close 50, touching. */
+    if (theme == THEME_AERO) return kind == W2K_CAP_CLOSE ? 50 : kind == W2K_CAP_MIN ? 30 : 28;
     (void)kind;
     return W2K_THEME_IS7(theme) ? W7_BTN_W : theme == THEME_MODERN ? MD_BTN_W : 21;   /* all three alike */
 }
@@ -422,6 +426,15 @@ void w2k_theme_capbtn_place(int theme, int fw, int *y, int *close_x,
         *close_x = fw - S(1 + MD_BTN_W);
         *max_x = *close_x - S(MD_BTN_W);
         *min_x = *max_x - S(MD_BTN_W);
+        return;
+    }
+    if (theme == THEME_AERO) {
+        /* The cluster hangs from the frame's top edge, its right end six
+         * pixels in: Close 50 wide, then Maximise 28 and Minimise 30. */
+        *y = S(1);
+        *close_x = fw - S(55);
+        *max_x = fw - S(83);
+        *min_x = fw - S(113);
         return;
     }
     if (W2K_THEME_IS7(theme)) {

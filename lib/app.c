@@ -432,6 +432,7 @@ const char *w2k_theme_name(int theme)
     case THEME_BASIC7: return "Windows 7 Basic";
     case THEME_MODERN: return "Modern";
     case THEME_VISTA:  return "Windows Vista Basic";
+    case THEME_AERO:   return "Windows 7 Aero";
     }
     return "Windows Standard";
 }
@@ -701,7 +702,8 @@ int w2k_scheme_load(const char *path)
         w2k_theme = !strncasecmp(val, "xp", 2)     ? THEME_XP :
                     !strncasecmp(val, "basic7", 6) ? THEME_BASIC7 :
                     !strncasecmp(val, "modern", 6) ? THEME_MODERN :
-                    !strncasecmp(val, "vista", 5)  ? THEME_VISTA
+                    !strncasecmp(val, "vista", 5)  ? THEME_VISTA :
+                    !strncasecmp(val, "aero", 4)   ? THEME_AERO
                                                    : THEME_CLASSIC;
         w2k_theme_colours(w2k_theme);
         break;
@@ -1016,7 +1018,8 @@ int w2k_scheme_save(const char *path)
     fprintf(f, "Theme=%s\n", w2k_theme == THEME_XP ? "xp" :
             w2k_theme == THEME_BASIC7 ? "basic7" :
             w2k_theme == THEME_MODERN ? "modern" :
-            w2k_theme == THEME_VISTA ? "vista" : "classic");
+            w2k_theme == THEME_VISTA ? "vista" :
+            w2k_theme == THEME_AERO ? "aero" : "classic");
     fprintf(f, "ModernFrame=%s\n", w2k_modern_classic_frame ? "classic" : "modern");
     fprintf(f, "Compositor=%s\n", w2k_compositor ? "nested" : "none");
     fprintf(f, "CompositorFilter=%s\n", w2k_compositor_filter);

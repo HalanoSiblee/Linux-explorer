@@ -151,12 +151,16 @@ Try it nested first, without logging out of anything:
                    who it is licensed to and the memory (Start > Programs >
                    Accessories > System Tools, or Run > linver)
 
-Five looks, from Display Properties > Appearance: the Windows 2000
+Six looks, from Display Properties > Appearance: the Windows 2000
 classic scheme (and its colour variants: Brick, Desert, Eggplant, a
 Windows Classic Dark and the rest), Windows XP (Luna, with the two-column
 Start menu), Windows Vista Basic (7's frames over Vista's dark bar and
-Start menu), Windows 7 Basic (with its Start menu, orb and taskbar), and
-Modern, in a Light and a Dark scheme. Every element's colour can be set
+Start menu), Windows 7 Basic (with its Start menu, orb and taskbar),
+Windows 7 Aero (the same in glass: frames, taskbar and Start menu show
+the wallpaper through them, blurred and tinted as measured off Windows 7
+over black, white and blue desktops; without a compositor it is the
+wallpaper that shows through, not the windows behind), and Modern, in a
+Light and a Dark scheme. Every element's colour can be set
 from the basic-colours palette or by its red, green and blue values, and
 title bars have a Color 2 for the far end of their gradient. The XP and 7
 chrome is cropped from screenshots and checked by diffing against them.
@@ -228,7 +232,7 @@ cursors through an Xcursor theme, and Explorer is the folder handler for
 Windows XP in Appearance switches GTK programs to B00merang's Windows XP
 Luna theme and Windows XP icons, Qt programs to the same through the GTK 2
 bridge (`qt5-style-plugins`), and the desktop's own icons to the Windows
-XP set; Windows Vista and Windows 7 Basic switch to B00merang's Windows
+XP set; Windows Vista, Windows 7 Basic and Aero switch to B00merang's Windows
 Vista and Windows-7 themes, the Windows-7 icons, the Windows 7 Kvantum
 theme for Qt (with Kvantum installed) and the Windows 7 icon set; Modern
 goes to Adwaita and Fusion; the classic schemes go back to Chicago95. The

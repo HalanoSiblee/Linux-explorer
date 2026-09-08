@@ -143,6 +143,7 @@ typedef struct {
 
 static int seven(void) { return W2K_THEME_IS7(w2k_theme); }   /* 7 or Vista */
 static int vista(void) { return w2k_theme == THEME_VISTA; }
+static int aero(void)  { return w2k_theme == THEME_AERO; }    /* 7 in glass */
 
 static Row  left_rows[MAXROWS], right_rows[MAXROWS];
 static int  nleft, nright;
@@ -533,8 +534,18 @@ static void panel7_draw(Drawable pm)
     const PanelMetrics *m = pm7();
     int v = vista();
     int oy = m->over;
+    int lh = m->left_bot - m->left_top + 1;
     if (v) {
         panelv_ground(pm);
+    } else if (aero()) {
+        /* Aero: a slab of dark glass over the wallpaper, the white pane
+         * cut into it with the search band across its foot. In screen
+         * pixels, from where the panel stands. */
+        fill(pm, 0, 0, P7_W, oy, w2k.col[C_DESKTOP]);
+        w2k_aero_panel(pm, 0, w2k_px(oy), panel_x, panel_y + w2k_px(oy),
+                       w2k_px(P7_W), w2k_px(P7_H),
+                       w2k_px(P7_LEFT_X), w2k_px(m->left_top), w2k_px(P7_LEFT_W), w2k_px(lh),
+                       w2k_px(m->ap_y + m->ap_h + 2));
     } else {
         /* Above the panel only the tile is window (the rest is shaped
          * away); the desktop colour is for the W2K_RENDER picture of it. */
@@ -542,11 +553,12 @@ static void panel7_draw(Drawable pm)
         panel7_ground(pm, 0, oy, P7_W);
     }
     /* The white column, in a dark line; Vista's has a lighter line over
-     * it and another under it. */
-    int lh = m->left_bot - m->left_top + 1;
-    fill(pm, P7_LEFT_X, oy + m->left_top, P7_LEFT_W, lh, w2k_rgb(255, 255, 255));
-    XSetForeground(w2k.dpy, w2k.gc, v ? w2k_rgb(61, 61, 61) : w2k_rgb(101, 120, 138));
-    rect_fg(pm, P7_LEFT_X - 1, oy + m->left_top - 1, P7_LEFT_W + 2, lh + 2);
+     * it and another under it. Aero's came with the glass. */
+    if (!aero()) {
+        fill(pm, P7_LEFT_X, oy + m->left_top, P7_LEFT_W, lh, w2k_rgb(255, 255, 255));
+        XSetForeground(w2k.dpy, w2k.gc, v ? w2k_rgb(61, 61, 61) : w2k_rgb(101, 120, 138));
+        rect_fg(pm, P7_LEFT_X - 1, oy + m->left_top - 1, P7_LEFT_W + 2, lh + 2);
+    }
     if (v) {
         w2k_fill_rgb(pm, P7_LEFT_X - 1, oy + m->left_top - 2, P7_LEFT_W + 2, 1, 144, 144, 144);
         w2k_fill_rgb(pm, P7_LEFT_X - 1, oy + m->left_bot + 2, P7_LEFT_W + 2, 1, 158, 158, 158);
@@ -633,8 +645,12 @@ static void panel7_draw(Drawable pm)
             else   hover7(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, m->rrow_h, 0);
         }
         w2k_ellipsis(F_UI, r->label, P7_RIGHT_W - 30, buf, sizeof buf);
-        w2k_text_rgb(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
-                     255, 255, 255);
+        if (aero())      /* white in a dark glow, as Windows 7 sets it on glass */
+            w2k_text_glow(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
+                          255, 255, 255, 0, 0, 0, 150);
+        else
+            w2k_text_rgb(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
+                         255, 255, 255);
         if (r->kind == R_SUB)
             arrow7(pm, P7_RIGHT_X + P7_RIGHT_W - 14, y + m->rrow_h / 2,
                    255, 255, 255);
@@ -1077,11 +1093,19 @@ int startpanel_run(int bx, int by)
         #define R(x, y, w, h) (XRectangle){ (short)w2k_px(x), (short)w2k_px(y), \
                                 (unsigned short)(w2k_px((x) + (w)) - w2k_px(x)), \
                                 (unsigned short)(w2k_px((y) + (h)) - w2k_px(y)) }
-        for (int i = 0; i < 4; i++) {
-            rs[n++] = R(ins[i], P7_OVER + i, P7_W - 2 * ins[i], 1);
-            rs[n++] = R(ins[i], P7_OVER + P7_H - 1 - i, P7_W - 2 * ins[i], 1);
+        if (aero()) {
+            /* Aero's slab: top corners five, three, two, one, one; the
+             * bottom ones square on the bar. Measured. */
+            static const int insa[5] = { 5, 3, 2, 1, 1 };
+            for (int i = 0; i < 5; i++) rs[n++] = R(insa[i], P7_OVER + i, P7_W - 2 * insa[i], 1);
+            rs[n++] = R(0, P7_OVER + 5, P7_W, P7_H - 5);
+        } else {
+            for (int i = 0; i < 4; i++) {
+                rs[n++] = R(ins[i], P7_OVER + i, P7_W - 2 * ins[i], 1);
+                rs[n++] = R(ins[i], P7_OVER + P7_H - 1 - i, P7_W - 2 * ins[i], 1);
+            }
+            rs[n++] = R(0, P7_OVER + 4, P7_W, P7_H - 8);
         }
-        rs[n++] = R(0, P7_OVER + 4, P7_W, P7_H - 8);
         /* The tile above the panel, its top corners cut like the skin's. */
         for (int i = 0; i < 3; i++)
             rs[n++] = R(P7_TILE_X + ins[i], i, P7_TILE_W - 2 * ins[i], 1);

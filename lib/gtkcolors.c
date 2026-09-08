@@ -479,6 +479,7 @@ void w2k_look_themes(int theme)
         kv = "Windows7Kvantum"; set = "win7";
         break;
     case THEME_BASIC7:
+    case THEME_AERO:
         gtk = "Windows-7"; icons = "Windows-7"; qt = "kvantum";
         kv = "Windows7Kvantum"; set = "win7";
         break;

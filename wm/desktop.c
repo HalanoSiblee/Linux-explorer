@@ -381,10 +381,17 @@ static uint32_t *row32(XImage *im, int y)
 static void build_wallpaper(void)
 {
     if (wall) { w2k_free_pixmap(wall); wall = 0; }
-    if (!w2k_wallpaper[0]) return;
+    /* Aero's glass is the wallpaper blurred: the same picture goes to
+     * lib/aero.c as it is built, monitor by monitor. Without a picture
+     * the glass is the desktop colour. */
+    int glass = w2k_theme == THEME_AERO;
+    const unsigned char *dc = w2k_scheme_rgb(C_DESKTOP);
+    if (glass) w2k_glass_source_begin(w2k.sw, w2k.sh, dc[0], dc[1], dc[2]);
+    else       w2k_glass_source_free();
+    if (!w2k_wallpaper[0]) { if (glass) w2k_glass_source_end(); return; }
     int iw, ih;
     unsigned char *rgba = w2k_image_load(w2k_wallpaper, &iw, &ih);   /* BMP, PNG or JPEG */
-    if (!rgba || iw <= 0 || ih <= 0) { free(rgba); return; }
+    if (!rgba || iw <= 0 || ih <= 0) { free(rgba); if (glass) w2k_glass_source_end(); return; }
     /* Span: the picture over every monitor at once, resampled once. */
     unsigned char *span = NULL;
     if (w2k_wallpaper_style == 5 && w2k_resample != RS_NEAREST)
@@ -469,11 +476,13 @@ static void build_wallpaper(void)
             }
         }
         XPutImage(w2k.dpy, wall, w2k.gc, im, 0, 0, m->x, m->y, W, H);
+        if (glass) w2k_glass_source_put(m->x, m->y, W, H, im);
         if (sc != span) free(sc);
         XDestroyImage(im);
     }
     free(span);
     free(rgba);
+    if (glass) w2k_glass_source_end();
 }
 
 /* The wallpaper is the window's background, so the server paints the parts

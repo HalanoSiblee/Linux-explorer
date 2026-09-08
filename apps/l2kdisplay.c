@@ -59,6 +59,7 @@ presets[] = {
     { "Windows XP", NULL, 0, THEME_XP },
     { "Windows Vista Basic", NULL, 0, THEME_VISTA },
     { "Windows 7 Basic", NULL, 0, THEME_BASIC7 },
+    { "Windows 7 Aero", NULL, 0, THEME_AERO },
     { "Windows Classic", S({C_FACE,192,192,192},{C_LIGHT,223,223,223},{C_DKSHADOW,0,0,0},
         {C_ACTIVETITLE,0,0,128},{C_ACTIVETITLE2,16,132,208},{C_INACTIVETITLE,128,128,128},
         {C_INACTIVETITLE2,181,181,181},{C_INACTIVETITLETEXT,192,192,192},{C_MENU,192,192,192},

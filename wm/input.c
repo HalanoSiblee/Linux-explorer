@@ -1,5 +1,6 @@
 /* input.c -- moving, sizing, the system menu, Alt+Tab and global hotkeys. */
 #include "wm.h"
+#include <X11/XF86keysym.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -494,7 +495,34 @@ static const struct { unsigned mod; KeySym key; } bindings[] = {
     { Mod4Mask,              XK_Right  },   /* snap right             */
     { Mod4Mask,              XK_Up     },   /* snap: maximise         */
     { Mod4Mask,              XK_Down   },   /* snap: restore / bottom */
+    /* The keyboard's media keys: the speaker by the clock, and whatever
+     * is playing (an MPRIS player, over D-Bus). */
+    { 0, XF86XK_AudioRaiseVolume },
+    { 0, XF86XK_AudioLowerVolume },
+    { 0, XF86XK_AudioMute },
+    { 0, XF86XK_AudioPlay },
+    { 0, XF86XK_AudioStop },
 };
+
+/* Volume keys move the mixer in steps of five, landing on a multiple of
+ * five as Windows' keys do; the mute key is the speaker's own mute. */
+static void media_key(KeySym ks)
+{
+    if (ks == XF86XK_AudioPlay) { media_control("PlayPause"); return; }
+    if (ks == XF86XK_AudioStop) { media_control("Stop"); return; }
+    if (!volume_available()) return;
+    if (ks == XF86XK_AudioMute) {
+        volume_toggle_mute();
+    } else {
+        int v = volume_level();
+        if (v < 0) v = 50;
+        const int step = 5;
+        v = ks == XF86XK_AudioRaiseVolume ? (v / step + 1) * step
+                                          : ((v + step - 1) / step - 1) * step;
+        volume_set(v);
+    }
+    taskbar_paint();
+}
 
 void grab_keys(void)
 {
@@ -552,6 +580,11 @@ void handle_key(XKeyEvent *e)
     if (ks == XK_Super_L || ks == XK_Super_R) {
         super_down = 1;
         super_used = 0;
+        return;
+    }
+    if (ks == XF86XK_AudioRaiseVolume || ks == XF86XK_AudioLowerVolume ||
+        ks == XF86XK_AudioMute || ks == XF86XK_AudioPlay || ks == XF86XK_AudioStop) {
+        media_key(ks);
         return;
     }
     if (mod & Mod4Mask) super_used = 1;

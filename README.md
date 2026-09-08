@@ -235,7 +235,8 @@ when they start.
 
 Keys: **Ctrl+Esc** / **Win** Start menu · **Alt+Tab** switch windows ·
 **Alt+F4** close · **Alt+Space** system menu · **Ctrl+Alt+Del** Task Manager ·
-**Win+E** Explorer · **Win+R** Run · **Win+D** show desktop · typing at the
+**Win+E** Explorer · **Win+R** Run · **Win+D** show desktop · the keyboard's
+volume, mute, play and stop keys do what they say · typing at the
 Start menu searches.
 
 ## Scaling

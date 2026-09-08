@@ -58,9 +58,7 @@ typedef struct {
     double      kern_hist[HIST], kern_now;
     unsigned long long cpu_kern;
     int         show_kernel;
-    /* The page file: Windows' commit charge, from Committed_AS. */
-    long        commit_kb, commit_limit_kb, commit_peak_kb;
-    double      pf_pct;
+    long        swap_peak_kb;        /* most of the page file used so far */
     long        slab_kb, sreclaim_kb, sunreclaim_kb, kstack_kb, ptables_kb;
     long        handles;
 
@@ -108,21 +106,20 @@ static void sample_memory(void)
     if (!tm.mem_avail_kb) tm.mem_avail_kb = read_meminfo_key(buf, "MemFree");
     if (tm.mem_total_kb > 0)
         tm.mem_pct = 100.0 * (tm.mem_total_kb - tm.mem_avail_kb) / tm.mem_total_kb;
-    /* The Windows figures: the commit charge is what the kernel calls
-     * Committed_AS against CommitLimit; the kernel's own memory is the
-     * slab, split into what can be paged out (reclaimable) and what
-     * cannot, plus stacks and page tables. */
-    tm.commit_kb       = read_meminfo_key(buf, "Committed_AS");
-    tm.commit_limit_kb = read_meminfo_key(buf, "CommitLimit");
-    if (tm.commit_kb > tm.commit_peak_kb) tm.commit_peak_kb = tm.commit_kb;
+    /* Windows' commit charge has no honest counterpart here -- the
+     * kernel's Committed_AS counts every reservation and runs past its
+     * own limit on any desktop -- so the page-file box shows the swap
+     * that is really in use. The kernel's own memory is the slab, split
+     * into what can be paged out (reclaimable) and what cannot, plus
+     * stacks and page tables. */
+    if (tm.swap_total_kb - tm.swap_free_kb > tm.swap_peak_kb)
+        tm.swap_peak_kb = tm.swap_total_kb - tm.swap_free_kb;
     tm.slab_kb      = read_meminfo_key(buf, "Slab");
     tm.sreclaim_kb  = read_meminfo_key(buf, "SReclaimable");
     tm.sunreclaim_kb = read_meminfo_key(buf, "SUnreclaim");
     tm.kstack_kb    = read_meminfo_key(buf, "KernelStack");
     tm.ptables_kb   = read_meminfo_key(buf, "PageTables");
     tm.mem_cached_kb += tm.sreclaim_kb;              /* System Cache */
-    tm.pf_pct = tm.commit_limit_kb > 0 ? 100.0 * tm.commit_kb / tm.commit_limit_kb : 0;
-    if (tm.pf_pct > 100) tm.pf_pct = 100;
     FILE *h = fopen("/proc/sys/fs/file-nr", "r");   /* open handles */
     if (h) {
         long a = 0;
@@ -479,7 +476,7 @@ static void tick(void *unused)
     if (tm.hist_n < HIST) {
         tm.cpu_hist[tm.hist_n] = tm.cpu_now;
         tm.kern_hist[tm.hist_n] = tm.kern_now;
-        tm.mem_hist[tm.hist_n] = tm.pf_pct;
+        tm.mem_hist[tm.hist_n] = tm.mem_pct;
         for (int k = 0; k < tm.ncpu; k++) {
             tm.core_hist[k][tm.hist_n] = tm.core_now[k];
             tm.core_khist[k][tm.hist_n] = tm.core_know[k];
@@ -491,7 +488,7 @@ static void tick(void *unused)
         memmove(tm.mem_hist, tm.mem_hist + 1, (HIST - 1) * sizeof(double));
         tm.cpu_hist[HIST - 1] = tm.cpu_now;
         tm.kern_hist[HIST - 1] = tm.kern_now;
-        tm.mem_hist[HIST - 1] = tm.pf_pct;
+        tm.mem_hist[HIST - 1] = tm.mem_pct;
         for (int k = 0; k < tm.ncpu; k++) {
             memmove(tm.core_hist[k], tm.core_hist[k] + 1,
                     (HIST - 1) * sizeof(double));
@@ -514,9 +511,11 @@ static void tick(void *unused)
     w2k_status_set(tm.sb, 0, b);
     snprintf(b, sizeof b, "CPU Usage: %d%%", (int)(tm.cpu_now + 0.5));
     w2k_status_set(tm.sb, 1, b);
-    /* "Commit Charge: 326M / 1159M", as Windows put it. */
-    snprintf(b, sizeof b, "Commit Charge: %ldM / %ldM", tm.commit_kb / 1024,
-             tm.commit_limit_kb / 1024);
+    /* Windows wrote "Commit Charge: 326M / 1159M" here; on Linux the
+     * commit charge counts every reservation and means little, so the
+     * bar, the graph and this figure are the memory actually in use. */
+    snprintf(b, sizeof b, "Mem Usage: %ldM / %ldM",
+             (tm.mem_total_kb - tm.mem_avail_kb) / 1024, tm.mem_total_kb / 1024);
     w2k_status_set(tm.sb, 2, b);
 
     w2k_win_dirty(tm.win);
@@ -681,19 +680,20 @@ static void paint_perf(Drawable d, W2kRect c)
     if (tm.per_core) draw_core_graphs(d, hg);
     else             draw_graph(d, hg, tm.cpu_hist, tm.kern_hist, tm.hist_n);
 
-    /* --- Page file ---------------------------------------------------- */
+    /* --- Memory: physical memory in use, not the page file ------------ */
     int y2 = grp.y + grp_h + 6;
     W2kRect mgrp = { c.x + 4, y2, meter_w + 16, grp_h };
-    w2k_draw_groupbox(d, &mgrp, "PF Usage");
+    w2k_draw_groupbox(d, &mgrp, "Mem Usage");
     W2kRect m1 = { mgrp.x + 8, mgrp.y + 16, meter_w, meter_h };
-    if (tm.commit_kb >= 1024 * 1024)
-        snprintf(b, sizeof b, "%.1f GB", tm.commit_kb / (1024.0 * 1024.0));
+    long used_kb = tm.mem_total_kb - tm.mem_avail_kb;
+    if (used_kb >= 1024 * 1024)
+        snprintf(b, sizeof b, "%.1f GB", used_kb / (1024.0 * 1024.0));
     else
-        snprintf(b, sizeof b, "%ld MB", tm.commit_kb / 1024);
-    draw_meter(d, m1, tm.pf_pct, b);
+        snprintf(b, sizeof b, "%ld MB", used_kb / 1024);
+    draw_meter(d, m1, tm.mem_pct, b);
 
     W2kRect mhgrp = { hx, y2, c.x + c.w - hx - 4, grp_h };
-    w2k_draw_groupbox(d, &mhgrp, "Page File Usage History");
+    w2k_draw_groupbox(d, &mhgrp, "Memory Usage History");
     W2kRect mh = { mhgrp.x + 8, mhgrp.y + 16, mhgrp.w - 16, meter_h };
     draw_graph(d, mh, tm.mem_hist, NULL, tm.hist_n);
 
@@ -702,7 +702,7 @@ static void paint_perf(Drawable d, W2kRect c)
     int bw = (c.w - 16) / 2, bh = c.y + c.h - y3 - 4;
     if (bh < 40) return;
     const char *titles[4] = { "Totals", "Physical Memory (K)",
-                              "Commit Charge (K)", "Kernel Memory (K)" };
+                              "Page File (K)", "Kernel Memory (K)" };
     for (int i = 0; i < 4; i++) {
         W2kRect g = { c.x + 4 + (i % 2) * (bw + 8), y3 + (i / 2) * (bh / 2 + 2),
                       bw, bh / 2 - 2 };
@@ -720,9 +720,9 @@ static void paint_perf(Drawable d, W2kRect c)
             figure(d, lx, ly + 2 * dy, lw, "System Cache", tm.mem_cached_kb);
             break;
         case 2:
-            figure(d, lx, ly, lw, "Total", tm.commit_kb);
-            figure(d, lx, ly + dy, lw, "Limit", tm.commit_limit_kb);
-            figure(d, lx, ly + 2 * dy, lw, "Peak", tm.commit_peak_kb);
+            figure(d, lx, ly, lw, "Total", tm.swap_total_kb);
+            figure(d, lx, ly + dy, lw, "In Use", tm.swap_total_kb - tm.swap_free_kb);
+            figure(d, lx, ly + 2 * dy, lw, "Peak", tm.swap_peak_kb);
             break;
         case 3:
             figure(d, lx, ly, lw, "Total", tm.slab_kb + tm.kstack_kb + tm.ptables_kb);
@@ -1199,6 +1199,8 @@ int main(void)
     tm.mb->win_ref = tm.win->win;
 
     tm.tabs = w2k_tabs_new(NULL, on_tab);
+    /* The render harness may ask for a tab: W2K_RENDER_TAB=0..2. */
+    { const char *rt = getenv("W2K_RENDER_TAB"); if (rt && getenv("W2K_RENDER")) tm.tabs->sel = atoi(rt) % 3; }
     w2k_tabs_add(tm.tabs, "Applications");
     w2k_tabs_add(tm.tabs, "Processes");
     w2k_tabs_add(tm.tabs, "Performance");

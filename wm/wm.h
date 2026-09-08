@@ -16,6 +16,11 @@
 #define CAPTION_H    w2k_px(W2K_CAPTION_H)     /* SM_CYCAPTION             */
 #define CAPBTN_W     w2k_px(16)    /* SM_CXSIZE                             */
 #define CAPBTN_H     w2k_px(14)    /* SM_CYSIZE                             */
+/* The look the window frame wears: Modern can carry the classic frame. */
+static inline int frame_theme(void)
+{
+    return w2k_theme == THEME_MODERN && w2k_modern_classic_frame ? THEME_CLASSIC : w2k_theme;
+}
 /* One row of task buttons plus the bar's edge. Windows XP and 7 are two
  * pixels taller than Windows 2000, which is what their Start button
  * artwork is drawn for. */

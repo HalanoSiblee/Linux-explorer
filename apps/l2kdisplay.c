@@ -49,6 +49,9 @@ typedef struct { int color; unsigned char r, g, b; } Tint;
  * whole colour table, and the taskbar, Start button and Start menu change
  * with them. The rest are the classic Windows 2000 tint schemes, which
  * only recolour the standard look. */
+/* A preset's `theme` may also be this: the Modern look with the classic
+ * window frame (w2k_modern_classic_frame). */
+#define PRESET_MODERN_CLASSIC 100
 static const struct { const char *name; const Tint *t; int n; int theme; }
 presets[] = {
 #define S(...) (const Tint[]){ __VA_ARGS__ }
@@ -84,28 +87,21 @@ presets[] = {
         {C_MENU,40,40,40},{C_MENUTEXT,240,240,240},{C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},
         {C_DESKTOP,24,32,44},{C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
         {C_APPWORKSPACE,25,25,25}), 25 , THEME_MODERN },
-    /* The Modern schemes on the classic frame: the same flat colours, the
-     * standard caption buttons and glyphs, and a title bar that shades
-     * from off-white to white -- or, with the lights off, from off-black
-     * to black under white glyphs. */
-    { "Modern Light Classic", S({C_FACE,243,243,243},{C_LIGHT,243,243,243},
-        {C_HILIGHT,196,196,196},{C_SHADOW,243,243,243},{C_DKSHADOW,196,196,196},
-        {C_TEXT,27,27,27},{C_GRAYTEXT,140,140,140},{C_WINDOW,255,255,255},
-        {C_WINDOWTEXT,27,27,27},{C_WINDOWFRAME,196,196,196},{C_ACTIVETITLE,222,222,222},
-        {C_ACTIVETITLE2,255,255,255},{C_TITLETEXT,27,27,27},{C_INACTIVETITLE,243,243,243},
-        {C_INACTIVETITLE2,250,250,250},{C_INACTIVETITLETEXT,140,140,140},{C_MENU,249,249,249},
-        {C_MENUTEXT,27,27,27},{C_HIGHLIGHT,0,103,192},{C_HIGHLIGHTTEXT,255,255,255},
-        {C_DESKTOP,36,82,140},{C_SCROLLBAR,240,240,240},{C_TOOLTIP,255,255,255},
-        {C_TOOLTIPTEXT,27,27,27},{C_APPWORKSPACE,225,225,225}), 25 , -1 },
+    /* The Modern schemes with the standard window frame: everything is
+     * still Modern -- the rounded buttons, the bar, the menus -- but the
+     * caption is the classic one, its buttons and glyphs (white in the
+     * dark one) under a title bar shading from off-white to white or
+     * from off-black to black. */
+    { "Modern Light Classic", S({C_ACTIVETITLE,222,222,222},{C_ACTIVETITLE2,255,255,255},
+        {C_INACTIVETITLE,243,243,243},{C_INACTIVETITLE2,250,250,250}), 4 , PRESET_MODERN_CLASSIC },
     { "Modern Dark Classic", S({C_FACE,32,32,32},{C_LIGHT,32,32,32},{C_HILIGHT,72,72,72},
         {C_SHADOW,32,32,32},{C_DKSHADOW,72,72,72},{C_TEXT,240,240,240},{C_GRAYTEXT,128,128,128},
         {C_WINDOW,25,25,25},{C_WINDOWTEXT,240,240,240},{C_WINDOWFRAME,72,72,72},
         {C_ACTIVETITLE,52,52,52},{C_ACTIVETITLE2,0,0,0},{C_TITLETEXT,255,255,255},
-        {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,16,16,16},
-        {C_INACTIVETITLETEXT,128,128,128},{C_MENU,40,40,40},{C_MENUTEXT,240,240,240},
-        {C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},{C_DESKTOP,24,32,44},
-        {C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
-        {C_APPWORKSPACE,25,25,25}), 25 , -1 },
+        {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,16,16,16},{C_INACTIVETITLETEXT,128,128,128},
+        {C_MENU,40,40,40},{C_MENUTEXT,240,240,240},{C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},
+        {C_DESKTOP,24,32,44},{C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
+        {C_APPWORKSPACE,25,25,25}), 25 , PRESET_MODERN_CLASSIC },
     { "Brick", S({C_ACTIVETITLE,128,0,0},{C_ACTIVETITLE2,192,96,96},{C_INACTIVETITLE,128,128,64},
         {C_INACTIVETITLE2,192,192,128},{C_HIGHLIGHT,128,0,0},{C_DESKTOP,0,128,128},
         {C_FACE,192,192,192},{C_LIGHT,223,223,223},{C_MENU,192,192,192},{C_SCROLLBAR,192,192,192}), 10 , -1 },
@@ -580,6 +576,8 @@ static int matching_preset(void)
 {
     for (int i = 0; i < NPRESET; i++) {
         int th = presets[i].theme;
+        int cf = th == PRESET_MODERN_CLASSIC;
+        if (cf) th = THEME_MODERN;
         if (th >= 0 && th != THEME_CLASSIC && th != THEME_MODERN) {
             if (w2k_theme == th) return i;
             continue;
@@ -588,6 +586,7 @@ static int matching_preset(void)
          * tints over Windows Standard. */
         int base = th == THEME_MODERN ? THEME_MODERN : THEME_CLASSIC;
         if (w2k_theme != base) continue;
+        if (base == THEME_MODERN && w2k_modern_classic_frame != cf) continue;
         /* Every colour must be what this preset would set it to. */
         int ok = 1;
         for (int c = 0; c < N_COLORS && ok; c++) {
@@ -623,7 +622,9 @@ static void on_scheme(void *u, int i)
      * the folder options and the monitor arrangement back to their
      * defaults too, and Apply would then write those defaults over what
      * Performance Options and the other applets had saved. */
-    w2k_theme = presets[i].theme >= 0 ? presets[i].theme : THEME_CLASSIC;
+    w2k_modern_classic_frame = presets[i].theme == PRESET_MODERN_CLASSIC;
+    w2k_theme = presets[i].theme == PRESET_MODERN_CLASSIC ? THEME_MODERN
+              : presets[i].theme >= 0 ? presets[i].theme : THEME_CLASSIC;
     w2k_theme_colours(w2k_theme);
     snprintf(w2k_wallpaper, sizeof w2k_wallpaper, "%s", wp);
     w2k_wallpaper_style = st;
@@ -1601,7 +1602,9 @@ int main(int argc, char **argv)
         }
         for (int i = 0; i < NPRESET; i++)
             if (!strcasecmp(presets[i].name, argv[2])) {
-                w2k_theme = presets[i].theme >= 0 ? presets[i].theme : THEME_CLASSIC;
+                w2k_modern_classic_frame = presets[i].theme == PRESET_MODERN_CLASSIC;
+                w2k_theme = presets[i].theme == PRESET_MODERN_CLASSIC ? THEME_MODERN
+                          : presets[i].theme >= 0 ? presets[i].theme : THEME_CLASSIC;
                 w2k_theme_colours(w2k_theme);
                 for (int k = 0; k < presets[i].n; k++)
                     w2k_color_set(presets[i].t[k].color, presets[i].t[k].r,

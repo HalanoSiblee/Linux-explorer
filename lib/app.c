@@ -389,6 +389,7 @@ static const unsigned char modern[N_COLORS][3] = {
 };
 
 int w2k_theme = THEME_CLASSIC;
+int w2k_modern_classic_frame;
 
 const char *w2k_theme_name(int theme)
 {
@@ -444,6 +445,7 @@ void w2k_scheme_reset(void)
     w2k_start_banner_bottom[2] = 255;
     w2k_start_banner_dither = 0;
     w2k_start_banner_gradient = 1;
+    w2k_modern_classic_frame = 0;
     w2k_start_icon = SI_FLAG;
     w2k_start_search = 1;
     w2k_start_panel = 0;
@@ -706,6 +708,10 @@ int w2k_scheme_load(const char *path)
             w2k_start_banner_gradient = atoi(val) != 0;
             continue;
         }
+        if (!strcasecmp(line, "ModernFrame")) {
+            w2k_modern_classic_frame = !strncasecmp(val, "classic", 7);
+            continue;
+        }
         if (!strcasecmp(line, "Monitor")) {
             /* Monitor=<output> <mode|auto> <x> <y> <primary> <enabled>
              *         [<rate|auto> <scale%>] -- the last two since 1.7 */
@@ -946,6 +952,7 @@ int w2k_scheme_save(const char *path)
             w2k_theme == THEME_BASIC7 ? "basic7" :
             w2k_theme == THEME_MODERN ? "modern" :
             w2k_theme == THEME_VISTA ? "vista" : "classic");
+    fprintf(f, "ModernFrame=%s\n", w2k_modern_classic_frame ? "classic" : "modern");
     fprintf(f, "IconSet=%s\n", w2k_icon_set);
     fprintf(f, "UiScale=%d\n", w2k_ui_scale_pref);
     fprintf(f, "Resample=%s\n", w2k_resample == RS_NEAREST ? "nearest"

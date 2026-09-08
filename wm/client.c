@@ -29,10 +29,10 @@ int client_border(Client *c)
 {
     if (!c->decorate || c->fullscreen) return 0;
     /* Windows 7 Basic frames are ten pixels all round, dialogs included. */
-    if (W2K_THEME_IS7(w2k_theme)) return w2k_px(10);
+    if (W2K_THEME_IS7(frame_theme())) return w2k_px(10);
     /* Modern: a one-pixel line with an invisible six-pixel margin
      * outside it, shaped away, that the resize cursor still finds. */
-    if (w2k_theme == THEME_MODERN) return w2k_theme_modern_margin() + w2k_th(1);
+    if (frame_theme() == THEME_MODERN) return w2k_theme_modern_margin() + w2k_th(1);
     return c->resizable ? FRAME_SIZE : FRAME_FIXED;
 }
 
@@ -41,8 +41,8 @@ int client_caption_h(Client *c)
     if (!c->decorate || c->fullscreen) return 0;
     /* Luna's caption is taller than the classic one: its buttons are 19
      * pixels square where Windows 2000's are 16 by 14. */
-    return w2k_theme == THEME_CLASSIC ? CAPTION_H
-                                      : w2k_px(w2k_theme_caption_h(w2k_theme));
+    return frame_theme() == THEME_CLASSIC ? CAPTION_H
+                                      : w2k_px(w2k_theme_caption_h(frame_theme()));
 }
 
 int client_frame_w(Client *c) { return c->w + 2 * client_border(c); }
@@ -544,7 +544,7 @@ void client_maximize(Client *c, int on)
         int wx, wy, ww, wh;
         wm_workarea_of_client(c, &wx, &wy, &ww, &wh);
         int b = client_border(c), cap = client_caption_h(c);
-        if (w2k_theme == THEME_MODERN) {
+        if (frame_theme() == THEME_MODERN) {
             /* The invisible margin goes off the edge of the work area,
              * as Windows pushes it, so the client meets the edges. */
             int t = w2k_th(1);

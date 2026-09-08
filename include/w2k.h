@@ -367,6 +367,9 @@ enum { THEME_CLASSIC = 0, THEME_XP, THEME_BASIC7, THEME_MODERN, THEME_VISTA, N_T
 #define W2K_THEME_IS7(t) ((t) == THEME_BASIC7 || (t) == THEME_VISTA)
 extern const char *w2k_theme_name(int theme);
 extern int w2k_theme;
+/* Modern with the standard window frame: the classic caption, its buttons
+ * and glyphs, everything else still Modern. ModernFrame=classic. */
+extern int w2k_modern_classic_frame;
 void w2k_theme_colours(int theme);   /* load that theme's colour table */
 
 /* ---- Input settings ------------------------------------------------ *

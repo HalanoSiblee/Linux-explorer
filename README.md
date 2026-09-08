@@ -184,9 +184,11 @@ in and marked with an accent-coloured line, and the default button in a
 dialog is filled with the accent colour. Modern Light is white and grey with a
 blue accent; Modern Dark the same on near-black. The Appearance page has
 a word for people who choose it. Modern Light Classic and Modern Dark
-Classic put the same colours on the standard frame instead: the classic
-caption buttons and glyphs (white in the dark one) under a title bar
-that shades from off-white to white, or from off-black to black.
+Classic are the same look with the standard window frame: the rounded
+buttons, the bar and the menus stay Modern, but the caption is the
+classic one, with its buttons and glyphs (white in the dark one) under
+a title bar that shades from off-white to white, or from off-black to
+black.
 
 Icons come in five sets, from Display Properties > Appearance > Icons:
 Windows 2000 (the built-in artwork), Windows 98, Windows XP, Windows 7 and

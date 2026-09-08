@@ -272,10 +272,10 @@ static void read_monitors(void)
     }
 }
 
-/* How the scale is produced: SCALE_XRANDR, SCALE_SUPER or SCALE_DESKTOP,
- * from the Method box on the Settings page. */
+/* How the scale is produced: SCALE_XRANDR, SCALE_SUPER, SCALE_SUPER2 or
+ * SCALE_DESKTOP, from the Method box on the Settings page. */
 static int scale_method;
-static const int method_modes[3] = { SCALE_XRANDR, SCALE_SUPER, SCALE_DESKTOP };
+static const int method_modes[4] = { SCALE_XRANDR, SCALE_SUPER, SCALE_SUPER2, SCALE_DESKTOP };
 
 /* What the desktop would render at with the pending choices. */
 static int pending_render(void)
@@ -917,7 +917,7 @@ static void on_rate(void *u, int i)
 static void on_method(void *u, int i)
 {
     (void)u;
-    if (i < 0 || i > 2) return;
+    if (i < 0 || i > 3) return;
     scale_method = method_modes[i];
     for (int k = 0; k < nmons; k++) snap_monitor(k);   /* virtual sizes change */
     dl.dirty = dl.mon_dirty = 1;
@@ -1249,6 +1249,9 @@ static void paint(W2kWin *w, Drawable d)
             else if (scale_method == SCALE_SUPER)
                 how = want == render ? " (desktop drawn at 200%; next logon)"
                                      : " (drawn at 200%, shown shrunk: sharp; next logon)";
+            else if (scale_method == SCALE_SUPER2)
+                how = render == want * 2 ? " (drawn at twice this, halved: supersampled; next logon)"
+                                         : " (drawn larger, shrunk to fit; next logon)";
             else
                 how = want == render ? " (desktop drawn larger; takes effect at the next logon)"
                                      : " (desktop scale follows the primary; the screen makes up the rest)";
@@ -1322,6 +1325,28 @@ static void do_apply(void)
      * is pressed; before, switching tabs after choosing a scale lost it. */
     int monitors = nmons && (dl.tabs->sel == 2 || dl.mon_dirty);
     int running = w2k_ui_scale;
+    if (monitors) {
+        /* The X server's framebuffer has a ceiling -- 16384 on most GPUs --
+         * and the supersampled methods spend it fast: three monitors at
+         * three times their size do not fit. Say so rather than let xrandr
+         * fail at the next logon. */
+        int right = 0, bottom = 0;
+        for (int i = 0; i < nmons; i++) {
+            if (!mons[i].want_enabled) continue;
+            int mw, mh;
+            pending_size(&mons[i], &mw, &mh);
+            if (mons[i].px + mw > right) right = mons[i].px + mw;
+            if (mons[i].py + mh > bottom) bottom = mons[i].py + mh;
+        }
+        if (right > 16384 || bottom > 16384) {
+            char msg[300];
+            snprintf(msg, sizeof msg, "With this scaling method the screen would be %d x %d pixels, "
+                     "and the X server allows at most 16384 each way.\n\nChoose Sharp or Screen, "
+                     "a smaller scale, or fewer monitors.", right, bottom);
+            w2k_msgbox(dl.win, "Display Properties", msg, MB_OK | MB_ICONWARNING);
+            return;
+        }
+    }
     if (monitors) record_monitors();
     w2k_scheme_save(NULL);
     w2k_scheme_broadcast();
@@ -1709,9 +1734,11 @@ int main(int argc, char **argv)
     dl.method->on_change = on_method;
     w2k_combo_add(dl.method, "Screen (xrandr stretches the picture)");
     w2k_combo_add(dl.method, "Sharp (drawn at 200%, shrunk to fit)");
+    w2k_combo_add(dl.method, "Sharp 2x (drawn at twice the scale, halved)");
     w2k_combo_add(dl.method, "Desktop (experimental: drawn at the scale)");
     scale_method = w2k_scale_mode;
-    dl.method->sel = scale_method == SCALE_SUPER ? 1 : scale_method == SCALE_DESKTOP ? 2 : 0;
+    dl.method->sel = scale_method == SCALE_SUPER ? 1 : scale_method == SCALE_SUPER2 ? 2
+                   : scale_method == SCALE_DESKTOP ? 3 : 0;
     dl.method->r = (W2kRect){ c.x + 100, c.y + 322, c.w - 110, 21 };
     dl.resample = w2k_combo_new(0);
     dl.resample->on_change = on_resample;

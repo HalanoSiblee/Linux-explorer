@@ -256,6 +256,11 @@ the panel that picture shrunk to the scale you asked for. Shrinking
 stays crisp where stretching smears, at the cost of a larger virtual
 screen for the GPU. It takes effect at the next logon.
 
+"Sharp 2x" renders at twice the largest scale wanted and lets xrandr halve
+it: at 2:1 its bilinear is a clean 2x2 box, so the whole picture is
+supersampled rather than stretched. Four times the pixels of the scale;
+best when the monitors share a scale.
+
 A Resampling box beside it picks the filter the desktop uses for its own
 artwork at a fraction -- icons, the XP and 7 chrome, the pointer, the
 wallpaper: Lanczos, cubic spline, bilinear or nearest.
@@ -280,7 +285,7 @@ whole scale.
 
 Everything the applets set lives in `~/.w2k/scheme` (colours, theme,
 wallpaper, effects, taskbar, folder options, input settings, the monitor
-arrangement, `UiScale=` and `ScaleMode=desktop|supersample|xrandr` for
+arrangement, `UiScale=` and `ScaleMode=desktop|supersample2|supersample|xrandr` for
 the scaling above, `Resample=`, the power scheme's `MonitorOff=`,
 `StandBy=` and `Hibernate=` minutes, `StartWidth=` for the classic Start
 menu's columns) and is applied live to every running program. Shut Down

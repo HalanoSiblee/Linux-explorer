@@ -33,6 +33,21 @@ machinery below, at its one exact setting. Each monitor keeps its own
 scale: a second monitor wanting 100% gets `--scale 2` from the same
 200% desktop.
 
+### Sharp 2x
+
+"Sharp 2x" is Sharp taken to its conclusion: the desktop renders at
+twice the largest scale any monitor wants -- 300% for a 150% monitor --
+and xrandr halves it. At exactly 2:1 xrandr's bilinear filter is a clean
+2x2 box: every screen pixel is the average of four rendered ones, so
+text and edges come out supersampled rather than stretched, with no
+ringing and nothing invented. It is the best picture X11 can be made to
+give a fractional scale, and the dearest: four times the pixels of the
+scale itself, drawn by every program (GTK and Qt render at 3x). Monitors
+at other scales are shrunk by more than two -- a 100% monitor beside a
+150% one is shown at 3:1, which bilinear does less cleanly -- so it
+suits a desktop whose monitors share a scale. Like Sharp it takes
+effect at the next logon. `ScaleMode=supersample2`.
+
 ## Desktop scaling (the experimental way)
 
 The panel stays at its native size and the desktop renders larger. This

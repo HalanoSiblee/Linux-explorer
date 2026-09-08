@@ -22,6 +22,15 @@ int w2k_scale_render(int mode, const int *wants, int n, int primary)
         int w = primary >= 0 && primary < n ? wants[primary] : wants[0];
         return w > 0 ? w : 100;
     }
+    if (mode == SCALE_SUPER2) {
+        /* Twice the largest scale wanted: that monitor is halved, the
+         * others shrunk by more. Nothing to do when nobody wants more
+         * than 100. */
+        int top = 100;
+        for (int i = 0; i < n; i++)
+            if (wants[i] > top) top = wants[i];
+        return top > 100 ? top * 2 : 100;
+    }
     /* Supersampled: a whole scale to render at, shrunk to what each
      * monitor wants. 200 covers every fraction on offer. */
     for (int i = 0; i < n; i++)
@@ -45,6 +54,7 @@ double w2k_scale_transform(int mode, int render, int want, const char **filter)
     } else {
         f = (double)render / want;
         if (render == 100 && want == 200) flt = "nearest";
+        else if (f > 1.0001) flt = "bilinear";   /* shrinking: nearest would drop pixels */
     }
     if (filter) *filter = flt;
     return f;
@@ -865,6 +875,7 @@ int w2k_scheme_load(const char *path)
         }
         if (!strcasecmp(line, "ScaleMode")) {
             w2k_scale_mode = strcasecmp(val, "desktop") == 0 ? SCALE_DESKTOP
+                           : strcasecmp(val, "supersample2") == 0 ? SCALE_SUPER2
                            : strcasecmp(val, "supersample") == 0 ? SCALE_SUPER : SCALE_XRANDR;
             continue;
         }
@@ -963,6 +974,7 @@ int w2k_scheme_save(const char *path)
                                 : w2k_resample == RS_BILINEAR ? "bilinear"
                                 : w2k_resample == RS_LANCZOS ? "lanczos" : "cubic");
     fprintf(f, "ScaleMode=%s\n", w2k_scale_mode == SCALE_DESKTOP ? "desktop"
+                                : w2k_scale_mode == SCALE_SUPER2 ? "supersample2"
                                 : w2k_scale_mode == SCALE_SUPER ? "supersample" : "xrandr");
     fprintf(f, "SoundPack=%s\n", w2k_sound_pack);
     fprintf(f, "SoundVolume=%d\n", w2k_sound_volume);

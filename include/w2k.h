@@ -465,12 +465,16 @@ int         w2k_trash_restore(const char *name);   /* put one back */
 extern int w2k_ui_scale;
 extern int w2k_scale_raw;
 extern int w2k_ui_scale_pref;        /* what the scheme asks for, per cent */
-extern int w2k_scale_mode;           /* SCALE_XRANDR / SCALE_DESKTOP / SCALE_SUPER */
+extern int w2k_scale_mode;           /* SCALE_XRANDR / SCALE_DESKTOP / SCALE_SUPER / SCALE_SUPER2 */
 /* Screen: xrandr stretches a smaller virtual screen (nearest at 200%).
  * Desktop: the desktop renders at the scale, the screen is left alone.
  * Super: the desktop renders at 200% and xrandr shrinks it to the scale
- * wanted -- downscaling stays sharp where upscaling smears. */
-enum { SCALE_XRANDR, SCALE_DESKTOP, SCALE_SUPER };
+ * wanted -- downscaling stays sharp where upscaling smears.
+ * Super2: the desktop renders at twice the largest scale wanted, so the
+ * monitor that wants it is shrunk exactly 2:1, where xrandr's bilinear
+ * is a clean 2x2 box -- the whole picture supersampled, nothing
+ * stretched. Costs four times the pixels of the scale itself. */
+enum { SCALE_XRANDR, SCALE_DESKTOP, SCALE_SUPER, SCALE_SUPER2 };
 /* What the desktop renders at for a mode, given each monitor's wanted
  * scale (per cent) and which is primary. */
 int    w2k_scale_render(int mode, const int *wants, int n, int primary);

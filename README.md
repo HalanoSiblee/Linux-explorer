@@ -168,27 +168,22 @@ Each look, as a desktop at 1280 by 800 with Explorer, Display Properties, Calcul
 
 ![Windows 7 Basic: the orb, the Windows 7 Start menu and taskbar](docs/desktop-windows7.png)
 
-![Modern Light: flat captions, rounded buttons and a plain bar](docs/desktop-modern-light.png)
+![Modern Light: rounded buttons and a plain bar](docs/desktop-modern-light.png)
 
 ![Modern Dark: the same on near-black](docs/desktop-modern-dark.png)
 
 ![Windows Classic Dark: the classic look with the lights off](docs/desktop-classic-dark.png)
 
-Modern is for anyone who wants the desktop without the bevels: title bars
-in the window's own colour with thin Minimize, Maximize and Close glyphs
-(Close turns red when pressed), a one-pixel window border with rounded
-corners and an invisible six-pixel resize margin outside it, as Windows
-10 and 11 have, and flat rounded buttons everywhere -- in dialogs, on
-toolbars and on the taskbar, where the active window's button is pressed
-in and marked with an accent-coloured line, and the default button in a
-dialog is filled with the accent colour. Modern Light is white and grey with a
-blue accent; Modern Dark the same on near-black. The Appearance page has
-a word for people who choose it. Modern Light Classic and Modern Dark
-Classic are the same look with the standard window frame: the rounded
-buttons, the bar and the menus stay Modern, but the caption is the
-classic one, with its buttons and glyphs (white in the dark one) under
-a title bar that shades from off-white to white, or from off-black to
-black.
+Modern is for anyone who wants the desktop without the bevels: flat
+rounded buttons everywhere -- in dialogs, on toolbars and on the
+taskbar, where the active window's button is pressed in and marked with
+an accent-coloured line -- the default button in a dialog filled with
+the accent colour, and a plain bar. The window frame is the standard
+one, with the classic caption buttons and glyphs, under a title bar that
+shades gently from off-white to white. Modern Light is white and grey
+with a blue accent; Modern Dark the same on near-black, its glyphs white
+and its title bar off-black to black. The Appearance page has a word
+for people who choose it.
 
 Icons come in five sets, from Display Properties > Appearance > Icons:
 Windows 2000 (the built-in artwork), Windows 98, Windows XP, Windows 7 and

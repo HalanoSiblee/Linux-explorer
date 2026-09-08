@@ -74,31 +74,21 @@ presets[] = {
         {C_MENU,64,64,64},{C_MENUTEXT,230,230,230},{C_HIGHLIGHT,10,36,106},{C_HIGHLIGHTTEXT,255,255,255},
         {C_DESKTOP,32,48,64},{C_SCROLLBAR,80,80,80},{C_TOOLTIP,48,48,32},{C_TOOLTIPTEXT,230,230,200},
         {C_APPWORKSPACE,40,40,40}), 25 , -1 },
-    /* The two modern schemes: flat. The bevel colours are chosen so a
-     * button's outer ring is a thin grey outline and its inner ring the
-     * face itself, which is as flat as a 3D edge can be made to look. */
-    /* The Modern look's own scheme, and the same with the lights off. */
-    { "Modern Light", NULL, 0, THEME_MODERN },
+    /* The two Modern schemes: flat, with the standard window frame.
+     * Everything is Modern -- the rounded buttons, the plain bar, the
+     * menus -- but the caption is the classic one, its buttons and glyphs
+     * (white in the dark one) under a title bar that shades gently from
+     * off-white to white, or from off-black to black. The bevel colours
+     * are chosen so a button's outer ring is a thin grey outline and its
+     * inner ring the face itself, which is as flat as a 3D edge can be
+     * made to look. */
+    { "Modern Light", S({C_ACTIVETITLE,236,236,236},{C_ACTIVETITLE2,250,250,250},
+        {C_INACTIVETITLE,243,243,243},{C_INACTIVETITLE2,247,247,247}), 4 , PRESET_MODERN_CLASSIC },
     { "Modern Dark", S({C_FACE,32,32,32},{C_LIGHT,32,32,32},{C_HILIGHT,72,72,72},
         {C_SHADOW,32,32,32},{C_DKSHADOW,72,72,72},{C_TEXT,240,240,240},{C_GRAYTEXT,128,128,128},
         {C_WINDOW,25,25,25},{C_WINDOWTEXT,240,240,240},{C_WINDOWFRAME,72,72,72},
-        {C_ACTIVETITLE,32,32,32},{C_ACTIVETITLE2,32,32,32},{C_TITLETEXT,255,255,255},
-        {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,32,32,32},{C_INACTIVETITLETEXT,128,128,128},
-        {C_MENU,40,40,40},{C_MENUTEXT,240,240,240},{C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},
-        {C_DESKTOP,24,32,44},{C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
-        {C_APPWORKSPACE,25,25,25}), 25 , THEME_MODERN },
-    /* The Modern schemes with the standard window frame: everything is
-     * still Modern -- the rounded buttons, the bar, the menus -- but the
-     * caption is the classic one, its buttons and glyphs (white in the
-     * dark one) under a title bar shading from off-white to white or
-     * from off-black to black. */
-    { "Modern Light Classic", S({C_ACTIVETITLE,222,222,222},{C_ACTIVETITLE2,255,255,255},
-        {C_INACTIVETITLE,243,243,243},{C_INACTIVETITLE2,250,250,250}), 4 , PRESET_MODERN_CLASSIC },
-    { "Modern Dark Classic", S({C_FACE,32,32,32},{C_LIGHT,32,32,32},{C_HILIGHT,72,72,72},
-        {C_SHADOW,32,32,32},{C_DKSHADOW,72,72,72},{C_TEXT,240,240,240},{C_GRAYTEXT,128,128,128},
-        {C_WINDOW,25,25,25},{C_WINDOWTEXT,240,240,240},{C_WINDOWFRAME,72,72,72},
-        {C_ACTIVETITLE,52,52,52},{C_ACTIVETITLE2,0,0,0},{C_TITLETEXT,255,255,255},
-        {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,16,16,16},{C_INACTIVETITLETEXT,128,128,128},
+        {C_ACTIVETITLE,42,42,42},{C_ACTIVETITLE2,22,22,22},{C_TITLETEXT,255,255,255},
+        {C_INACTIVETITLE,32,32,32},{C_INACTIVETITLE2,26,26,26},{C_INACTIVETITLETEXT,128,128,128},
         {C_MENU,40,40,40},{C_MENUTEXT,240,240,240},{C_HIGHLIGHT,0,120,212},{C_HIGHLIGHTTEXT,255,255,255},
         {C_DESKTOP,24,32,44},{C_SCROLLBAR,45,45,45},{C_TOOLTIP,43,43,43},{C_TOOLTIPTEXT,240,240,240},
         {C_APPWORKSPACE,25,25,25}), 25 , PRESET_MODERN_CLASSIC },

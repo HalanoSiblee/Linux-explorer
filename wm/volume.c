@@ -120,9 +120,28 @@ void volume_toggle_mute(void)
     if (system(cmd) == 0) vol_muted = !vol_muted;
 }
 
-/* The speaker, drawn at 16x16: a cone, and either arcs or a cross. */
+/* The speaker, drawn at 16x16: a cone, and either arcs or a cross. On
+ * the Windows 7 bar it is Windows 7's own glyph, cut from a capture. */
 void volume_draw(Drawable d, int x, int y)
 {
+    if (w2k_theme == THEME_BASIC7) {
+        static W2kSkin *glyph;
+        static int tried;
+        if (!tried) {
+            tried = 1;
+            char path[1024];
+            if (w2k_skin_path("w7-volume.png", path, sizeof path)) glyph = w2k_skin_load(path);
+        }
+        if (glyph) {
+            w2k_skin_draw(d, glyph, x, y, 0, 0, 16, 16);
+            if (vol_muted || vol_level == 0)
+                for (int i = 0; i < 6; i++) {          /* a red cross over the waves */
+                    w2k_fill_rgb(d, x + 9 + i, y + 5 + i, 1, 1, 200, 30, 30);
+                    w2k_fill_rgb(d, x + 14 - i, y + 5 + i, 1, 1, 200, 30, 30);
+                }
+            return;
+        }
+    }
     int c = C_TEXT;
     /* body */
     w2k_fill(d, x + 2, y + 6, 2, 4, c);

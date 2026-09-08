@@ -6,6 +6,7 @@
  * synchronise and no IPC to pay for. */
 #include "wm.h"
 #include "w2kui.h"
+#include <X11/extensions/shape.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +27,10 @@
 /* Where a button row starts: a pixel of bar shows above the classic and
  * XP buttons; Windows 7's fill the row. */
 #define BTN_TOP      ((TASKBAR_ROW - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0))
-#define W7_SLIVER    12       /* Windows 7's Show Desktop, at the bar's far end */
+#define W7_SLIVER    15       /* Windows 7's Show Desktop, at the bar's far end: measured */
+#define W7_ORB_W     58       /* the orb's artwork, and how much of it shows over the big and small bars */
+#define W7_ORB_H     51
+#define W7_ORB_SMALL 45
 #define W7_ARROW     14       /* the "show hidden icons" arrow and its air */
 #define TRAY_PAD      6
 
@@ -73,6 +77,9 @@ static void taskbar_geometry(int *x, int *y, int *w, int *h)
     }
 }
 static int    tb_shown = 1;        /* only meaningful when auto-hiding */
+static Window orb;                 /* Windows 7's orb, risen above the bar: a shaped window of its own */
+static int    orb_mapped, orb_pw, orb_ph;
+static void   orb_paint(void);
 static char   clock_text[32];
 static char   clock_date[40];     /* Windows 7 shows the date under the time */
 
@@ -171,10 +178,12 @@ static W2kSkin *theme_start_skin(void)
     orb_frames_free();
     if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN) return NULL;
 
-    /* Vista's bar is thirty rows: the orb that fits it is the small one. */
+    /* Windows 7's orb is the same size over either bar -- it rises
+     * above the small one further -- and lives in a window of its own
+     * (orb_place); Vista's bar is thirty rows and keeps the small one
+     * that fits it. */
     const char *file = w2k_theme == THEME_XP ? "xp-start.png"
-                     : (w2k_taskbar_small || w2k_theme == THEME_VISTA) ? "w7-orb-small.png"
-                                                                       : "w7-orb.png";
+                     : w2k_theme == THEME_VISTA ? "w7-orb-small.png" : "w7-orb.png";
     char path[1024];
     if (w2k_skin_path(file, path, sizeof path)) {
         skin = w2k_skin_load(path);
@@ -437,9 +446,10 @@ static void layout(void)
     task_x  = ql_x + NQL * QL_BTN + START_GAP + GRIP_W;
     int seven = w2k_theme == THEME_BASIC7;
     if (seven) {
-        /* Measured: the first pinned button starts 58 pixels in, and the
-         * buttons, pinned and running alike, are 60 wide and adjacent. */
-        ql_x   = 58;
+        /* Measured off full-size captures: the first button's border is
+         * the 62nd column, and the buttons, pinned and running alike, are
+         * adjacent -- 60 wide as icons, 160 with their labels. */
+        ql_x   = 61;
         task_x = ql_x + NQL * QL_BTN;
     }
 
@@ -456,15 +466,18 @@ static void layout(void)
     int tpad = w2k_theme == THEME_XP ? 12 : TRAY_PAD;
     tray_w  = w2k_taskbar_showclock ? clock_w + 2 * tpad : 0;
     tray_x  = tb_w - (seven ? W7_SLIVER + 6 : TB_PAD) - tray_w;
+    /* Measured: the clock's lines are centred 53 columns from the bar's
+     * end, the first icon's right edge 96 from it, the icons 24 apart. */
+    if (seven && w2k_taskbar_showclock) tray_x = tb_w - 53 - tray_w / 2;
 
     /* Luna spaces its icons wider: six pixels between them, a dozen
      * either side of the clock. */
     int tgap = w2k_theme == THEME_XP ? 6 : (seven || w2k_theme == THEME_VISTA) ? 8 : 4;
-    vol_x = tray_x - tgap - 16;
+    vol_x = seven ? tb_w - 111 : tray_x - tgap - 16;
     bat_x = bat.present ? vol_x - tgap - 16 : vol_x;
     notify_w = tray_width();
     notify_x = bat_x - (notify_w ? notify_w + tgap : 0);
-    tray_layout(notify_x, (TASKBAR_H - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0) + (BTN_H - 16) / 2, 16);
+    tray_layout(notify_x, (TASKBAR_H - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0) + (BTN_H - 16) / 2 + (seven ? 1 : 0), 16);
 
     ntasks = 0;
     for (Client *c = clients; c && ntasks < 64; c = c->next)
@@ -590,11 +603,17 @@ static void taskbar_draw(Pixmap pm, int h)
         int sw = w2k_skin_w(skin), sh = w2k_skin_h(skin) / 3;
         int state = start_pressed ? 2 : (start_hot ? 1 : 0);
         int sy = vert ? TB_PAD : (h - sh) / 2;
+        /* Windows 7's orb sits on the bar's bottom edge and rises above
+         * its top: the bar itself shows the lower part; the orb window
+         * over it shows the whole. */
+        if (w2k_theme == THEME_BASIC7 && !vert) sy = h - (w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
+        /* Measured: Windows 7's orb starts two columns in. */
+        int sx0 = w2k_theme == THEME_BASIC7 && !vert ? 2 : TB_PAD - 2;
         if (state != 2 && orb_frames[0] && W2K_THEME_IS7(w2k_theme))
             /* Part way through the glow: the mixed frame. */
-            w2k_skin_draw(pm, orb_frames[orb_frame], TB_PAD - 2, sy, 0, 0, sw, sh);
+            w2k_skin_draw(pm, orb_frames[orb_frame], sx0, sy, 0, 0, sw, sh);
         else
-            w2k_skin_draw(pm, skin, TB_PAD - 2, sy, 0, state * sh, sw, sh);
+            w2k_skin_draw(pm, skin, sx0, sy, 0, state * sh, sw, sh);
     } else {
         w2k_button(pm, TB_PAD, by, start_w, BTN_H, start_pressed);
         int o = start_pressed ? 1 : 0;
@@ -619,11 +638,12 @@ static void taskbar_draw(Pixmap pm, int h)
             if (i == hover_ql)
                 w2k_theme_taskbutton(pm, ql_x + i * QL_BTN, 0, QL_BTN, BTN_H,
                                      W2K_TB_HOT, w2k_theme);
+            /* Measured: the icon 14 in and 7 down on the big bar, 8 down
+             * on the small. */
             if (w2k_taskbar_small)
-                w2k_icon_draw(pm, ql_x + i * QL_BTN + (QL_BTN - 16) / 2,
-                              (BTN_H - 16) / 2, ql[i].icon);
+                w2k_icon_draw(pm, ql_x + i * QL_BTN + (QL_BTN - 16) / 2, 8, ql[i].icon);
             else
-                w2k_bigicon_draw(pm, ql_x + i * QL_BTN + 14, 4, ql[i].icon);
+                w2k_bigicon_draw(pm, ql_x + i * QL_BTN + 14, 7, ql[i].icon);
         }
         else
             w2k_icon_draw(pm, ql_x + i * QL_BTN + (QL_BTN - 16) / 2,
@@ -654,20 +674,21 @@ static void taskbar_draw(Pixmap pm, int h)
         }
         if (w2k_theme == THEME_BASIC7) {
             int isz = w2k_taskbar_small ? 16 : 32;
+            int iy = by + (w2k_taskbar_small ? 8 : 7);      /* measured */
             if (!w2k_taskbar_labels) {
                 /* Combined: the icon alone, centred. */
                 if (w >= isz) {
-                    int ix = x + (w - isz) / 2, iy = by + (bh - isz) / 2;
+                    int ix = x + (w - isz) / 2;
                     if (isz == 32) w2k_bigicon_draw(pm, ix, iy, c->icon);
                     else           w2k_icon_draw(pm, ix, iy, c->icon);
                 }
                 continue;
             }
-            /* Never combine: icon at the left, the title beside it. */
-            int ix = x + 6, iy = by + (bh - isz) / 2;
+            /* Never combine: the icon ten in, the title eight past it. */
+            int ix = x + 10;
             if (isz == 32) w2k_bigicon_draw(pm, ix, iy, c->icon);
             else           w2k_icon_draw(pm, ix, iy, c->icon);
-            int tx = ix + isz + 6, avail = x + w - 6 - tx;
+            int tx = ix + isz + 8, avail = x + w - 6 - tx;
             if (avail > 6) {
                 char buf[160];
                 w2k_ellipsis(F_UI, c->name, avail, buf, sizeof buf);
@@ -716,12 +737,12 @@ static void taskbar_draw(Pixmap pm, int h)
     if (w2k_theme == THEME_BASIC7) {
         /* The darker notification area, faded in from the bar, and the
          * "show hidden icons" arrow Windows 7 keeps at its left. */
-        int ax = notify_x - W7_ARROW;
-        int tx = ax - 10 - 32;
-        w2k_theme_tray(pm, tx, 0, tb_w - W7_SLIVER - 1 - tx, h, w2k_theme);
-        int ay = by + BTN_H / 2 - 2;
-        for (int i = 0; i < 3; i++)
-            w2k_fill_rgb(pm, ax + 2 - i, ay + i, 1 + 2 * i, 1, 228, 234, 244);
+        /* Measured: seven wide and four tall, its top row at the bar's
+         * middle, twenty columns before the first icon. */
+        int ax = notify_x - 20;
+        int ay = h / 2;
+        for (int i = 0; i < 4; i++)
+            w2k_fill_rgb(pm, ax + 3 - i, ay + i, 1 + 2 * i, 1, 228, 234, 244);
     } else if (w2k_theme == THEME_VISTA) {
         /* Vista keeps the arrow too, on its plain dark bar. */
         int ax = notify_x - W7_ARROW;
@@ -746,12 +767,19 @@ static void taskbar_draw(Pixmap pm, int h)
         int cw = tray_w - 2 * TRAY_PAD;
         int tw = w2k_text_width(F_UI, clock_text, -1);
         int dw = w2k_text_width(F_UI, clock_date, -1);
-        int ty = w2k_taskbar_small ? 3 : 6, dy = w2k_taskbar_small ? 15 : 21;
-        /* White, as Windows 7 sets its clock. */
-        w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - tw) / 2, ty,
-                     clock_text, 255, 255, 255);
-        w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - dw) / 2, dy,
-                     clock_date, 255, 255, 255);
+        int fh = w2k_font_height(F_UI);
+        /* White, as Windows 7 sets its clock. Measured: the time's caps
+         * start eight rows down the big bar and the date's 25; the small
+         * bar shows the time alone, centred. */
+        if (w2k_taskbar_small) {
+            w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - tw) / 2, (h - fh) / 2,
+                         clock_text, 255, 255, 255);
+        } else {
+            w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - tw) / 2, 6,
+                         clock_text, 255, 255, 255);
+            w2k_text_rgb(pm, F_UI, tray_x + TRAY_PAD + (cw - dw) / 2, 23,
+                         clock_date, 255, 255, 255);
+        }
     } else if (w2k_taskbar_showclock) {
         int cy = by + (BTN_H - w2k_font_height(F_UI)) / 2;
         if (w2k_theme == THEME_CLASSIC || w2k_theme == THEME_MODERN)
@@ -784,6 +812,7 @@ void taskbar_paint(void)
     }
     taskbar_draw(pm, h);
     XCopyArea(w2k.dpy, pm, tb, w2k.gc, 0, 0, (unsigned)tb_pw, (unsigned)tb_ph, 0, 0);
+    orb_paint();
 }
 
 /* W2K_RENDER aid: the bar as it would be painted `w` wide, to a PPM. */
@@ -973,6 +1002,89 @@ static void taskbar_trigger_place(void)
 
 /* Where the bar sits when hidden: just off its own edge, with a sliver
  * showing so it can still be clicked. */
+/* ------------------------------------------------------------------ *
+ * The Windows 7 orb, in a window of its own
+ *
+ * The real orb rises eleven rows above the big bar (fifteen above the
+ * small one) and sits on the bar's bottom edge: nothing a window the
+ * bar's height can show. So it has its own override-redirect window,
+ * shaped to the artwork, stacked over the bar's left end; the pointer
+ * and clicks on it are the Start button's.
+ * ------------------------------------------------------------------ */
+static int orb_wanted(void)
+{
+    return w2k_theme == THEME_BASIC7 && !vertical() && w2k_taskbar_edge == TB_BOTTOM;
+}
+
+static void orb_setup(void)
+{
+    if (orb || !tb) return;
+    char path[1024];
+    if (!w2k_skin_path("w7-orb.png", path, sizeof path)) return;
+    int iw = 0, ih = 0;
+    unsigned char *rgba = w2k_image_load(path, &iw, &ih);
+    if (!rgba || iw < W7_ORB_W || ih < W7_ORB_H) { free(rgba); return; }
+    orb_pw = w2k_px(W7_ORB_W);
+    orb_ph = w2k_px(W7_ORB_H);
+    XSetWindowAttributes a = {
+        .override_redirect = True,
+        .background_pixel  = w2k.col[C_FACE],
+        .event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask |
+                      EnterWindowMask | LeaveWindowMask
+    };
+    orb = XCreateWindow(w2k.dpy, w2k.root, 0, 0, (unsigned)orb_pw, (unsigned)orb_ph, 0,
+                        CopyFromParent, InputOutput, CopyFromParent,
+                        CWOverrideRedirect | CWBackPixel | CWEventMask, &a);
+    /* The shape: where the first state's art is at least half opaque,
+     * sampled at the size the window is drawn. */
+    int stride = (orb_pw + 7) / 8;
+    unsigned char *bits = calloc((size_t)stride * orb_ph, 1);
+    if (bits) {
+        for (int y = 0; y < orb_ph; y++)
+            for (int x = 0; x < orb_pw; x++) {
+                int sx = x * W7_ORB_W / orb_pw, sy = y * W7_ORB_H / orb_ph;
+                if (rgba[((size_t)sy * iw + sx) * 4 + 3] >= 128) bits[y * stride + (x >> 3)] |= 1 << (x & 7);
+            }
+        Pixmap mask = XCreateBitmapFromData(w2k.dpy, orb, (char *)bits, (unsigned)orb_pw, (unsigned)orb_ph);
+        XShapeCombineMask(w2k.dpy, orb, ShapeBounding, 0, 0, mask, ShapeSet);
+        XFreePixmap(w2k.dpy, mask);
+        free(bits);
+    }
+    free(rgba);
+}
+
+static void orb_place(void)
+{
+    if (!orb) return;
+    int hidden = w2k_taskbar_autohide && !tb_shown;
+    if (!orb_wanted() || hidden || !theme_start_skin()) {
+        if (orb_mapped) { XUnmapWindow(w2k.dpy, orb); orb_mapped = 0; }
+        return;
+    }
+    int vis = w2k_px(w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
+    XMoveWindow(w2k.dpy, orb, tb_x + w2k_px(2), tb_y + tb_ph - vis);
+    if (!orb_mapped) { XMapRaised(w2k.dpy, orb); orb_mapped = 1; }
+    else XRaiseWindow(w2k.dpy, orb);
+}
+
+static void orb_paint(void)
+{
+    if (!orb || !orb_mapped) return;
+    W2kSkin *skin = theme_start_skin();
+    if (!skin) return;
+    static Pixmap opm;
+    static int opm_w, opm_h;
+    if (opm && (opm_w != orb_pw || opm_h != orb_ph)) { w2k_free_pixmap(opm); opm = 0; }
+    if (!opm) { opm = XCreatePixmap(w2k.dpy, orb, (unsigned)orb_pw, (unsigned)orb_ph, w2k.depth); opm_w = orb_pw; opm_h = orb_ph; }
+    /* What shows through the rim's few soft pixels: the bar's colour. */
+    w2k_fill_rgb(opm, 0, 0, W7_ORB_W, W7_ORB_H, 129, 148, 170);
+    int sw = w2k_skin_w(skin), sh = w2k_skin_h(skin) / 3;
+    int state = startmenu_is_open() ? 2 : (start_hot ? 1 : 0);
+    if (state != 2 && orb_frames[0]) w2k_skin_draw(opm, orb_frames[orb_frame], 0, 0, 0, 0, sw, sh);
+    else                             w2k_skin_draw(opm, skin, 0, 0, 0, state * sh, sw, sh);
+    XCopyArea(w2k.dpy, opm, orb, w2k.gc, 0, 0, (unsigned)orb_pw, (unsigned)orb_ph, 0, 0);
+}
+
 static void taskbar_place(void)
 {
     const W2kMonitor *m = w2k_monitor_primary();
@@ -989,6 +1101,7 @@ static void taskbar_place(void)
     if (tb) XMoveWindow(w2k.dpy, tb, x, y);
     tb_x = x;
     tb_y = y;
+    orb_place();
 }
 
 void taskbar_reveal(int show)
@@ -997,7 +1110,7 @@ void taskbar_reveal(int show)
     if (tb_shown == show) return;
     tb_shown = show;
     taskbar_place();
-    if (show) XRaiseWindow(w2k.dpy, tb);
+    if (show) { XRaiseWindow(w2k.dpy, tb); orb_place(); }
 }
 
 void taskbar_relayout(void)
@@ -1026,6 +1139,7 @@ void taskbar_init(void)
     if (tb) {
         XMoveResizeWindow(w2k.dpy, tb, tb_x, tb_y, (unsigned)tb_pw, (unsigned)tb_ph);
         if (w2k_taskbar_ontop) XRaiseWindow(w2k.dpy, tb);
+        if (orb_wanted()) orb_setup();
         taskbar_place();
         taskbar_trigger_place();
         taskbar_paint();
@@ -1041,6 +1155,7 @@ void taskbar_init(void)
                        CopyFromParent, InputOutput, CopyFromParent,
                        CWOverrideRedirect | CWBackPixel | CWEventMask, &a);
     XMapRaised(w2k.dpy, tb);
+    if (orb_wanted()) { orb_setup(); orb_place(); }
     /* Files can be dropped on the Start button and Quick Launch. */
     w2k_dnd_accept(tb);
     taskbar_trigger_place();
@@ -1290,6 +1405,19 @@ int taskbar_event(XEvent *e)
             e->xbutton.x = w2k_lp(e->xbutton.x);
             e->xbutton.y = w2k_lp(e->xbutton.y);
         }
+    }
+
+    /* The orb window: the pointer on it is the pointer on the Start
+     * button, a click on it a click there. */
+    if (orb && e->xany.window == orb) {
+        if (e->type == EnterNotify) { if (!start_hot) { start_hot = 1; start_hot_changed(); } return 1; }
+        if (e->type == LeaveNotify) { if (start_hot) { start_hot = 0; start_hot_changed(); } return 1; }
+        if (e->type == Expose) { orb_paint(); return 1; }
+        if (e->type == ButtonPress || e->type == ButtonRelease) {
+            e->xbutton.window = tb;
+            e->xbutton.x = 20;
+            e->xbutton.y = taskbar_thickness() / 2;
+        } else return 1;
     }
 
     /* The battery's tooltip is what is left in it, as in Windows. */

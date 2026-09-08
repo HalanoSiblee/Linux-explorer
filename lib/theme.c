@@ -668,23 +668,45 @@ void w2k_theme_taskbutton(Drawable d, int x, int y, int w, int h, int state,
         return;
     }
     if (W2K_THEME_IS7(theme)) {
-        /* Basic's buttons are pale framed boxes on the bar: a dark line,
-         * a light one inside it, and a fill that lightens under the
-         * pointer and more for the active window. The reference for these
-         * is a palettised screenshot, so they are drawn, not cropped. */
-        unsigned long fill = state == W2K_TB_DOWN ? w2k_rgb(207, 229, 249)
-                           : state == W2K_TB_HOT  ? w2k_rgb(225, 235, 250)
-                                                  : w2k_rgb(179, 211, 241);
-        int bx = x, by = y + 1, bw = w, bh = h - 1;   /* from under the bar's top line to its last row */
-        XSetForeground(w2k.dpy, w2k.gc, fill);
-        w2k_fill_fg(d, bx + 1, by + 1, bw - 2, bh - 2);
-        XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(200, 218, 238));
-        w2k_frame_fg(d, bx + 1, by + 1, bw - 2, bh - 2);
-        XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(51, 79, 109));
-        w2k_fill_fg(d, bx + 1, by, bw - 2, 1);
-        w2k_fill_fg(d, bx + 1, by + bh - 1, bw - 2, 1);
-        w2k_fill_fg(d, bx, by + 1, 1, bh - 2);
-        w2k_fill_fg(d, bx + bw - 1, by + 1, 1, bh - 2);
+        /* The active window's button, read row by row off a full-size
+         * capture: it spans the bar's whole height, its top border on the
+         * bar's own dark line; a near-black top edge, slate sides, a
+         * white line inside the top and left, a lighter one inside the
+         * right and bottom, and a glassy fill that falls from a pale
+         * blue-grey to its darkest a little past the middle and lifts
+         * again toward the bottom. The pointer's button is the same
+         * faded most of the way in; a window's that is merely running,
+         * a little under half. */
+        static const struct { int at, r, g, b; } stops[] = {
+            {    0, 212, 218, 226 }, {  550, 175, 187, 201 }, { 1000, 196, 205, 215 },
+        };
+        const int body[3] = { 129, 148, 170 };
+        int k = state == W2K_TB_DOWN ? 256 : state == W2K_TB_HOT ? 205 : 115;
+#define MIX(c, b) ((b) + ((c) - (b)) * k / 256)
+        if (w < 4 || h < 5) return;
+        for (int i = 2; i < h - 2; i++) {
+            int at = (i - 2) * 1000 / (h - 5);
+            int j = at < 550 ? 0 : 1;
+            int span = stops[j + 1].at - stops[j].at, t = (at - stops[j].at) * 256 / (span ? span : 1);
+            int r = stops[j].r + (stops[j + 1].r - stops[j].r) * t / 256;
+            int g = stops[j].g + (stops[j + 1].g - stops[j].g) * t / 256;
+            int b = stops[j].b + (stops[j + 1].b - stops[j].b) * t / 256;
+            w2k_fill_rgb(d, x + 2, y + i, w - 4, 1, MIX(r, body[0]), MIX(g, body[1]), MIX(b, body[2]));
+        }
+        w2k_fill_rgb(d, x + 1, y + 1, w - 2, 1, MIX(252, body[0]), MIX(253, body[1]), MIX(254, body[2]));
+        w2k_fill_rgb(d, x + 1, y + h - 2, w - 2, 1, MIX(243, body[0]), MIX(245, body[1]), MIX(247, body[2]));
+        w2k_fill_rgb(d, x + 1, y + 2, 1, h - 4, MIX(246, body[0]), MIX(247, body[1]), MIX(249, body[2]));
+        w2k_fill_rgb(d, x + w - 2, y + 2, 1, h - 4, MIX(234, body[0]), MIX(237, body[1]), MIX(241, body[2]));
+        w2k_fill_rgb(d, x + 1, y, w - 2, 1, MIX(25, body[0]), MIX(29, body[1]), MIX(33, body[2]));
+        w2k_fill_rgb(d, x + 1, y + h - 1, w - 2, 1, MIX(52, body[0]), MIX(59, body[1]), MIX(68, body[2]));
+        w2k_fill_rgb(d, x, y + 1, 1, h - 2, MIX(58, body[0]), MIX(67, body[1]), MIX(77, body[2]));
+        w2k_fill_rgb(d, x + w - 1, y + 1, 1, h - 2, MIX(71, body[0]), MIX(81, body[1]), MIX(93, body[2]));
+        int cr = (MIX(64, body[0]) + body[0]) / 2, cg = (MIX(74, body[1]) + body[1]) / 2, cb = (MIX(85, body[2]) + body[2]) / 2;
+        w2k_fill_rgb(d, x, y, 1, 1, cr, cg, cb);
+        w2k_fill_rgb(d, x + w - 1, y, 1, 1, cr, cg, cb);
+        w2k_fill_rgb(d, x, y + h - 1, 1, 1, cr, cg, cb);
+        w2k_fill_rgb(d, x + w - 1, y + h - 1, 1, 1, cr, cg, cb);
+#undef MIX
         return;
     }
     if (theme == THEME_XP) {
@@ -729,6 +751,9 @@ static const Stop tray_7[] = {
 void w2k_theme_tray(Drawable d, int x, int y, int w, int h, int theme)
 {
     if (W2K_THEME_IS7(theme)) {
+        /* Windows 7's notification area is the bar itself: nothing to
+         * paint. (The darker well below is Vista's, kept for it.) */
+        if (theme == THEME_BASIC7) return;
         if (w <= 0 || h <= 0) return;
         int fade = 32;
         int n = (int)(sizeof tray_7 / sizeof *tray_7);
@@ -784,22 +809,20 @@ void w2k_theme_bar(Drawable d, int x, int y, int w, int h, int theme)
         return;
     }
     if (W2K_THEME_IS7(theme)) {
-        /* The theme's own taskbar texture, both sizes of it, is one flat
-         * colour: (167,192,220), every pixel. The Show Desktop sliver at
-         * the far end is marked off with a line. */
-        w2k_fill_rgb(d, x, y, w, h, 167, 192, 220);
-        /* A dark line along the top with a light one under it. */
-        w2k_fill_rgb(d, x, y, w, 1, 74, 107, 142);
-        w2k_fill_rgb(d, x, y + 1, w, 1, 180, 196, 219);
-        /* Show Desktop: a darker sliver, lighter at its top and bottom,
-         * behind a dark divider -- read off a screenshot. */
-        static const Stop sliver[] = {
-            {    0,  64,  81, 111 }, {   45, 149, 157, 168 }, {  130, 118, 127, 136 },
-            {  250,  90,  97, 113 }, {  600,  95, 104, 118 }, {  850, 116, 129, 148 },
-            { 1000, 141, 150, 159 },
-        };
-        grad_fill(d, x + w - 12, y, 12, h, sliver, (int)(sizeof sliver / sizeof *sliver), NULL, 256);
-        w2k_fill_rgb(d, x + w - 13, y + 1, 1, h - 1, 107, 120, 137);
+        /* Read off full-size captures of the real bar, at rest: one flat
+         * colour, (129,148,170), under a dark line and a light one. The
+         * Show Desktop sliver at the far end is fifteen columns: a dark
+         * divider, twelve of a darker fill, a lighter column, a dark
+         * edge. */
+        w2k_fill_rgb(d, x, y, w, h, 129, 148, 170);
+        w2k_fill_rgb(d, x, y, w, 1, 67, 77, 88);
+        w2k_fill_rgb(d, x, y + 1, w, 1, 202, 217, 234);
+        if (w >= 15) {
+            w2k_fill_rgb(d, x + w - 15, y, 1, h, 72, 83, 95);
+            w2k_fill_rgb(d, x + w - 14, y, 12, h, 92, 106, 121);
+            w2k_fill_rgb(d, x + w - 2, y, 1, h, 112, 124, 138);
+            w2k_fill_rgb(d, x + w - 1, y, 1, h, 75, 86, 99);
+        }
         return;
     }
     if (theme == THEME_XP) {

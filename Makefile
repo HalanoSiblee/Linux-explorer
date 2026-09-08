@@ -14,7 +14,7 @@ CPPFLAGS += -DW2K_PREFIX=\"$(PREFIX)\"
 W2K_VERSION := $(shell cat VERSION)$(shell git rev-parse --short HEAD 2>/dev/null | sed "s/^/+/")
 CPPFLAGS += -DW2K_VERSION=\"$(W2K_VERSION)\"
 CFLAGS  += -I/usr/include/freetype2
-LDLIBS  := -lX11 -lXext -lXrandr -lXcursor -lXft -lfontconfig -lz -ljpeg -lm
+LDLIBS  := -lX11 -lXext -lXrandr -lXcursor -lXft -lXrender -lfontconfig -lz -ljpeg -lm
 
 LIB_SRC := $(wildcard lib/*.c)
 LIB_OBJ := $(LIB_SRC:.c=.o)

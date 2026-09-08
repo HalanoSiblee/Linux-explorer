@@ -313,6 +313,9 @@ effect_info[N_EFFECTS] = {
     [FX_VISUAL_STYLES]     = { "Use visual styles on windows and buttons",       0, 0 },
     [FX_HIDE_ACCEL]        = { "Hide keyboard navigation indicators until I "
                                "use the Alt key",                              1, 1 },
+    /* Ours: icons drawn with their real transparency and their stepped
+     * edges softened, everywhere the desktop draws one (see icon.c). */
+    [FX_SMOOTH_ICONS]      = { "Smooth edges of icons",                        1, 0 },
 };
 
 const char *w2k_effect_label(int i)

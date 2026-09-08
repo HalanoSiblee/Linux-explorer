@@ -167,9 +167,65 @@ static const int scales[] = { 100, 125, 150, 175, 200 };
 static Monitor mons[8];
 static int nmons;
 
+/* Inside the nested compositor the server has one big screen; the real
+ * monitors come from the session (W2K_MONITORS, in nested pixels) and
+ * the saved arrangement (their modes, rates and scales). Each shows one
+ * mode, its own; scale, primary and enabled can be changed, for the next
+ * logon. Monitors the arrangement switched off are listed off. */
+static int read_monitors_nested(void)
+{
+    const char *env = getenv("W2K_MONITORS");
+    if (!env || !*env) return 0;
+    char *dup = strdup(env), *save = NULL;
+    for (char *tok = strtok_r(dup, ";", &save); tok && nmons < 8; tok = strtok_r(NULL, ";", &save)) {
+        char name[64];
+        int w, h, x, y, pri = 0;
+        if (sscanf(tok, "%63[^:]:%dx%d+%d+%d:%d", name, &w, &h, &x, &y, &pri) < 5 || w <= 0 || h <= 0) continue;
+        Monitor *m = &mons[nmons++];
+        memset(m, 0, sizeof *m);
+        snprintf(m->name, sizeof m->name, "%s", name);
+        m->connected = m->enabled = 1;
+        m->primary = pri != 0;
+        m->x = x; m->y = y; m->w = w; m->h = h;
+        m->scale = 100;
+        const W2kMonitorCfg *c = NULL;
+        for (int i = 0; i < w2k_monitor_cfg_n; i++)
+            if (!strcmp(w2k_monitor_cfg[i].name, name)) c = &w2k_monitor_cfg[i];
+        if (c && c->scale > 0) m->scale = c->scale;
+        if (c && c->mode[0]) snprintf(m->modes[0], 16, "%s", c->mode);
+        else snprintf(m->modes[0], 16, "%dx%d", w * m->scale / 100, h * m->scale / 100);
+        snprintf(m->rates[0][0], 8, "%s", c && c->rate[0] ? c->rate : "60.00");
+        m->nmodes = 1; m->nrates[0] = 1; m->cur_mode = 0; m->cur_rate = 0;
+    }
+    free(dup);
+    for (int i = 0; i < w2k_monitor_cfg_n && nmons < 8; i++) {
+        const W2kMonitorCfg *c = &w2k_monitor_cfg[i];
+        int have = 0;
+        for (int k = 0; k < nmons; k++) if (!strcmp(mons[k].name, c->name)) have = 1;
+        if (have) continue;
+        Monitor *m = &mons[nmons++];
+        memset(m, 0, sizeof *m);
+        snprintf(m->name, sizeof m->name, "%s", c->name);
+        m->connected = 1; m->enabled = 0;
+        m->x = c->x; m->y = c->y;
+        m->scale = c->scale > 0 ? c->scale : 100;
+        snprintf(m->modes[0], 16, "%s", c->mode[0] ? c->mode : "1024x768");
+        snprintf(m->rates[0][0], 8, "%s", c->rate[0] ? c->rate : "60.00");
+        m->nmodes = 1; m->nrates[0] = 1; m->cur_mode = 0; m->cur_rate = 0;
+    }
+    for (int i = 0; i < nmons; i++) {
+        Monitor *m = &mons[i];
+        m->mode_sel = 0; m->rate_sel = 0;
+        m->want_scale = m->scale; m->want_primary = m->primary; m->want_enabled = m->enabled;
+        m->px = m->x; m->py = m->y;
+    }
+    return nmons > 0;
+}
+
 static void read_monitors(void)
 {
     nmons = 0;
+    if (read_monitors_nested()) return;
     FILE *p = popen("xrandr --query 2>/dev/null", "r");
     if (!p) return;
     char line[512];
@@ -1261,7 +1317,7 @@ static void paint(W2kWin *w, Drawable d)
                 how = want == render ? " (desktop drawn larger; takes effect at the next logon)"
                                      : " (desktop scale follows the primary; the screen makes up the rest)";
             if (getenv("W2K_MONITORS") && *getenv("W2K_MONITORS"))
-                how = " (shown through the nested compositor; layout changes take the next logon)";
+                how = " (through the nested compositor; layout changes need a logon)";
             snprintf(info, sizeof info, "%s -- %d x %d at %d, %d%s",
                      mons[cur].name, mw, mh, mons[cur].px, mons[cur].py, how);
             w2k_text(d, F_UI, c.x + 10, c.y + c.h - fh - 6, info, C_GRAYTEXT);

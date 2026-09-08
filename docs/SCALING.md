@@ -55,30 +55,45 @@ one of two filters, nearest or bilinear, and lets nothing else in
 between. The one way past it is to move the desktop out of the real
 server altogether: with **Experimental: scale the whole picture through
 the nested compositor** ticked on the Settings page (`Compositor=nested`
-in the scheme), l2k-session starts a headless X server (Xvfb) at each
-monitor's *logical* size -- 2560x1707 for a 3840x2560 monitor at 150% --
-runs the desktop in it at 100%, and starts `l2kscaler` on the real
-server. l2kscaler shows the nested screen on the real one, a window per
+in the scheme), l2k-session starts a nested X server at each monitor's
+*logical* size -- 2560x1707 for a 3840x2560 monitor at 150% -- runs the
+desktop in it at 100%, and starts `l2kscaler` on the real server.
+l2kscaler shows the nested screen on the real one, a window per
 monitor, drawn by the GPU with mpv's EWA Lanczos-sharp: a polar jinc
-filter, blurred a hair, in sigmoidised linear light with a light
-anti-ringing clamp -- the filter high-quality video players use, which
-keeps edges and text clean where bilinear smears them. Monitors at 100%
-are copied through unchanged. Input on those windows goes back into the
-nested server with XTest at the matching logical position, and the
-nested pointer is drawn by l2kscaler, scaled, since the real one is
-hidden.
+filter, blurred a hair, with a light anti-ringing clamp -- the filter
+high-quality video players use, which keeps edges and text clean where
+bilinear smears them. Monitors at 100% are copied through unchanged.
+Input on those windows goes back into the nested server with XTest at
+the matching logical position, and the nested pointer is drawn by
+l2kscaler, scaled, since the real one is hidden. One window waits for
+the vertical blank per frame; the others do not, so three monitors do
+not mean a third of the frame rate.
 
-The price, and why it is off by default: every program in the nested
-server renders in software (Xvfb has no GPU), which a desktop bears and
-3D does not; the monitor layout is fixed for the session (Display
-Properties still records changes, for the next logon); and it needs
-Xvfb and l2kscaler, which the installer provides -- without either the
-session starts plainly and says so in `~/.w2k/session.log`. Turn the
-box off to go back at the next logon.
+The nested server is Xephyr when it is installed, started with glamor:
+it draws with the GPU and gives its programs hardware GL, so the desktop
+inside is as quick as the plain one. Without Xephyr it is Xvfb, where
+every program renders in software -- fine for a desktop, not for 3D.
+The screen is read out of the nested server through shared memory. With
+Xephyr the scaler can instead bind the nested window's own pixmap into
+its texture on the GPU (`CompositorCapture=pixmap` in the scheme; no copy
+at all), but some drivers take that badly, so it is off unless asked.
 
-To try it without logging off: `l2kscaler --nested :0 --layout
+The filter works in gamma space, which is what text weight is drawn for;
+`CompositorLight=linear` filters in sigmoidised linear light as mpv does,
+truer for photographs but thin dark text comes out lighter.
+
+Inside the nested session Display Properties lists the real monitors
+(the session tells the desktop where they are, `W2K_MONITORS`), and
+scale, primary and enabled can be changed for the next logon; the
+layout is fixed while the session runs. It needs Xephyr or Xvfb and
+l2kscaler, which the installer provides -- without them the session
+starts plainly and says so in `~/.w2k/session.log`. Turn the box off to
+go back at the next logon.
+
+To try the scaler without logging off: `l2kscaler --nested :0 --layout
 "test,600,400,100,100,400,267,0,0" --window --no-input` shows a piece of
-the running desktop scaled 1.5x in a window.
+the running desktop scaled 1.5x in a window. Do not run it against a
+display that is already being shown through l2kscaler.
 
 ## Desktop scaling (the experimental way)
 

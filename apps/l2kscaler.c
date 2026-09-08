@@ -14,12 +14,21 @@
  * starts it. Programs in the nested server render in software (Xvfb has
  * no GPU), which a desktop bears and a game does not.
  *
- *   l2kscaler --nested :1 --layout "name,hW,hH,hX,hY,nW,nH,nX,nY;..." [--window]
+ *   l2kscaler --nested :1 --layout "name,hW,hH,hX,hY,nW,nH,nX,nY;..."
+ *             [--nested-window TITLE] [--linear-light] [--window] [--no-input]
  *
  * Each layout entry is one monitor: its window on this display (size and
  * position) and the rectangle of the nested screen it shows; hW/nW is the
- * scale. --window makes ordinary windows instead of full-screen ones, for
- * trying it out on a desktop that is already running. */
+ * scale. With --nested-window the nested server is Xephyr and its window
+ * on this display carries that title: the screen is then taken straight
+ * from that window's pixmap on the GPU (Composite and texture-from-pixmap)
+ * and never copied; without it the nested server is Xvfb and the screen
+ * is read through shared memory. --linear-light filters in sigmoidised
+ * linear light as mpv does, which keeps a photograph honest but makes
+ * thin dark text look lighter; the default filters in gamma space, which
+ * text weight is drawn for. --window makes ordinary windows instead of
+ * full-screen ones and --no-input sends nothing back, for trying it out
+ * on a desktop that is already running. */
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -28,8 +37,10 @@
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/XTest.h>
+#include <X11/extensions/Xcomposite.h>
 #include <GL/gl.h>
 #include <GL/glx.h>
+#include <GL/glxext.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/select.h>
@@ -67,6 +78,8 @@ static void   (*p_glFramebufferTexture2D)(GLenum, GLenum, GLenum, GLuint, GLint)
 static GLenum (*p_glCheckFramebufferStatus)(GLenum);
 static void   (*p_glDeleteFramebuffers)(GLsizei, const GLuint *);
 static void   (*p_glXSwapIntervalEXT)(Display *, GLXDrawable, int);
+static void   (*p_glXBindTexImageEXT)(Display *, GLXDrawable, int, const int *);
+static void   (*p_glXReleaseTexImageEXT)(Display *, GLXDrawable, int);
 
 #ifndef GL_FRAMEBUFFER
 #define GL_FRAMEBUFFER 0x8D40
@@ -108,6 +121,8 @@ static int load_gl(void)
     GETPROC(glGenFramebuffers); GETPROC(glBindFramebuffer); GETPROC(glFramebufferTexture2D);
     GETPROC(glCheckFramebufferStatus); GETPROC(glDeleteFramebuffers);
     p_glXSwapIntervalEXT = (void *)glXGetProcAddressARB((const GLubyte *)"glXSwapIntervalEXT");
+    p_glXBindTexImageEXT = (void *)glXGetProcAddressARB((const GLubyte *)"glXBindTexImageEXT");
+    p_glXReleaseTexImageEXT = (void *)glXGetProcAddressARB((const GLubyte *)"glXReleaseTexImageEXT");
     return 1;
 }
 
@@ -190,9 +205,14 @@ static const char *ewa_src =
     "uniform vec2 origin;\n"             /* nested pixel at the window's corner */
     "uniform float scale;\n"             /* host pixels per nested pixel */
     "uniform float radius;\n"
+    "uniform float linlight;\n"          /* 1: filter in sigmoidised linear light */
+    "uniform float texflip;\n"           /* 1: the texture's row 0 is the bottom */
     "varying vec2 p;\n"
     "vec3 fetch(vec2 j) {\n"
-    "    vec3 c = texture2D(tex, (j + 0.5) / texsize).rgb;\n"
+    "    vec2 t = (j + 0.5) / texsize;\n"
+    "    if (texflip > 0.5) t.y = 1.0 - t.y;\n"
+    "    vec3 c = texture2D(tex, t).rgb;\n"
+    "    if (linlight < 0.5) return c;\n"
     "    return vec3(texture1D(sig, c.r).r, texture1D(sig, c.g).r, texture1D(sig, c.b).r);\n"
     "}\n"
     "void main() {\n"
@@ -217,6 +237,7 @@ static const char *ewa_src =
     "    vec3 lo = min(min(a, b), min(cc, d4)), hi = max(max(a, b), max(cc, d4));\n"
     "    res = mix(res, clamp(res, lo, hi), 0.8);\n"
     "    res = clamp(res, 0.0, 1.0);\n"
+    "    if (linlight < 0.5) { gl_FragColor = vec4(res, 1.0); return; }\n"
     "    gl_FragColor = vec4(texture1D(unsig, res.r).r, texture1D(unsig, res.g).r,\n"
     "                        texture1D(unsig, res.b).r, 1.0);\n"
     "}\n";
@@ -258,6 +279,14 @@ static int NW, NH;                  /* nested screen size */
 static Mon mons[8];
 static int nmons;
 static int windowed, no_input;   /* --window and --no-input: for trying it out */
+static int linear_light;         /* --linear-light */
+static const char *nested_title; /* --nested-window: Xephyr's window on this display */
+static Window xwin;              /* that window */
+static Pixmap xpix;              /* its pixmap, named by Composite */
+static GLXPixmap xglx;           /* bound to desk_tex */
+static int tex_flip;             /* the bound texture's row 0 is the bottom */
+static Damage hdamage;           /* damage on that window, on this display */
+static int hdamage_base;
 static volatile sig_atomic_t quit;
 
 static GLXContext ctx;
@@ -411,7 +440,19 @@ static void mon_window(Mon *m)
 
 static void gl_after_context(void)
 {
-    if (p_glXSwapIntervalEXT) p_glXSwapIntervalEXT(hd, mons[0].win, 1);
+    /* One vertical-blank wait per frame, not one per window: the first
+     * scaled window (or the first) syncs, the rest are told not to. */
+    if (p_glXSwapIntervalEXT) {
+        int synced = -1;
+        for (int i = 0; i < nmons && synced < 0; i++)
+            if (fabs(mons[i].scale - 1.0) > 1e-6) synced = i;
+        if (synced < 0) synced = 0;
+        for (int i = 0; i < nmons; i++) {
+            glXMakeCurrent(hd, mons[i].win, ctx);
+            p_glXSwapIntervalEXT(hd, mons[i].win, i == synced ? 1 : 0);
+        }
+        glXMakeCurrent(hd, mons[0].win, ctx);
+    }
     float lut[LUT_N], sfwd[256], sinv[1024];
     make_lut(lut);
     make_sigmoid_luts(sfwd, sinv);
@@ -465,6 +506,82 @@ static void bind_common(GLuint prog, GLuint tex, int tw, int th, double ox, doub
 /* ------------------------------------------------------------------ *
  * The nested screen: damage in, texture out
  * ------------------------------------------------------------------ */
+/* Xephyr's window on this display, by title. */
+static Window find_window(Window root, const char *title, int depth)
+{
+    Window rr, parent, *kids = NULL;
+    unsigned n = 0;
+    if (!XQueryTree(hd, root, &rr, &parent, &kids, &n)) return 0;
+    Window found = 0;
+    for (unsigned i = 0; i < n && !found; i++) {
+        char *name = NULL;
+        if (XFetchName(hd, kids[i], &name) && name) {
+            if (!strcmp(name, title)) found = kids[i];
+            XFree(name);
+        }
+        if (!found && depth < 3) found = find_window(kids[i], title, depth + 1);
+    }
+    if (kids) XFree(kids);
+    return found;
+}
+
+/* Take the window's pixmap as our screen texture: no copy, the GPU reads
+ * what Xephyr drew. Done again whenever the window changes size. */
+static void tfp_bind(void)
+{
+    if (xglx) { p_glXReleaseTexImageEXT(hd, xglx, GLX_FRONT_LEFT_EXT); glXDestroyPixmap(hd, xglx); xglx = 0; }
+    if (xpix) { XFreePixmap(hd, xpix); xpix = 0; }
+    xpix = XCompositeNameWindowPixmap(hd, xwin);
+    int attrs[] = { GLX_BIND_TO_TEXTURE_RGB_EXT, True, GLX_DRAWABLE_TYPE, GLX_PIXMAP_BIT,
+                    GLX_BIND_TO_TEXTURE_TARGETS_EXT, GLX_TEXTURE_2D_BIT_EXT, GLX_DOUBLEBUFFER, False,
+                    GLX_RED_SIZE, 8, GLX_GREEN_SIZE, 8, GLX_BLUE_SIZE, 8, None };
+    int n = 0;
+    GLXFBConfig *fbc = glXChooseFBConfig(hd, hscreen, attrs, &n);
+    if (!fbc || !n) { fprintf(stderr, "l2kscaler: no framebuffer config binds a pixmap to a texture\n"); exit(1); }
+    /* The one whose depth is the window's. */
+    XWindowAttributes wa;
+    XGetWindowAttributes(hd, xwin, &wa);
+    NW = wa.width; NH = wa.height;         /* the window is the nested screen */
+    GLXFBConfig pick = fbc[0];
+    for (int i = 0; i < n; i++) {
+        XVisualInfo *v = glXGetVisualFromFBConfig(hd, fbc[i]);
+        if (v && v->depth == wa.depth) { pick = fbc[i]; XFree(v); break; }
+        if (v) XFree(v);
+    }
+    XFree(fbc);
+    int pattrs[] = { GLX_TEXTURE_TARGET_EXT, GLX_TEXTURE_2D_EXT,
+                     GLX_TEXTURE_FORMAT_EXT, GLX_TEXTURE_FORMAT_RGB_EXT, None };
+    xglx = glXCreatePixmap(hd, pick, xpix, pattrs);
+    unsigned inv = 0;
+    glXQueryDrawable(hd, xglx, GLX_Y_INVERTED_EXT, &inv);
+    tex_flip = inv != 0;                   /* as Mesa binds them: rows from the bottom */
+    glBindTexture(GL_TEXTURE_2D, desk_tex);
+    p_glXBindTexImageEXT(hd, xglx, GLX_FRONT_LEFT_EXT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+}
+
+static int tfp_init(void)
+{
+    if (!p_glXBindTexImageEXT || !p_glXReleaseTexImageEXT) {
+        fprintf(stderr, "l2kscaler: no GLX_EXT_texture_from_pixmap\n");
+        return 0;
+    }
+    int ev, err;
+    if (!XCompositeQueryExtension(hd, &ev, &err)) { fprintf(stderr, "l2kscaler: this server has no Composite\n"); return 0; }
+    if (!XDamageQueryExtension(hd, &hdamage_base, &err)) { fprintf(stderr, "l2kscaler: this server has no DAMAGE\n"); return 0; }
+    for (int tries = 0; tries < 100 && !xwin; tries++) {
+        xwin = find_window(RootWindow(hd, hscreen), nested_title, 0);
+        if (!xwin) usleep(100000);
+    }
+    if (!xwin) { fprintf(stderr, "l2kscaler: no window called \"%s\" on this display\n", nested_title); return 0; }
+    XCompositeRedirectWindow(hd, xwin, CompositeRedirectAutomatic);
+    XSelectInput(hd, xwin, StructureNotifyMask);
+    hdamage = XDamageCreate(hd, xwin, XDamageReportBoundingBox);
+    XSync(hd, False);
+    return 1;
+}
+
 static int shm_init(void)
 {
     if (!XShmQueryExtension(nd)) { fprintf(stderr, "l2kscaler: the nested server has no MIT-SHM\n"); return 0; }
@@ -497,13 +614,21 @@ static void fetch_damage(void)
     if (y1 > NH) y1 = NH;
     dmg_any = 0;
     if (x1 <= x0 || y1 <= y0) return;
-    int rw = x1 - x0, rh = y1 - y0;
-    shmimg->width = rw; shmimg->height = rh; shmimg->bytes_per_line = rw * 4;
-    if (!XShmGetImage(nd, nroot, shmimg, x0, y0, AllPlanes)) return;
-    glBindTexture(GL_TEXTURE_2D, desk_tex);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, rw);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, rw, rh, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, shmimg->data);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    if (xwin) {
+        /* The texture is the pixmap: let go and take it again, which is
+         * what the extension asks of a reader after the drawer has drawn. */
+        glBindTexture(GL_TEXTURE_2D, desk_tex);
+        p_glXReleaseTexImageEXT(hd, xglx, GLX_FRONT_LEFT_EXT);
+        p_glXBindTexImageEXT(hd, xglx, GLX_FRONT_LEFT_EXT, NULL);
+    } else {
+        int rw = x1 - x0, rh = y1 - y0;
+        shmimg->width = rw; shmimg->height = rh; shmimg->bytes_per_line = rw * 4;
+        if (!XShmGetImage(nd, nroot, shmimg, x0, y0, AllPlanes)) return;
+        glBindTexture(GL_TEXTURE_2D, desk_tex);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, rw);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, rw, rh, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, shmimg->data);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    }
     /* Which windows it touches, and where in their scaled picture. */
     for (int i = 0; i < nmons; i++) {
         Mon *m = &mons[i];
@@ -564,6 +689,8 @@ static void draw_mon(Mon *m)
         p_glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_1D, unsig_tex);
         p_glUniform1i(p_glGetUniformLocation(prog_ewa, "unsig"), 3);
         p_glUniform1f(p_glGetUniformLocation(prog_ewa, "radius"), (float)EWA_RADIUS);
+        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "linlight"), linear_light ? 1.0f : 0.0f);
+        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "texflip"), tex_flip ? 1.0f : 0.0f);
         p_glActiveTexture(GL_TEXTURE0);
         glEnable(GL_SCISSOR_TEST);
         /* The framebuffer texture is y-up; our quad is y-down, so the
@@ -583,7 +710,7 @@ static void draw_mon(Mon *m)
         bind_common(prog_blit, m->fbo_tex, m->hw, m->hh, 0, 0, 1.0, 1);
         quad(0, 0, m->hw, m->hh, m->hw, m->hh);
     } else {
-        bind_common(prog_blit, desk_tex, NW, NH, m->nx, m->ny, 1.0, 0);
+        bind_common(prog_blit, desk_tex, NW, NH, m->nx, m->ny, 1.0, tex_flip);
         quad(0, 0, m->hw, m->hh, m->hw, m->hh);
     }
     /* The nested pointer, where the nested server says it is. */
@@ -627,6 +754,26 @@ static Mon *mon_of(Window w)
 
 static void host_event(XEvent *e)
 {
+    if (xwin && e->type == hdamage_base + XDamageNotify) {
+        XDamageNotifyEvent *d = (XDamageNotifyEvent *)e;
+        int x0 = d->area.x, y0 = d->area.y, x1 = x0 + d->area.width, y1 = y0 + d->area.height;
+        if (!dmg_any) { dmg_x0 = x0; dmg_y0 = y0; dmg_x1 = x1; dmg_y1 = y1; dmg_any = 1; }
+        else {
+            if (x0 < dmg_x0) dmg_x0 = x0;
+            if (y0 < dmg_y0) dmg_y0 = y0;
+            if (x1 > dmg_x1) dmg_x1 = x1;
+            if (y1 > dmg_y1) dmg_y1 = y1;
+        }
+        return;
+    }
+    if (xwin && e->xany.window == xwin) {
+        if (e->type == ConfigureNotify) {
+            glXMakeCurrent(hd, mons[0].win, ctx);
+            tfp_bind();
+            dmg_x0 = 0; dmg_y0 = 0; dmg_x1 = NW; dmg_y1 = NH; dmg_any = 1;
+        }
+        return;
+    }
     Mon *m = mon_of(e->xany.window);
     if (!m) return;
     switch (e->type) {
@@ -693,7 +840,7 @@ static void nested_event(XEvent *e)
  * ------------------------------------------------------------------ */
 static void usage(void)
 {
-    fprintf(stderr, "usage: l2kscaler --nested DISPLAY --layout \"name,hW,hH,hX,hY,nW,nH,nX,nY;...\" [--window] [--no-input]\n");
+    fprintf(stderr, "usage: l2kscaler --nested DISPLAY --layout \"name,hW,hH,hX,hY,nW,nH,nX,nY;...\" [--nested-window TITLE] [--linear-light] [--window] [--no-input]\n");
     exit(2);
 }
 
@@ -705,6 +852,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--layout") && i + 1 < argc) layout = argv[++i];
         else if (!strcmp(argv[i], "--window")) windowed = 1;
         else if (!strcmp(argv[i], "--no-input")) no_input = 1;
+        else if (!strcmp(argv[i], "--linear-light")) linear_light = 1;
+        else if (!strcmp(argv[i], "--nested-window") && i + 1 < argc) nested_title = argv[++i];
         else usage();
     }
     if (!nested || !layout || !parse_layout(layout)) usage();
@@ -729,7 +878,7 @@ int main(int argc, char **argv)
     if (!XFixesQueryExtension(nd, &xfixes_base, &err)) { fprintf(stderr, "l2kscaler: the nested server has no XFIXES\n"); return 1; }
     if (!XTestQueryExtension(nd, &xtest_ev, &xtest_err, &xtest_maj, &xtest_min)) { fprintf(stderr, "l2kscaler: the nested server has no XTEST\n"); return 1; }
     if (!XFixesQueryExtension(hd, &ev, &err)) { fprintf(stderr, "l2kscaler: this server has no XFIXES\n"); return 1; }
-    if (!shm_init()) return 1;
+    if (!nested_title && !shm_init()) return 1;
     if (!load_gl() || !gl_init()) return 1;
 
     for (int i = 0; i < nmons; i++) mon_window(&mons[i]);
@@ -737,9 +886,14 @@ int main(int argc, char **argv)
     glXMakeCurrent(hd, mons[0].win, ctx);
     gl_after_context();
     if (!prog_ewa || !prog_blit) return 1;
+    if (nested_title) {
+        if (!tfp_init()) return 1;
+        tfp_bind();
+        for (int i = 0; i < nmons; i++) XRaiseWindow(hd, mons[i].win);
+    }
     XSetInputFocus(hd, mons[0].win, RevertToPointerRoot, CurrentTime);
 
-    damage = XDamageCreate(nd, nroot, XDamageReportBoundingBox);
+    if (!xwin) damage = XDamageCreate(nd, nroot, XDamageReportBoundingBox);
     XFixesSelectCursorInput(nd, nroot, XFixesDisplayCursorNotifyMask);
     dmg_x0 = 0; dmg_y0 = 0; dmg_x1 = NW; dmg_y1 = NH; dmg_any = 1;
     fetch_cursor();
@@ -756,7 +910,8 @@ int main(int argc, char **argv)
         long t = now_ms();
         if (any_dirty && t - last_frame >= 8) {
             last_frame = t;
-            XDamageSubtract(nd, damage, None, None);
+            if (xwin) XDamageSubtract(hd, hdamage, None, None);
+            else      XDamageSubtract(nd, damage, None, None);
             glXMakeCurrent(hd, mons[0].win, ctx);
             fetch_damage();
             Window rr, cw; int rx, ry, wx, wy; unsigned mask;
@@ -783,9 +938,8 @@ int main(int argc, char **argv)
             }
         }
     }
-    XDamageDestroy(nd, damage);
-    XShmDetach(nd, &shm);
-    shmdt(shm.shmaddr);
+    if (xwin) { XDamageDestroy(hd, hdamage); XCompositeUnredirectWindow(hd, xwin, CompositeRedirectAutomatic); }
+    else { XDamageDestroy(nd, damage); XShmDetach(nd, &shm); shmdt(shm.shmaddr); }
     XCloseDisplay(nd);
     XCloseDisplay(hd);
     return 0;

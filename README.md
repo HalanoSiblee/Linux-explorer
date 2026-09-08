@@ -262,11 +262,11 @@ supersampled rather than stretched. Four times the pixels of the scale;
 best when the monitors share a scale.
 
 Behind an experimental switch on the same page, the desktop can instead
-run inside a nested X server and be shown through `l2kscaler`, a small
-GPU compositor that scales every monitor with mpv's EWA Lanczos-sharp --
-the whole picture, text and all, past xrandr's two filters. Programs
-render in software there, so it is off unless you ask (see
-docs/SCALING.md).
+run inside a nested X server (Xephyr with glamor, so programs keep their
+GPU; Xvfb without it) and be shown through `l2kscaler`, a small GPU
+compositor that scales every monitor with mpv's EWA Lanczos-sharp -- the
+whole picture, text and all, past xrandr's two filters. Off unless you
+ask (see docs/SCALING.md).
 
 A Resampling box beside it picks the filter the desktop uses for its own
 artwork at a fraction -- icons, the XP and 7 chrome, the pointer, the

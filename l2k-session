@@ -112,8 +112,9 @@ if [ "$(sed -n 's/^Compositor=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)"
     n_any=$(printf '%s\n' "$plan" | sed -n 6p)
     if [ "$n_any" != 1 ] || [ -z "$n_layout" ]; then
         echo "l2k-session: nested compositor: no scaled monitor in the scheme; running plainly"
-    elif ! command -v Xvfb >/dev/null 2>&1 || ! command -v l2kscaler >/dev/null 2>&1; then
-        echo "l2k-session: nested compositor: needs Xvfb and l2kscaler; running plainly"
+    elif ! { command -v Xephyr >/dev/null 2>&1 || command -v Xvfb >/dev/null 2>&1; } || \
+         ! command -v l2kscaler >/dev/null 2>&1; then
+        echo "l2k-session: nested compositor: needs Xephyr (or Xvfb) and l2kscaler; running plainly"
     else
         host_display=$DISPLAY
         # The real screen: every monitor at its own size, nothing scaled.
@@ -124,15 +125,32 @@ if [ "$(sed -n 's/^Compositor=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)"
         if command -v xauth >/dev/null 2>&1 && command -v mcookie >/dev/null 2>&1; then
             xauth add ":$n" . "$(mcookie)" 2>/dev/null && nauth="-auth ${XAUTHORITY:-$HOME/.Xauthority}"
         fi
-        # shellcheck disable=SC2086
-        Xvfb ":$n" -screen 0 "${n_w}x${n_h}x24" -nolisten tcp -noreset -dpi 96 $nauth >>"$LOG" 2>&1 &
-        NESTED_PID=$!
-        i=0; while [ ! -e "/tmp/.X11-unix/X$n" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
-        if [ ! -e "/tmp/.X11-unix/X$n" ]; then
-            echo "l2k-session: Xvfb did not come up; running plainly"
-            kill "$NESTED_PID" 2>/dev/null; NESTED_PID=
+        # Xephyr draws with the GPU (glamor) and gives its programs GL, and
+        # its window on this screen is read straight into the scaler's
+        # texture; Xvfb is the fallback, in software, read through memory.
+        nested_kind=
+        if command -v Xephyr >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            Xephyr ":$n" -glamor -screen "${n_w}x${n_h}x24" -title l2k-nested -no-host-grab \
+                -nolisten tcp -noreset -dpi 96 $nauth >>"$LOG" 2>&1 &
+            NESTED_PID=$!
+            i=0; while [ ! -e "/tmp/.X11-unix/X$n" ] && kill -0 "$NESTED_PID" 2>/dev/null && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+            if [ -e "/tmp/.X11-unix/X$n" ]; then nested_kind=xephyr
+            else echo "l2k-session: Xephyr with glamor did not come up; trying Xvfb"; kill "$NESTED_PID" 2>/dev/null; NESTED_PID=
+            fi
+        fi
+        if [ -z "$nested_kind" ] && command -v Xvfb >/dev/null 2>&1; then
+            # shellcheck disable=SC2086
+            Xvfb ":$n" -screen 0 "${n_w}x${n_h}x24" -nolisten tcp -noreset -dpi 96 $nauth >>"$LOG" 2>&1 &
+            NESTED_PID=$!
+            i=0; while [ ! -e "/tmp/.X11-unix/X$n" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+            [ -e "/tmp/.X11-unix/X$n" ] && nested_kind=xvfb
+        fi
+        if [ -z "$nested_kind" ]; then
+            echo "l2k-session: no nested server came up; running plainly"
+            [ -n "$NESTED_PID" ] && kill "$NESTED_PID" 2>/dev/null; NESTED_PID=
         else
-            echo "    nested : :$n at ${n_w}x${n_h}; layout $n_layout"
+            echo "    nested : :$n ($nested_kind) at ${n_w}x${n_h}; layout $n_layout"
             # The same keyboard in both servers, so keycodes sent through mean the same.
             xkbcomp "$host_display" - 2>/dev/null | xkbcomp - ":$n" >/dev/null 2>&1
             # Tell the nested server's RandR about the monitors too, for programs that ask.
@@ -141,7 +159,17 @@ if [ "$(sed -n 's/^Compositor=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)"
                 mw=${mgeo%%x*}; rest=${mgeo#*x}; mh=${rest%%+*}; rest=${rest#*+}; mx=${rest%%+*}; my=${rest#*+}
                 xrandr --display ":$n" --setmonitor "$mname" "${mw}/0x${mh}/0+${mx}+${my}" none >/dev/null 2>&1
             done
-            DISPLAY=$host_display l2kscaler --nested ":$n" --layout "$n_layout" >>"$LOG" 2>&1 &
+            # The screen is read through shared memory unless the scheme asks
+            # for the GPU's own copy (CompositorCapture=pixmap): binding the
+            # nested window's pixmap straight into the scaler's texture,
+            # which some drivers take badly.
+            scaler_args=
+            [ "$nested_kind" = xephyr ] && \
+                [ "$(sed -n 's/^CompositorCapture=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)" = pixmap ] && \
+                scaler_args="--nested-window l2k-nested"
+            [ "$(sed -n 's/^CompositorLight=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)" = linear ] && scaler_args="$scaler_args --linear-light"
+            # shellcheck disable=SC2086
+            DISPLAY=$host_display l2kscaler --nested ":$n" --layout "$n_layout" $scaler_args >>"$LOG" 2>&1 &
             SCALER_PID=$!
             export DISPLAY=":$n" W2K_MONITORS="$n_mon" W2K_UI_SCALE=100
         fi

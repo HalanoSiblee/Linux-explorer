@@ -64,6 +64,8 @@ static const Applet applets[] = {
       ICO_TASKMGR, "l2ktaskmgr" },
     { "Taskbar and Start Menu", "Customizes the Start Menu and the taskbar.",
       ICO_TASKBAR, "@startmenu" },      /* @ = ask the shell, not a program */
+    { "User Accounts", "Changes the name and picture the Start menu shows for you.",
+      ICO_CP_USERS, NULL },
 };
 #define NAPPLETS ((int)(sizeof applets / sizeof *applets))
 
@@ -415,7 +417,7 @@ static void open_performance(void)
  * ------------------------------------------------------------------ */
 enum { AP_DATETIME = 0, AP_DEFAULTS, AP_DEVMGR, AP_DISPLAY, AP_FOLDER,
        AP_FONTS, AP_KEYBOARD, AP_MOUSE, AP_NETWORK, AP_POWER, AP_SOUNDS,
-       AP_SYSTEM, AP_TASKMGR, AP_STARTMENU };
+       AP_SYSTEM, AP_TASKMGR, AP_STARTMENU, AP_USERS };
 
 #define MAX_SLIDERS 4
 
@@ -2080,6 +2082,157 @@ static void open_power(void)
     w2k_tabs_free(pd.tabs);
 }
 
+/* ------------------------------------------------------------------ *
+ * User Accounts
+ *
+ * The name and the picture the Start menu shows for you: Windows XP's
+ * "Change my picture", on a Windows 2000 sheet. Kept in ~/.w2k/account;
+ * the logon name stays what the system calls you.
+ * ------------------------------------------------------------------ */
+typedef struct {
+    W2kWin  *win;
+    W2kEdit *name;
+    W2kRect  pic, change, def, ok, cancel, apply;
+    char     picture[1024];
+    int      down, dirty;
+} UsersDlg;
+
+static void ua_commit(UsersDlg *ud)
+{
+    const char *n = w2k_edit_text(ud->name);
+    /* A name that is only the passwd entry's is not kept: leave the file
+     * saying nothing and it follows the account. */
+    w2k_account_save(n && strcmp(n, w2k_account_default_name()) ? n : "", ud->picture);
+    w2k_scheme_broadcast();
+    ud->dirty = 0;
+}
+
+static void ua_paint(W2kWin *w, Drawable d)
+{
+    UsersDlg *ud = w->user;
+    int fh = w2k_font_height(F_UI);
+    W2kRect g = { 12, 10, w->w - 24, 96 };
+    w2k_draw_groupbox(d, &g, "Picture");
+    /* The picture in a sunken frame, as the Start menu shows it. */
+    w2k_edge(d, ud->pic.x - 2, ud->pic.y - 2, ud->pic.w + 4, ud->pic.h + 4, EDGE_SUNKEN, BF_RECT);
+    /* The picture as chosen here, saved or not. */
+    w2k_account_preview(ud->picture);
+    w2k_account_picture_draw(d, ud->pic.x, ud->pic.y, ud->pic.w, ICO_MYCOMPUTER);
+    w2k_draw_pushbutton(d, &ud->change, "&Change Picture...", ud->down == 4 ? BS_PRESSED : 0);
+    w2k_draw_pushbutton(d, &ud->def, "&Default Picture",
+                        (ud->picture[0] ? 0 : BS_DISABLED) | (ud->down == 5 ? BS_PRESSED : 0));
+    w2k_text(d, F_UI, ud->change.x, ud->def.y + ud->def.h + 6,
+             ud->picture[0] ? "A picture of your own; it is cropped to a square." : "The shell's own tile.", C_GRAYTEXT);
+
+    W2kRect g2 = { 12, g.y + g.h + 8, w->w - 24, 40 + fh + 21 };
+    w2k_draw_groupbox(d, &g2, "Name");
+    w2k_text_mnemonic(d, F_UI, g2.x + 10, ud->name->r.y - fh - 4,
+                      "The &name the Start menu shows:", C_TEXT, 1);
+    w2k_edit_draw(d, ud->name);
+    char note[200];
+    snprintf(note, sizeof note, "Your logon name stays \"%s\"; this is only how the Start menu greets you.",
+             getenv("USER") ? getenv("USER") : "you");
+    w2k_text(d, F_UI, 12, g2.y + g2.h + 8, note, C_GRAYTEXT);
+
+    w2k_draw_pushbutton(d, &ud->ok, "OK", BS_DEFAULT | (ud->down == 1 ? BS_PRESSED : 0));
+    w2k_draw_pushbutton(d, &ud->cancel, "Cancel", ud->down == 2 ? BS_PRESSED : 0);
+    w2k_draw_pushbutton(d, &ud->apply, "&Apply",
+                        (ud->dirty ? 0 : BS_DISABLED) | (ud->down == 3 ? BS_PRESSED : 0));
+}
+
+static void ua_pick_picture(UsersDlg *ud)
+{
+    char path[1024];
+    snprintf(path, sizeof path, "%s", ud->picture[0] ? ud->picture : "");
+    if (!path[0]) {
+        const char *h = getenv("HOME");
+        snprintf(path, sizeof path, "%s/", h ? h : "/");
+    }
+    if (w2k_file_dialog_filter(ud->win, 0, path, sizeof path,
+                               "Pictures (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*")) {
+        int pw = 0, ph = 0;
+        unsigned char *probe = w2k_image_load(path, &pw, &ph);
+        if (!probe) {
+            w2k_msgbox(ud->win, "User Accounts",
+                       "That file is not a picture Linux 2000 can read (PNG, JPEG or BMP).",
+                       MB_OK | MB_ICONWARNING);
+            return;
+        }
+        free(probe);
+        snprintf(ud->picture, sizeof ud->picture, "%s", path);
+        ud->dirty = 1;
+    }
+}
+
+static int ua_event(W2kWin *w, XEvent *e)
+{
+    UsersDlg *ud = w->user;
+    switch (e->type) {
+    case ButtonPress: {
+        int x = e->xbutton.x, y = e->xbutton.y;
+        if (w2k_edit_press(ud->name, &e->xbutton)) { w2k_win_dirty(w); return 1; }
+        if (w2k_rect_hit(&ud->ok, x, y)) ud->down = 1;
+        else if (w2k_rect_hit(&ud->cancel, x, y)) ud->down = 2;
+        else if (w2k_rect_hit(&ud->apply, x, y) && ud->dirty) ud->down = 3;
+        else if (w2k_rect_hit(&ud->change, x, y)) ud->down = 4;
+        else if (w2k_rect_hit(&ud->def, x, y) && ud->picture[0]) ud->down = 5;
+        w2k_win_dirty(w);
+        return 1;
+    }
+    case ButtonRelease: {
+        int b = ud->down, x = e->xbutton.x, y = e->xbutton.y;
+        ud->down = 0;
+        if (b == 1 && w2k_rect_hit(&ud->ok, x, y)) { ua_commit(ud); w2k_win_close(w, ID_OK); }
+        else if (b == 2 && w2k_rect_hit(&ud->cancel, x, y)) w2k_win_close(w, ID_CANCEL);
+        else if (b == 3 && w2k_rect_hit(&ud->apply, x, y)) ua_commit(ud);
+        else if (b == 4 && w2k_rect_hit(&ud->change, x, y)) ua_pick_picture(ud);
+        else if (b == 5 && w2k_rect_hit(&ud->def, x, y)) { ud->picture[0] = 0; ud->dirty = 1; }
+        w2k_win_dirty(w);
+        return 1;
+    }
+    case KeyPress: {
+        KeySym ks = XLookupKeysym(&e->xkey, 0);
+        if (ks == XK_Escape) { w2k_win_close(w, ID_CANCEL); return 1; }
+        if (ks == XK_Return || ks == XK_KP_Enter) { ua_commit(ud); w2k_win_close(w, ID_OK); return 1; }
+        if (w2k_edit_key(ud->name, &e->xkey)) { ud->dirty = 1; w2k_win_dirty(w); return 1; }
+        return 1;
+    }
+    }
+    return 0;
+}
+
+static void open_users(void)
+{
+    UsersDlg ud;
+    memset(&ud, 0, sizeof ud);
+    int cw = 372, chh = 292, fh = w2k_font_height(F_UI);
+    W2kWin *w = w2k_win_new("User Accounts", "l2kcontrol", cw, chh, 0);
+    ud.win = w;
+    w->user = &ud;
+    w->paint = ua_paint;
+    w->event = ua_event;
+    snprintf(ud.picture, sizeof ud.picture, "%s", w2k_account_picture());
+    ud.pic    = (W2kRect){ 12 + 14, 10 + 22, 48, 48 };
+    ud.change = (W2kRect){ 12 + 14 + 48 + 16, 10 + 22, 120, 23 };
+    ud.def    = (W2kRect){ 12 + 14 + 48 + 16, 10 + 22 + 27, 120, 23 };
+    ud.name = w2k_edit_new(0);
+    w2k_edit_bind(ud.name, w);
+    ud.name->r = (W2kRect){ 12 + 10, 10 + 96 + 8 + 20 + fh + 4, cw - 24 - 20, 21 };
+    w2k_edit_set(ud.name, w2k_account_name());
+    ud.name->focused = 1;
+    w2k_add_timer(w2k_caret_blink, blink, ud.name);
+    int bby = chh - 12 - 23;
+    ud.apply  = (W2kRect){ cw - 12 - 75, bby, 75, 23 };
+    ud.cancel = (W2kRect){ cw - 12 - 75 * 2 - 6, bby, 75, 23 };
+    ud.ok     = (W2kRect){ cw - 12 - 75 * 3 - 12, bby, 75, 23 };
+    w2k_win_center(w, cp.win);
+    Atom t = w2k.a_net_wm_wt_dialog;
+    XChangeProperty(w2k.dpy, w->win, w2k.a_net_wm_window_type, XA_ATOM, 32,
+                    PropModeReplace, (unsigned char *)&t, 1);
+    w2k_win_modal(w);
+    w2k_del_timer(blink, ud.name);
+}
+
 /* Rows of the Control Panel list carry their applet's index: on a desktop
  * machine Power Options is left out, so the row and the index differ. */
 static int applet_of_row(int row)
@@ -2106,6 +2259,7 @@ static void open_applet(int i)
     case AP_FONTS:    open_fonts(); break;
     case AP_DATETIME: open_datetime(); break;
     case AP_POWER:    open_power(); break;
+    case AP_USERS:    open_users(); break;
     }
 }
 
@@ -2214,6 +2368,7 @@ int main(int argc, char **argv)
             { "fonts",       open_fonts       },
             { "datetime",    open_datetime    },
             { "power",       open_power       },
+            { "users",       open_users       },
         };
         for (int i = 0; i < (int)(sizeof direct / sizeof *direct); i++)
             if (!strcasecmp(argv[1], direct[i].word)) {

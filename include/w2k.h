@@ -824,6 +824,16 @@ void w2k_icon_cache_drop(int id);            /* forget a slot's pixmaps */
 int  w2k_icon_load_rgba(int id, const unsigned char *rgba, int w, int h);
 void w2k_icon_set_user(int id, unsigned char *i16, unsigned char *i32);
 int  w2k_distro_logo_path(char *buf, int n);   /* the distribution's logo PNG */
+/* The user as the Start menu shows them (lib/account.c): a display name
+ * and a picture from ~/.w2k/account, with the passwd entry behind. */
+const char *w2k_account_name(void);           /* never empty */
+const char *w2k_account_default_name(void);   /* the passwd entry's */
+const char *w2k_account_picture(void);        /* a path, or "" */
+int   w2k_account_save(const char *name, const char *picture);
+void  w2k_account_reload(void);
+void  w2k_account_preview(const char *picture);   /* this process only */
+void  w2k_account_picture_draw(Drawable d, int x, int y, int size, int fallback);
+
 /* Register an icon file (.ico, .png, .bmp, .jpg) as a new icon id. */
 int  w2k_icon_from_file(const char *path);
 /* The built-in icon a slug names, or -1: the reverse of w2k_icon_slug(). */

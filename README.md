@@ -107,7 +107,9 @@ Try it nested first, without logging out of anything:
                    monitor, stand by, hibernate after idle minutes; Advanced:
                    what the lid and the power button do, through logind;
                    the Power Meter; Brightness for the backlight), Sounds and
-                   Multimedia, System, Task Manager, Taskbar and Start Menu
+                   Multimedia, System, Task Manager, Taskbar and Start Menu,
+                   User Accounts (the name and picture the Start menu shows
+                   for you; ~/.w2k/account)
     l2knetwork     Network and Dial-up Connections: one icon per adapter, the
                    Local Area Connection Status dialog (Connection and
                    Activity), and a Wireless Network Connection in the same

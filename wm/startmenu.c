@@ -288,12 +288,12 @@ void startmenu_open(void)
     w2k_menu_item(settings, SM_CONTROLPANEL, "&Control Panel", NULL, ICO_CONTROLPANEL);
     w2k_menu_item(settings, SM_NETWORK, "&Network and Dial-up Connections", NULL,
                   ICO_CP_NETWORK);
-    w2k_menu_item(settings, SM_DISPLAY, "&Display Properties...", NULL, ICO_SETTINGS);
+    w2k_menu_item(settings, SM_DISPLAY, "&Display Properties...", NULL, ICO_CP_DISPLAY);
     w2k_menu_item(settings, SM_DEFAULTS, "De&fault Programs...", NULL, ICO_PROGRAMS);
     w2k_menu_item(settings, SM_TASKBARPROPS, "&Taskbar and Start Menu...",
-                  NULL, ICO_STARTFLAG);
+                  NULL, ICO_TASKBAR);
     w2k_menu_item(settings, SM_FOLDEROPTS, "F&older Options...", NULL,
-                  ICO_FOLDER_OPEN);
+                  ICO_CP_FOLDEROPTS);
 
     W2kMenu *search = w2k_menu_new();
     w2k_menu_item(search, SM_SEARCH, "For &Files or Folders...", NULL, ICO_SEARCH);

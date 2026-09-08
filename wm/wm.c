@@ -571,6 +571,7 @@ void wm_handle_event(XEvent *e)
         if (e->xproperty.window == w2k.root) {
             if (e->xproperty.atom == w2k.a_w2k_scheme) {
                 w2k_scheme_load(NULL);
+                w2k_account_reload();   /* User Accounts saves, then signals this way */
                 taskbar_skins_reload();
                 startpanel_skins_reload();
                 /* Effects can change with the scheme: the pointer shadow

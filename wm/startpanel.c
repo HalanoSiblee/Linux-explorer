@@ -167,18 +167,10 @@ static Row *push(Row *rows, int *n, int kind, int id, const char *label,
     return r;
 }
 
+/* The name Control Panel > User Accounts set, or the passwd entry's. */
 static const char *user_display_name(void)
 {
-    static char name[128];
-    if (name[0]) return name;
-    struct passwd *pw = getpwuid(getuid());
-    const char *n = pw && pw->pw_gecos && pw->pw_gecos[0] ? pw->pw_gecos
-                  : pw && pw->pw_name ? pw->pw_name : "User";
-    snprintf(name, sizeof name, "%.127s", n);
-    char *comma = strchr(name, ',');       /* GECOS is a comma-separated list */
-    if (comma) *comma = 0;
-    if (name[0] >= 'a' && name[0] <= 'z') name[0] -= 32;
-    return name;
+    return w2k_account_name();
 }
 
 static void build_rows(void)
@@ -564,13 +556,13 @@ static void panel7_draw(Drawable pm)
     if (v) {
         W2kSkin *tile = skin7("vista-usertile.png");
         if (tile) w2k_skin_draw(pm, tile, PV_TILE_X, PV_TILE_Y, 0, 0, PV_TILE_W, PV_TILE_H);
-        w2k_bigicon_draw(pm, PV_TILE_X + (PV_TILE_W - 32) / 2,
-                         PV_TILE_Y + (PV_TILE_H - 32) / 2, ICO_MYCOMPUTER);
+        w2k_account_picture_draw(pm, PV_TILE_X + (PV_TILE_W - 46) / 2,
+                                 PV_TILE_Y + (PV_TILE_H - 46) / 2, 46, ICO_MYCOMPUTER);
     } else {
         W2kSkin *tile = skin7("w7-usertile.png");
         if (tile) w2k_skin_draw(pm, tile, P7_TILE_X, 0, 0, 0, P7_TILE_W, P7_TILE_H);
-        w2k_bigicon_draw(pm, P7_TILE_X + (P7_TILE_W - 32) / 2, (P7_TILE_H - 32) / 2,
-                         ICO_MYCOMPUTER);
+        w2k_account_picture_draw(pm, P7_TILE_X + (P7_TILE_W - 44) / 2, (P7_TILE_H - 44) / 2,
+                                 44, ICO_MYCOMPUTER);
     }
 
     int fh = w2k_font_height(F_UI);
@@ -760,13 +752,13 @@ static void panel_draw(Drawable d)
         w2k_skin_draw(pm, hd, 0, 0, 0, 0, XP_W, XP_HEADER);
         w2k_skin_draw(pm, ft, 0, panel_h - FOOTER_H, 0, 0, XP_W, XP_FOOTER);
         w2k_skin_tile(pm, bd, 0, body_y, XP_W, body_h, 0, 0, XP_W, 1);
-        /* The user's picture: 48 pixels inside a frame at 7; ours is the
-         * 32-pixel icon, centred. */
-        w2k_bigicon_draw(pm, 17, 17, ICO_MYCOMPUTER);
+        /* The user's picture: 48 pixels inside a frame at 7 -- theirs, or
+         * the 32-pixel icon centred in its place. */
+        w2k_account_picture_draw(pm, 9, 9, 48, ICO_MYCOMPUTER);
     } else {
         hgradient(pm, 0, 0, PANEL_W, HEADER_H, hdr1, hdr2);
         hgradient(pm, 0, panel_h - FOOTER_H, PANEL_W, FOOTER_H, hdr2, hdr1);
-        w2k_bigicon_draw(pm, 10, (HEADER_H - 32) / 2, ICO_MYCOMPUTER);
+        w2k_account_picture_draw(pm, 8, (HEADER_H - 48) / 2, 48, ICO_MYCOMPUTER);
         fill(pm, 0, body_y, LEFT_W, body_h, w2k.col[C_WINDOW]);
         fill(pm, LEFT_W, body_y, PANEL_W - LEFT_W, body_h, right_bg);
         XSetForeground(w2k.dpy, w2k.gc, rule);

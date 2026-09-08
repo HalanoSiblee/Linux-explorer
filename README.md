@@ -188,6 +188,17 @@ with a blue accent; Modern Dark the same on near-black, its glyphs white
 and its title bar off-black to black. The Appearance page has a word
 for people who choose it.
 
+Windows programs run through Wine as if they were the desktop's own.
+Double-click an .exe, .msi, .lnk or .bat in Explorer and it opens with
+`wine start`: an installer installs, a program runs, a shortcut is
+followed. What gets installed appears in the Start menu under Programs
+> Windows Programs, with its own icons, straight from the entries
+Wine's menu builder writes; an .exe in Explorer shows the icon inside
+it when icoutils is installed. The session makes Wine's prefix
+(`~/.wine`, or `WINEPREFIX`) the first time it is missing. The installer
+brings wine and icoutils; 32-bit programs need the distribution's
+32-bit Wine as well.
+
 Icons come in five sets, from Display Properties > Appearance > Icons:
 Windows 2000 (the built-in artwork), Windows 98, Windows XP, Windows 7 and
 ReactOS. Every window, the desktop, Explorer and the Start menu follow the

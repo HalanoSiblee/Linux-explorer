@@ -176,6 +176,11 @@ int w2k_file_icon(const char *name, int isdir)
 int w2k_file_icon_stat(const char *path, const char *name, int isdir)
 {
     int id = w2k_file_icon(name, isdir);
+    /* A Windows program wears its own icon, as it would in Windows. */
+    if (!isdir) {
+        const char *dot = strrchr(name, '.');
+        if (dot && !strcasecmp(dot, ".exe")) return w2k_wine_exe_icon(path);
+    }
     if (!isdir && id == ICO_FILE_UNKNOWN) {
         struct stat st;
         if (stat(path, &st) == 0 && (st.st_mode & 0111)) return ICO_APP;

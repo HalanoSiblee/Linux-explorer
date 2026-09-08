@@ -213,6 +213,15 @@ if ! pgrep -f 'polkit.*agent' >/dev/null 2>&1 && ! pgrep -x lxpolkit >/dev/null 
     done
 fi
 
+# Windows programs: Wine's prefix is made the first time it is missing,
+# in the background -- it takes a while -- so an .exe opened from
+# Explorer finds one ready. Wine's own menu builder then keeps the Start
+# menu's Windows Programs group and the file associations up to date.
+if command -v wine >/dev/null 2>&1 && [ ! -d "${WINEPREFIX:-$HOME/.wine}" ]; then
+    echo "l2k-session: making Wine's prefix at ${WINEPREFIX:-$HOME/.wine}"
+    (WINEDEBUG=-all wineboot -u >>"$LOG" 2>&1 &)
+fi
+
 xsetroot -solid "#3a6ea5" 2>/dev/null
 xset b off 2>/dev/null
 

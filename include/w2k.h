@@ -444,6 +444,12 @@ const char *w2k_assoc_class_for(const char *path);
 void        w2k_assoc_command(const char *path, char *out, int n);
 int         w2k_assoc_apply_folder_default(void);   /* make the Folders program the XDG default */
 
+/* Windows programs, through Wine (lib/wine.c). */
+int  w2k_wine_available(void);                   /* wine on the PATH */
+void w2k_wine_prefix(char *buf, int n);          /* WINEPREFIX, or ~/.wine */
+int  w2k_wine_file(const char *name);            /* .exe .msi .lnk .bat .com .cmd */
+int  w2k_wine_exe_icon(const char *path);        /* the icon inside an .exe, or ICO_APP */
+
 /* The Recycle Bin: the freedesktop trash under ~/.local/share/Trash. */
 const char *w2k_trash_dir(void);
 const char *w2k_trash_files_dir(void);

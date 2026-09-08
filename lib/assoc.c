@@ -24,6 +24,9 @@ defaults[] = {
     { "audio", "Music",           "vlc" },
     { "text",  "Text documents",  "l2knotepad" },
     { "web",   "Web pages",       "xdg-open" },
+    /* Wine's start hands a program, installer, shortcut or batch file to
+     * whatever the prefix associates it with, as Explorer would. */
+    { "windows", "Windows programs", "wine start /unix %s" },
     { "other", "Everything else", "xdg-open" },
 };
 #define NCLASS ((int)(sizeof defaults / sizeof *defaults))
@@ -137,6 +140,8 @@ const char *w2k_assoc_class_for(const char *path)
         { ".sh","text" }, { ".conf","text" }, { ".cfg","text" },
         { ".ini","text" }, { ".json","text" }, { ".xml","text" },
         { ".html","web" }, { ".htm","web" }, { ".url","web" },
+        { ".exe","windows" }, { ".msi","windows" }, { ".lnk","windows" },
+        { ".bat","windows" }, { ".com","windows" }, { ".cmd","windows" },
         { NULL, NULL }
     };
     for (int i = 0; map[i].ext; i++)

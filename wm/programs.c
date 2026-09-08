@@ -1,7 +1,9 @@
 /* programs.c -- the Programs menu, built from the system's .desktop files.
  *
  * Applications are grouped into Windows-style program groups by their
- * freedesktop category, with Flatpak applications in a group of their own.
+ * freedesktop category, with Flatpak applications in a group of their own
+ * and Windows programs -- what Wine installed, from the .desktop entries
+ * its menu builder writes under applications/wine -- in another.
  * The menu is rebuilt on every open, so newly installed software shows up
  * without restarting anything. */
 #include "wm.h"
@@ -23,6 +25,7 @@ typedef struct {
     int   icon_id;                   /* resolved lazily, 0 = not yet */
     int   terminal;
     int   flatpak;
+    int   wine;                      /* from Wine's own menu tree */
     int   group;
 } App;
 
@@ -90,6 +93,8 @@ static char *clean_exec(const char *exec)
     return out;
 }
 
+static int adding_wine;              /* set while scanning Wine's tree */
+
 static void add_app(const char *path, const char *id, int flatpak)
 {
     if (napps >= MAXAPPS) return;
@@ -131,6 +136,7 @@ static void add_app(const char *path, const char *id, int flatpak)
         a->terminal = terminal;
         icon = NULL;
         a->flatpak = flatpak || strstr(exec, "flatpak run") != NULL;
+        a->wine = adding_wine;
         a->group = group_for(cats);
         name = NULL;
     }
@@ -151,6 +157,34 @@ static void scan_dir(const char *dir, int flatpak)
         char path[2048];
         snprintf(path, sizeof path, "%s/%s", dir, de->d_name);
         add_app(path, de->d_name, flatpak);
+    }
+    closedir(dp);
+}
+
+/* Wine's menu tree: applications/wine/Programs/<vendor>/<program>.desktop,
+ * folders within folders. The ids carry the folder so two vendors' "Help"
+ * entries stay apart. */
+static void scan_wine(const char *dir, const char *rel, int depth)
+{
+    DIR *dp = opendir(dir);
+    if (!dp) return;
+    struct dirent *de;
+    while ((de = readdir(dp))) {
+        if (de->d_name[0] == '.') continue;
+        char path[2048], id[1024];
+        snprintf(path, sizeof path, "%s/%s", dir, de->d_name);
+        snprintf(id, sizeof id, "wine/%s%s%s", rel, rel[0] ? "/" : "", de->d_name);
+        struct stat st;
+        if (stat(path, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            if (depth < 4) scan_wine(path, id + 5, depth + 1);
+            continue;
+        }
+        size_t n = strlen(de->d_name);
+        if (n < 9 || strcmp(de->d_name + n - 8, ".desktop")) continue;
+        adding_wine = 1;
+        add_app(path, id, 0);
+        adding_wine = 0;
     }
     closedir(dp);
 }
@@ -182,6 +216,11 @@ static void scan_all(void)
                  "%s/.local/share/flatpak/exports/share/applications", home);
         scan_dir(path, 1);
     }
+    /* What Wine installed. */
+    if (xdh && *xdh) snprintf(path, sizeof path, "%s/applications/wine", xdh);
+    else if (home)   snprintf(path, sizeof path, "%s/.local/share/applications/wine", home);
+    else path[0] = 0;
+    if (path[0]) scan_wine(path, "", 0);
     scan_dir("/var/lib/flatpak/exports/share/applications", 1);
 
     const char *dirs = getenv("XDG_DATA_DIRS");
@@ -289,7 +328,7 @@ void programs_collapse_all(void) { expand_group = -1; }
 
 
 /* Build one group's submenu; NULL when the group is empty. */
-static W2kMenu *group_menu(int group, int flatpak)
+static W2kMenu *group_menu(int group, int flatpak, int wine)
 {
     W2kMenu *m = NULL;
     int shown = 0, hidden = 0;
@@ -297,8 +336,8 @@ static W2kMenu *group_menu(int group, int flatpak)
 
     for (int pass = 0; pass < 2; pass++) {
         for (int i = 0; i < napps; i++) {
-            if (apps[i].flatpak != flatpak) continue;
-            if (!flatpak && apps[i].group != group) continue;
+            if (apps[i].flatpak != flatpak || apps[i].wine != wine) continue;
+            if (!flatpak && !wine && apps[i].group != group) continue;
             int used = usage_count(apps[i].name) > 0;
             /* First pass: what has been used. Second: the rest, and only
              * when the group is expanded. */
@@ -315,8 +354,8 @@ static W2kMenu *group_menu(int group, int flatpak)
     if (!m && hidden) {
         m = w2k_menu_new();
         for (int i = 0; i < napps; i++) {
-            if (apps[i].flatpak != flatpak) continue;
-            if (!flatpak && apps[i].group != group) continue;
+            if (apps[i].flatpak != flatpak || apps[i].wine != wine) continue;
+            if (!flatpak && !wine && apps[i].group != group) continue;
             w2k_menu_item(m, PROG_BASE + i, apps[i].name, NULL,
                           app_icon(&apps[i]));
         }
@@ -445,15 +484,21 @@ void programs_add_groups(W2kMenu *m)
 
     int any = 0;
     for (int g = 0; g < NGROUPS; g++) {
-        W2kMenu *sub = group_menu(g, 0);
+        W2kMenu *sub = group_menu(g, 0, 0);
         if (!sub) continue;
         w2k_menu_sub(m, groups[g].name, ICO_PROGRAMS, sub);
         any = 1;
     }
-    W2kMenu *fp = group_menu(0, 1);
+    W2kMenu *fp = group_menu(0, 1, 0);
     if (fp) {
         if (any) w2k_menu_sep(m);
         w2k_menu_sub(m, "Flatpak", ICO_PROGRAMS, fp);
+        any = 1;
+    }
+    W2kMenu *wn = group_menu(0, 0, 1);
+    if (wn) {
+        if (any && !fp) w2k_menu_sep(m);
+        w2k_menu_sub(m, "Windows Programs", ICO_PROGRAMS, wn);
         any = 1;
     }
     if (!any) {

@@ -583,6 +583,8 @@ static int logon_screen(const char *last_user, char *user_out, int n)
     w2k_edit_bind(lg.user, lg.win);
     lg.pass = w2k_edit_new(0);
     lg.pass->password = 1;
+    /* For a picture of the screen only: a password to show masked. */
+    if (getenv("W2K_RENDER") && getenv("W2K_RENDER_PASSWORD")) w2k_edit_set(lg.pass, getenv("W2K_RENDER_PASSWORD"));
     w2k_edit_bind(lg.pass, lg.win);
     if (last_user && *last_user) w2k_edit_set(lg.user, last_user);
     else {

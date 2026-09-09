@@ -136,6 +136,7 @@ void w2k_edit_free(W2kEdit *e)
 {
     if (!e) return;
     w2k_scroll_release(&e->vsb);
+    free(e->mask);
     free(e->text);
     free(e->vls);
     free(e);
@@ -151,20 +152,35 @@ static int tab_width(W2kEdit *e)
     return TABSTOP * w2k_text_width(e->font, "n", 1);
 }
 
+/* What the box shows: the text, or for a password box a star for every
+ * byte of it, the same length so every offset still holds. (A character
+ * of more than one byte shows as that many stars.) */
+static const char *shown(W2kEdit *e)
+{
+    if (!e->password) return e->text;
+    char *m = realloc(e->mask, (size_t)e->len + 1);
+    if (!m) return e->text;
+    e->mask = m;
+    memset(m, '*', (size_t)e->len);
+    m[e->len] = 0;
+    return m;
+}
+
 /* Pixel width of text[from .. from+n). */
 static int measure(W2kEdit *e, int from, int n)
 {
+    const char *t = shown(e);
     int x = 0, tw = tab_width(e), run = 0;
     for (int i = 0; i < n; i++) {
-        char c = e->text[from + i];
+        char c = t[from + i];
         if (c == '\t') {
-            if (run) { x += w2k_text_width(e->font, e->text + from + i - run, run); run = 0; }
+            if (run) { x += w2k_text_width(e->font, t + from + i - run, run); run = 0; }
             x = ((x / tw) + 1) * tw;
         } else if (c == '\n') {
             break;
         } else run++;
     }
-    if (run) x += w2k_text_width(e->font, e->text + from + n - run, run);
+    if (run) x += w2k_text_width(e->font, t + from + n - run, run);
     return x;
 }
 
@@ -361,6 +377,7 @@ static void ensure_caret_visible(W2kEdit *e)
 void w2k_edit_wipe(W2kEdit *e)
 {
     if (e->text && e->cap > 0) memset(e->text, 0, (size_t)e->cap);
+    if (e->mask) { free(e->mask); e->mask = NULL; }
     e->len = 0;
     e->caret = e->sel = 0;
     e->vsb.pos = e->hsb.pos = e->scroll_x = 0;
@@ -507,11 +524,12 @@ void w2k_edit_draw(Drawable d, W2kEdit *e)
         }
 
         /* Draw the line in runs so tabs advance correctly and the selected
-         * span picks up the highlight colour. */
+         * span picks up the highlight colour. A password box shows stars. */
+        const char *t = shown(e);
         int run = 0, px = x, tabw = tab_width(e);
         for (int k = 0; k <= le - ls; k++) {
             int at = ls + k;
-            int ch = (at < le) ? e->text[at] : 0;
+            int ch = (at < le) ? t[at] : 0;
             int is_tab = (ch == '\t');
             if (k == le - ls || is_tab) {
                 if (run) {
@@ -526,9 +544,9 @@ void w2k_edit_draw(Drawable d, W2kEdit *e)
                             if (s2 != sel_here) break;
                             n++;
                         }
-                        w2k_textn(d, e->font, px, y, e->text + rs, n,
+                        w2k_textn(d, e->font, px, y, t + rs, n,
                                   sel_here ? C_HIGHLIGHTTEXT : C_WINDOWTEXT);
-                        px += w2k_text_width(e->font, e->text + rs, n);
+                        px += w2k_text_width(e->font, t + rs, n);
                         rs += n;
                         run -= n;
                     }

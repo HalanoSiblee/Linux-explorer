@@ -158,6 +158,7 @@ typedef struct {
     void   (*on_change)(void *user);
     void    *user;
     int      noframe;       /* container drew the sunken well already */
+    char    *mask;          /* a password box shows this: one * a byte */
 } W2kEdit;
 
 W2kEdit *w2k_edit_new(int multiline);

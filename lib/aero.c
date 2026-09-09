@@ -245,17 +245,6 @@ const W2kGlass w2k_glass_bar   = { { 8, 12, 16 }, { 142, 169, 195 }, 1.0f, 0.39f
 const W2kGlass w2k_glass_dark  = { { 0, 0, 0 }, { 83, 99, 114 }, 0.44f, 0.10f };
 
 
-/* A horizontal run of `n` pixels at row y, columns x.., through `law`. */
-static void run_h(const unsigned char *bg, unsigned char *out, int w, int x, int y, int n, const W2kGlass *law)
-{
-    if (n <= 0) return;
-    w2k_glass_law(bg + ((size_t)y * w + x) * 3, out + ((size_t)y * w + x) * 3, (size_t)n, law);
-}
-static void run_v(const unsigned char *bg, unsigned char *out, int w, int x, int y, int n, const W2kGlass *law)
-{
-    for (int i = 0; i < n; i++)
-        w2k_glass_law(bg + ((size_t)(y + i) * w + x) * 3, out + ((size_t)(y + i) * w + x) * 3, 1, law);
-}
 /* White laid over a pixel, alpha 0..256. */
 static inline void lighten(unsigned char *p, int a)
 {

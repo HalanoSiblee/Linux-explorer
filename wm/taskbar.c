@@ -595,11 +595,10 @@ static void task_button(Pixmap pm, int x, int y, int w, int h, int state)
         w2k_theme_taskbutton(pm, x, y, w, h, state, w2k_theme);
 }
 
-/* White text on the bar: Aero's in a dark glow, as Windows 7 sets it. */
+/* White text on the bar, plain: no shadow or glow under Aero either. */
 static void bar_text(Pixmap pm, int x, int y, const char *s)
 {
-    if (w2k_theme == THEME_AERO) w2k_text_glow(pm, F_UI, x, y, s, 255, 255, 255, 0, 0, 0, 170);
-    else                         w2k_text_rgb(pm, F_UI, x, y, s, 255, 255, 255);
+    w2k_text_rgb(pm, F_UI, x, y, s, 255, 255, 255);
 }
 
 static void taskbar_draw(Pixmap pm, int h)

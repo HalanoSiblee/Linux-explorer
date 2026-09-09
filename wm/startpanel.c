@@ -645,12 +645,8 @@ static void panel7_draw(Drawable pm)
             else   hover7(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, m->rrow_h, 0);
         }
         w2k_ellipsis(F_UI, r->label, P7_RIGHT_W - 30, buf, sizeof buf);
-        if (aero())      /* white in a dark glow, as Windows 7 sets it on glass */
-            w2k_text_glow(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
-                          255, 255, 255, 0, 0, 0, 150);
-        else
-            w2k_text_rgb(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
-                         255, 255, 255);
+        w2k_text_rgb(pm, F_UI, P7_RIGHT_X + 13, y + (m->rrow_h - fh) / 2, buf,
+                     255, 255, 255);
         if (r->kind == R_SUB)
             arrow7(pm, P7_RIGHT_X + P7_RIGHT_W - 14, y + m->rrow_h / 2,
                    255, 255, 255);

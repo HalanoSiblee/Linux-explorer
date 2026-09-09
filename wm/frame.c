@@ -182,8 +182,8 @@ static void frame_draw_raw(Client *c, Drawable d)
                          active ? 120 : 160);
         }
         if (frame_theme() == THEME_AERO) {
-            /* Aero: black in a white glow, so it reads over any picture. */
-            w2k_text_glow(pm, tfont, tx, ty, buf, 0, 0, 0, 255, 255, 255, active ? 210 : 150);
+            /* Aero: plain white, active or not. */
+            w2k_text_rgb(pm, tfont, tx, ty, buf, 255, 255, 255);
         } else if (seven) {    /* black when active, grey when not */
             int g = active ? 0 : 153;
             w2k_text_rgb(pm, tfont, tx, ty, buf, g, g, g);

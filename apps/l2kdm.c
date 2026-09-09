@@ -154,26 +154,157 @@ typedef struct {
     char     message[200];
     W2kSkin *banner;
     int      want;               /* 0 log on, 10 shut down, 11 restart */
+    W2kLogonCfg cfg;             /* the look, from the last user's ~/.w2k/logon */
+    Pixmap   wall;               /* the wallpaper at the screen's size, or 0 */
+    Pixmap   art;                /* the banner's artwork (Linux 2000, the distribution) */
+    int      art_w, art_h;
+    char     distro[128];
 } Logon;
 
 static Logon lg;
 
+/* An RGBA picture as a pixmap, laid over `bg` (NULL: as it is). */
+static Pixmap rgba_pixmap(const unsigned char *rgba, int w, int h, const int *bg)
+{
+    Pixmap pm = XCreatePixmap(w2k.dpy, w2k.root, (unsigned)w, (unsigned)h, w2k.depth);
+    char *data = malloc((size_t)w * h * 4);
+    XImage *im = data ? XCreateImage(w2k.dpy, w2k.visual, w2k.depth, ZPixmap, 0, data,
+                                     (unsigned)w, (unsigned)h, 32, 0) : NULL;
+    if (!im) { free(data); return pm; }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            const unsigned char *q = rgba + ((size_t)y * w + x) * 4;
+            int a = bg ? q[3] : 255;
+            int r = bg ? (q[0] * a + bg[0] * (255 - a)) / 255 : q[0];
+            int g = bg ? (q[1] * a + bg[1] * (255 - a)) / 255 : q[1];
+            int b = bg ? (q[2] * a + bg[2] * (255 - a)) / 255 : q[2];
+            XPutPixel(im, x, y, w2k_rgb(r, g, b));
+        }
+    XPutImage(w2k.dpy, pm, w2k.gc, im, 0, 0, 0, 0, (unsigned)w, (unsigned)h);
+    XDestroyImage(im);
+    return pm;
+}
+
+/* The home of the user named, or of the first ordinary user; for a
+ * picture of the screen, $HOME. */
+static void home_of(const char *user, char *buf, int n)
+{
+    buf[0] = 0;
+    if (getenv("W2K_RENDER") && getenv("HOME")) { snprintf(buf, (size_t)n, "%s", getenv("HOME")); return; }
+    struct passwd *pw = user && *user ? getpwnam(user) : NULL;
+    if (!pw) {
+        setpwent();
+        while ((pw = getpwent()))
+            if (pw->pw_uid >= 1000 && pw->pw_uid < 60000 && pw->pw_dir && pw->pw_dir[0] == '/') break;
+        if (pw) snprintf(buf, (size_t)n, "%s", pw->pw_dir);
+        endpwent();
+        return;
+    }
+    if (pw->pw_dir) snprintf(buf, (size_t)n, "%s", pw->pw_dir);
+}
+
+/* The look: from the last user's ~/.w2k/logon -- the colour or wallpaper,
+ * the banner's artwork, whether the user's picture shows. */
+static void look_load(const char *user)
+{
+    char home[1024];
+    home_of(user, home, sizeof home);
+    w2k_logon_load(&lg.cfg, home[0] ? home : NULL);
+    w2k_account_load_from(home);
+    if (lg.wall) { XFreePixmap(w2k.dpy, lg.wall); lg.wall = 0; }
+    if (lg.art)  { XFreePixmap(w2k.dpy, lg.art);  lg.art = 0; }
+    if (lg.cfg.wallpaper[0]) {
+        int iw = 0, ih = 0;
+        unsigned char *rgba = w2k_image_load(lg.cfg.wallpaper, &iw, &ih);
+        if (rgba && iw > 0 && ih > 0) {
+            unsigned char *sc = w2k_rgba_resample(rgba, iw, ih, w2k.sw, w2k.sh, RS_CUBIC);
+            if (sc) { lg.wall = rgba_pixmap(sc, w2k.sw, w2k.sh, NULL); free(sc); }
+        }
+        free(rgba);
+    }
+    static const int white[3] = { 255, 255, 255 };
+    if (lg.cfg.art == LOGON_ART_LINUX2000) {
+        char path[1024];
+        int iw = 0, ih = 0;
+        unsigned char *rgba = w2k_skin_path("l2logo.png", path, sizeof path)
+                            ? w2k_image_load(path, &iw, &ih) : NULL;
+        if (rgba && iw > 0 && ih > 0) {
+            int h = w2k_px(BANNER_H - 16), w = h * iw / ih;
+            unsigned char *sc = w2k_rgba_resample(rgba, iw, ih, w, h, RS_CUBIC);
+            if (sc) { lg.art = rgba_pixmap(sc, w, h, white); lg.art_w = w; lg.art_h = h; free(sc); }
+        }
+        free(rgba);
+    } else if (lg.cfg.art == LOGON_ART_DISTRO) {
+        char path[1024];
+        int iw = 0, ih = 0;
+        unsigned char *rgba = w2k_distro_logo_path(path, sizeof path)
+                            ? w2k_image_load(path, &iw, &ih) : NULL;
+        if (rgba && iw > 0 && ih > 0) {
+            int s = w2k_px(56);
+            unsigned char *sc = w2k_rgba_resample(rgba, iw, ih, s, s, RS_CUBIC);
+            if (sc) { lg.art = rgba_pixmap(sc, s, s, white); lg.art_w = lg.art_h = s; free(sc); }
+        }
+        free(rgba);
+        w2k_distro_pretty_name(lg.distro, sizeof lg.distro);
+    }
+}
+
+/* The name typed changes whose picture shows. */
+static void user_changed(void *u)
+{
+    (void)u;
+    if (!lg.user || getenv("W2K_RENDER")) return;
+    char home[1024];
+    struct passwd *pw = getpwnam(w2k_edit_text(lg.user));
+    if (!pw || !pw->pw_dir) return;
+    snprintf(home, sizeof home, "%s", pw->pw_dir);
+    w2k_account_load_from(home);
+    if (lg.win) w2k_win_dirty(lg.win);
+}
+
 static void paint(W2kWin *w, Drawable d)
 {
     int fh = w2k_font_height(F_UI);
-    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(58, 110, 165));
-    XFillRectangle(w2k.dpy, d, w2k.gc, 0, 0, (unsigned)w->w, (unsigned)w->h);
+    if (lg.wall)
+        XCopyArea(w2k.dpy, lg.wall, d, w2k.gc, 0, 0, (unsigned)w2k.sw, (unsigned)w2k.sh, 0, 0);
+    else {
+        XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(lg.cfg.bg[0], lg.cfg.bg[1], lg.cfg.bg[2]));
+        XFillRectangle(w2k.dpy, d, w2k.gc, 0, 0, (unsigned)w->w, (unsigned)w->h);
+    }
 
     W2kRect r = lg.dlg;
     w2k_fill(d, r.x, r.y, r.w, r.h, C_FACE);
     w2k_edge(d, r.x, r.y, r.w, r.h, EDGE_RAISED, BF_RECT);
     w2k_gradient(d, r.x + 3, r.y + 3, r.w - 6, CAP_H, C_ACTIVETITLE, C_ACTIVETITLE2);
     w2k_text(d, F_UI_BOLD, r.x + 3 + 5, r.y + 3 + (CAP_H - w2k_font_height(F_UI_BOLD)) / 2,
-             "Log On to Windows", C_TITLETEXT);
+             lg.cfg.art == LOGON_ART_LINUX2000 ? "Log On to Linux 2000" :
+             lg.cfg.art == LOGON_ART_DISTRO ? "Log On" : "Log On to Windows", C_TITLETEXT);
 
     int by = r.y + 3 + CAP_H;
     w2k_fill(d, r.x + 3, by, r.w - 6, BANNER_H, C_WINDOW);
-    if (lg.banner)
+    /* The user's picture at the banner's right end, framed, when asked. */
+    int pic_w = lg.cfg.show_picture ? 48 + 24 : 0;
+    if (lg.cfg.show_picture) {
+        int px = r.x + r.w - 3 - 12 - 48, py = by + (BANNER_H - 48) / 2;
+        w2k_edge(d, px - 2, py - 2, 52, 52, EDGE_SUNKEN, BF_RECT);
+        w2k_account_picture_draw(d, px, py, 48, ICO_MYCOMPUTER);
+    }
+    if (lg.cfg.art == LOGON_ART_LINUX2000 && lg.art) {
+        /* The logo, centred in what the picture leaves of the banner. */
+        int aw = w2k_lp(lg.art_w), ah = w2k_lp(lg.art_h);
+        int ax = r.x + 3 + (r.w - 6 - pic_w - aw) / 2, ay = by + (BANNER_H - ah) / 2;
+        XCopyArea(w2k.dpy, lg.art, d, w2k.gc, 0, 0, (unsigned)lg.art_w, (unsigned)lg.art_h,
+                  w2k_cx(ax), w2k_cx(ay));
+    } else if (lg.cfg.art == LOGON_ART_DISTRO) {
+        /* The distribution's logo, its name beside it. */
+        int lx = r.x + 40, ly = by + (BANNER_H - 56) / 2;
+        if (lg.art) XCopyArea(w2k.dpy, lg.art, d, w2k.gc, 0, 0, (unsigned)lg.art_w, (unsigned)lg.art_h,
+                              w2k_cx(lx), w2k_cx(ly));
+        else w2k_bigicon_draw(d, lx + 12, ly + 12, ICO_STARTFLAG);
+        char buf[160];
+        w2k_ellipsis(F_UI_BOLD, lg.distro, r.w - 6 - pic_w - 110 - 8, buf, sizeof buf);
+        w2k_text(d, F_UI_BOLD, r.x + 110, by + 34, buf, C_TEXT);
+    } else if (lg.banner)
         w2k_skin_draw(d, lg.banner, r.x + 3, by, 0, 0, w2k_skin_w(lg.banner), w2k_skin_h(lg.banner));
     else {
         w2k_bigicon_draw(d, r.x + 50, by + 30, ICO_STARTFLAG);
@@ -601,8 +732,11 @@ static int logon_screen(const char *last_user, char *user_out, int n)
     lg.pass->focused = 1;
     lg.options_open = 1;
     layout(lg.win);
+    look_load(w2k_edit_text(lg.user));
+    lg.user->on_change = user_changed;
     char path[1024];
-    if (w2k_skin_path("logon-banner.png", path, sizeof path)) lg.banner = w2k_skin_load(path);
+    if (lg.cfg.art == LOGON_ART_WINDOWS &&
+        w2k_skin_path("logon-banner.png", path, sizeof path)) lg.banner = w2k_skin_load(path);
 
     w2k_add_timer(w2k_caret_blink, blink, lg.user);
     w2k_add_timer(w2k_caret_blink, blink, lg.pass);
@@ -614,6 +748,8 @@ static int logon_screen(const char *last_user, char *user_out, int n)
     w2k_edit_free(lg.user);
     w2k_edit_free(lg.pass);
     if (lg.banner) w2k_skin_free(lg.banner);
+    if (lg.wall) XFreePixmap(w2k.dpy, lg.wall);
+    if (lg.art)  XFreePixmap(w2k.dpy, lg.art);
     XFlush(w2k.dpy);
     /* Log on only when the dialog was dismissed by a successful logon:
      * anything else (a shutdown request, or a close forced on the window

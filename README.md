@@ -169,6 +169,11 @@ asked for, and the glass is refreshed when a window moves or is raised. Every el
 from the basic-colours palette or by its red, green and blue values, and
 title bars have a Color 2 for the far end of their gradient. The XP and 7
 chrome is cropped from screenshots and checked by diffing against them.
+Control Panel > Logon Screen chooses what the logon screen shows: the
+banner's artwork (Windows 2000, the Linux 2000 logo, or the
+distribution's own logo and name), the colour or a wallpaper behind the
+dialog, and whether the user's picture is on it. The logon screen reads
+the settings of the last user who logged on.
 Typing at any Start menu searches inside it -- the first letter
 included -- through the programs, the recent documents and the names
 Windows users type (taskmgr, calc, winver, desk.cpl, control, cmd and

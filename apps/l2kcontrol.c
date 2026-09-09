@@ -37,6 +37,7 @@ static void open_fonts(void);
 static void open_datetime(void);
 static void open_power(void);
 static void open_users(void);
+static void open_logon(void);
 
 typedef struct {
     const char *name;
@@ -65,6 +66,8 @@ static const Applet applets[] = {
       ICO_FONTS_FOLDER, NULL, open_fonts },
     { "Keyboard", "Customizes your keyboard settings.",
       ICO_CP_KEYBOARD, NULL, open_keyboard },
+    { "Logon Screen", "Chooses the artwork, the background and the picture the logon screen shows.",
+      ICO_LOGOFF, NULL, open_logon },
     { "Mouse", "Customizes your mouse settings.",
       ICO_CP_MOUSE, NULL, open_mouse },
     { "Network and Dial-up Connections", "Connects to other computers, networks, and the Internet.",
@@ -2248,6 +2251,197 @@ static void open_users(void)
     w2k_del_timer(blink, ud.name);
 }
 
+/* ------------------------------------------------------------------ *
+ * Logon Screen
+ *
+ * What the logon screen shows: the banner's artwork (Windows 2000,
+ * Linux 2000, the distribution's own logo), the colour or wallpaper
+ * behind the dialog, and whether the user's picture is on it. Kept in
+ * ~/.w2k/logon; the logon screen reads the last user's.
+ * ------------------------------------------------------------------ */
+typedef struct {
+    W2kWin  *win;
+    W2kLogonCfg cfg;
+    W2kEdit *rgb[3], *wall;
+    W2kRect  art[3], swatch, browse, none, pic, ok, cancel, apply;
+    char     distro[128];
+    int      down, dirty;
+} LogonDlg;
+
+static void lo_edit_focus(LogonDlg *ld, W2kEdit *e)
+{
+    for (int i = 0; i < 3; i++) ld->rgb[i]->focused = ld->rgb[i] == e;
+    ld->wall->focused = ld->wall == e;
+}
+
+static void lo_read_colour(LogonDlg *ld)
+{
+    for (int i = 0; i < 3; i++) {
+        int v = atoi(w2k_edit_text(ld->rgb[i]));
+        ld->cfg.bg[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+}
+
+static void lo_changed(void *u)
+{
+    LogonDlg *ld = u;
+    lo_read_colour(ld);
+    snprintf(ld->cfg.wallpaper, sizeof ld->cfg.wallpaper, "%s", w2k_edit_text(ld->wall));
+    ld->dirty = 1;
+    w2k_win_dirty(ld->win);
+}
+
+static void lo_paint(W2kWin *w, Drawable d)
+{
+    LogonDlg *ld = w->user;
+    int fh = w2k_font_height(F_UI);
+    W2kRect g = { 12, 10, w->w - 24, 88 };
+    w2k_draw_groupbox(d, &g, "Artwork");
+    static const char *const names[3] = { "Windows 2000 Professional", "Linux 2000", NULL };
+    char dl[160];
+    snprintf(dl, sizeof dl, "%s (the distribution's logo)", ld->distro);
+    for (int i = 0; i < 3; i++)
+        w2k_draw_radio(d, ld->art[i].x, ld->art[i].y, i == 2 ? dl : names[i], ld->cfg.art == i, 0, 0);
+
+    W2kRect g2 = { 12, g.y + g.h + 8, w->w - 24, 118 };
+    w2k_draw_groupbox(d, &g2, "Background");
+    w2k_text_mnemonic(d, F_UI, g2.x + 14, ld->swatch.y + (ld->swatch.h - fh) / 2, "&Color:", C_TEXT, 1);
+    w2k_edge(d, ld->swatch.x, ld->swatch.y, ld->swatch.w, ld->swatch.h, EDGE_SUNKEN, BF_RECT);
+    w2k_fill_rgb(d, ld->swatch.x + 2, ld->swatch.y + 2, ld->swatch.w - 4, ld->swatch.h - 4,
+                 ld->cfg.bg[0], ld->cfg.bg[1], ld->cfg.bg[2]);
+    for (int i = 0; i < 3; i++) w2k_edit_draw(d, ld->rgb[i]);
+    w2k_text(d, F_UI, ld->rgb[2]->r.x + ld->rgb[2]->r.w + 8, ld->swatch.y + (ld->swatch.h - fh) / 2,
+             "red, green, blue", C_GRAYTEXT);
+    w2k_text_mnemonic(d, F_UI, g2.x + 14, ld->wall->r.y + (21 - fh) / 2, "&Wallpaper:", C_TEXT, 1);
+    w2k_edit_draw(d, ld->wall);
+    w2k_draw_pushbutton(d, &ld->browse, "&Browse...", ld->down == 4 ? BS_PRESSED : 0);
+    w2k_draw_pushbutton(d, &ld->none, "&None",
+                        (ld->cfg.wallpaper[0] ? 0 : BS_DISABLED) | (ld->down == 5 ? BS_PRESSED : 0));
+    w2k_text(d, F_UI, g2.x + 14, ld->none.y + 4, "A picture is stretched over the colour.", C_GRAYTEXT);
+
+    w2k_draw_checkbox(d, ld->pic.x, ld->pic.y, "&Show the user's picture on the logon screen",
+                      ld->cfg.show_picture, 0, 0);
+    w2k_text(d, F_UI, 12, ld->pic.y + 26, "The logon screen takes its look from the last user who logged on.", C_GRAYTEXT);
+
+    w2k_draw_pushbutton(d, &ld->ok, "OK", BS_DEFAULT | (ld->down == 1 ? BS_PRESSED : 0));
+    w2k_draw_pushbutton(d, &ld->cancel, "Cancel", ld->down == 2 ? BS_PRESSED : 0);
+    w2k_draw_pushbutton(d, &ld->apply, "&Apply",
+                        (ld->dirty ? 0 : BS_DISABLED) | (ld->down == 3 ? BS_PRESSED : 0));
+}
+
+static void lo_commit(LogonDlg *ld)
+{
+    lo_read_colour(ld);
+    snprintf(ld->cfg.wallpaper, sizeof ld->cfg.wallpaper, "%s", w2k_edit_text(ld->wall));
+    if (w2k_logon_save(&ld->cfg) < 0)
+        w2k_msgbox(ld->win, "Logon Screen", "The settings could not be saved.", MB_OK | MB_ICONWARNING);
+    ld->dirty = 0;
+}
+
+static int lo_event(W2kWin *w, XEvent *e)
+{
+    LogonDlg *ld = w->user;
+    switch (e->type) {
+    case ButtonPress: {
+        int x = e->xbutton.x, y = e->xbutton.y;
+        for (int i = 0; i < 3; i++)
+            if (w2k_edit_press(ld->rgb[i], &e->xbutton)) { lo_edit_focus(ld, ld->rgb[i]); w2k_win_dirty(w); return 1; }
+        if (w2k_edit_press(ld->wall, &e->xbutton)) { lo_edit_focus(ld, ld->wall); w2k_win_dirty(w); return 1; }
+        for (int i = 0; i < 3; i++)
+            if (w2k_rect_hit(&ld->art[i], x, y)) { ld->cfg.art = i; ld->dirty = 1; w2k_win_dirty(w); return 1; }
+        if (w2k_rect_hit(&ld->pic, x, y)) { ld->cfg.show_picture = !ld->cfg.show_picture; ld->dirty = 1; w2k_win_dirty(w); return 1; }
+        if (w2k_rect_hit(&ld->ok, x, y)) ld->down = 1;
+        else if (w2k_rect_hit(&ld->cancel, x, y)) ld->down = 2;
+        else if (w2k_rect_hit(&ld->apply, x, y) && ld->dirty) ld->down = 3;
+        else if (w2k_rect_hit(&ld->browse, x, y)) ld->down = 4;
+        else if (w2k_rect_hit(&ld->none, x, y) && ld->cfg.wallpaper[0]) ld->down = 5;
+        w2k_win_dirty(w);
+        return 1;
+    }
+    case ButtonRelease: {
+        int b = ld->down, x = e->xbutton.x, y = e->xbutton.y;
+        ld->down = 0;
+        if (b == 1 && w2k_rect_hit(&ld->ok, x, y)) { lo_commit(ld); w2k_win_close(w, ID_OK); }
+        else if (b == 2 && w2k_rect_hit(&ld->cancel, x, y)) w2k_win_close(w, ID_CANCEL);
+        else if (b == 3 && w2k_rect_hit(&ld->apply, x, y)) lo_commit(ld);
+        else if (b == 4 && w2k_rect_hit(&ld->browse, x, y)) {
+            char path[1024];
+            snprintf(path, sizeof path, "%s", ld->cfg.wallpaper[0] ? ld->cfg.wallpaper : "/usr/share/backgrounds/");
+            if (w2k_file_dialog_filter(w, 0, path, sizeof path,
+                                       "Pictures (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*")) {
+                w2k_edit_set(ld->wall, path);
+                snprintf(ld->cfg.wallpaper, sizeof ld->cfg.wallpaper, "%s", path);
+                ld->dirty = 1;
+            }
+        }
+        else if (b == 5 && w2k_rect_hit(&ld->none, x, y)) { w2k_edit_set(ld->wall, ""); ld->cfg.wallpaper[0] = 0; ld->dirty = 1; }
+        w2k_win_dirty(w);
+        return 1;
+    }
+    case KeyPress: {
+        KeySym ks = XLookupKeysym(&e->xkey, 0);
+        if (ks == XK_Escape) { w2k_win_close(w, ID_CANCEL); return 1; }
+        if (ks == XK_Return || ks == XK_KP_Enter) { lo_commit(ld); w2k_win_close(w, ID_OK); return 1; }
+        for (int i = 0; i < 3; i++)
+            if (ld->rgb[i]->focused && w2k_edit_key(ld->rgb[i], &e->xkey)) { w2k_win_dirty(w); return 1; }
+        if (ld->wall->focused && w2k_edit_key(ld->wall, &e->xkey)) { w2k_win_dirty(w); return 1; }
+        return 1;
+    }
+    }
+    return 0;
+}
+
+static void open_logon(void)
+{
+    LogonDlg ld;
+    memset(&ld, 0, sizeof ld);
+    int cw = 392, chh = 330;
+    W2kWin *w = w2k_win_new("Logon Screen", "l2kcontrol", cw, chh, 0);
+    ld.win = w;
+    w->user = &ld;
+    w->paint = lo_paint;
+    w->event = lo_event;
+    w2k_logon_load(&ld.cfg, NULL);
+    w2k_distro_pretty_name(ld.distro, sizeof ld.distro);
+    for (int i = 0; i < 3; i++) ld.art[i] = (W2kRect){ 26, 30 + i * 20, 330, 16 };
+    ld.swatch = (W2kRect){ 26 + 70, 106 + 22, 40, 21 };
+    for (int i = 0; i < 3; i++) {
+        ld.rgb[i] = w2k_edit_new(0);
+        w2k_edit_bind(ld.rgb[i], w);
+        ld.rgb[i]->r = (W2kRect){ ld.swatch.x + ld.swatch.w + 8 + i * 40, ld.swatch.y, 36, 21 };
+        char v[8];
+        snprintf(v, sizeof v, "%d", ld.cfg.bg[i]);
+        w2k_edit_set(ld.rgb[i], v);
+        ld.rgb[i]->on_change = lo_changed;
+        ld.rgb[i]->user = &ld;
+    }
+    ld.wall = w2k_edit_new(0);
+    w2k_edit_bind(ld.wall, w);
+    ld.wall->r = (W2kRect){ 26 + 70, ld.swatch.y + 30, 190, 21 };
+    w2k_edit_set(ld.wall, ld.cfg.wallpaper);
+    ld.wall->on_change = lo_changed;
+    ld.wall->user = &ld;
+    ld.browse = (W2kRect){ ld.wall->r.x + ld.wall->r.w + 8, ld.wall->r.y - 1, 75, 23 };
+    ld.none   = (W2kRect){ ld.browse.x, ld.browse.y + 27, 75, 23 };
+    ld.pic    = (W2kRect){ 26, 106 + 118 + 12, 340, 16 };
+    ld.dirty = 0;
+    int bby = chh - 12 - 23;
+    ld.apply  = (W2kRect){ cw - 12 - 75, bby, 75, 23 };
+    ld.cancel = (W2kRect){ cw - 12 - 75 * 2 - 6, bby, 75, 23 };
+    ld.ok     = (W2kRect){ cw - 12 - 75 * 3 - 12, bby, 75, 23 };
+    lo_edit_focus(&ld, ld.rgb[0]);
+    for (int i = 0; i < 3; i++) w2k_add_timer(w2k_caret_blink, blink, ld.rgb[i]);
+    w2k_add_timer(w2k_caret_blink, blink, ld.wall);
+    w2k_win_center(w, cp.win);
+    Atom t = w2k.a_net_wm_wt_dialog;
+    XChangeProperty(w2k.dpy, w->win, w2k.a_net_wm_window_type, XA_ATOM, 32,
+                    PropModeReplace, (unsigned char *)&t, 1);
+    w2k_win_modal(w);
+    for (int i = 0; i < 3; i++) { w2k_del_timer(blink, ld.rgb[i]); w2k_edit_free(ld.rgb[i]); }
+    w2k_del_timer(blink, ld.wall);
+    w2k_edit_free(ld.wall);
+}
+
 /* Rows of the Control Panel list carry their applet's index: on a desktop
  * machine Power Options is left out, so the row and the index differ. */
 static int applet_of_row(int row)
@@ -2380,6 +2574,7 @@ int main(int argc, char **argv)
             { "datetime",    open_datetime    },
             { "power",       open_power       },
             { "users",       open_users       },
+            { "logon",       open_logon       },
         };
         for (int i = 0; i < (int)(sizeof direct / sizeof *direct); i++)
             if (!strcasecmp(argv[1], direct[i].word)) {

@@ -43,6 +43,7 @@ static const W2kAlias aliases[] = {
     { "lusrmgr",        "User Accounts",        "l2kcontrol users",   ICO_SETTINGS },
     { "sysdm",          "Performance Options",  "l2kcontrol performance", ICO_SETTINGS },
     { "msinfo32",       "About Linux 2000",     "linver",             ICO_STARTFLAG },
+    { "logonui",        "Logon Screen",         "l2kcontrol logon",   ICO_LOGOFF },
 };
 #define NALIAS ((int)(sizeof aliases / sizeof *aliases))
 

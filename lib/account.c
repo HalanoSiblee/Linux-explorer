@@ -57,6 +57,27 @@ void w2k_account_reload(void)
     pic_drop();
 }
 
+void w2k_account_load_from(const char *home)
+{
+    loaded = 1;
+    acc_name[0] = acc_pic[0] = 0;
+    pic_drop();
+    if (!home || !*home) return;
+    char p[1100];
+    snprintf(p, sizeof p, "%s/.w2k/account", home);
+    FILE *f = fopen(p, "r");
+    if (!f) return;
+    char line[1200];
+    while (fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (!strncmp(line, "Name=", 5))
+            snprintf(acc_name, sizeof acc_name, "%s", line + 5);
+        else if (!strncmp(line, "Picture=", 8))
+            snprintf(acc_pic, sizeof acc_pic, "%s", line + 8);
+    }
+    fclose(f);
+}
+
 /* The passwd entry's idea of the name: the first GECOS field with its
  * first letter up, or the login name. */
 const char *w2k_account_default_name(void)

@@ -901,6 +901,18 @@ void w2k_icon_set_user(int id, unsigned char *i16, unsigned char *i32);
 int  w2k_distro_logo_path(char *buf, int n);   /* the distribution's logo PNG */
 /* The user as the Start menu shows them (lib/account.c): a display name
  * and a picture from ~/.w2k/account, with the passwd entry behind. */
+/* Read another home's account file: the logon screen, running as root,
+ * shows the picture of whoever is logging on. */
+void w2k_account_load_from(const char *home);
+
+/* logon.c -- the logon screen's look, ~/.w2k/logon */
+enum { LOGON_ART_WINDOWS, LOGON_ART_LINUX2000, LOGON_ART_DISTRO };
+typedef struct { int art; int bg[3]; char wallpaper[1024]; int show_picture; } W2kLogonCfg;
+void w2k_logon_defaults(W2kLogonCfg *c);
+int  w2k_logon_load(W2kLogonCfg *c, const char *home);   /* NULL home: $HOME */
+int  w2k_logon_save(const W2kLogonCfg *c);
+void w2k_distro_pretty_name(char *buf, int n);
+
 const char *w2k_account_name(void);           /* never empty */
 const char *w2k_account_default_name(void);   /* the passwd entry's */
 const char *w2k_account_picture(void);        /* a path, or "" */

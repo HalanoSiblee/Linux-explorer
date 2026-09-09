@@ -135,6 +135,7 @@ int w2k_glass_source_ready(void) { return src_ready; }
 
 unsigned char *(*w2k_glass_live)(int rx, int ry, int w, int h);
 Window w2k_glass_above;
+void (*w2k_glass_batch)(int begin);
 
 /* The blurred wallpaper under the root rectangle, RGB, malloc'd -- or,
  * when the window manager offers it, what really lies there. */
@@ -384,23 +385,6 @@ int w2k_aero_corner_rows(void)
 #define AERO_TOP 36             /* from the frame's top edge to the client */
 #define AERO_BTN_X 112          /* the button cluster's left edge, from the frame's right */
 
-/* The reflection: a band of light down the left of the caption and up to
- * its right corner, fading along the caption and down the side. Measured
- * over a black desktop: 0.37 white at the corners. */
-static int sheen_at(int x, int y, int fw, int s)
-{
-    int top = AERO_TOP * s;
-    int l = x < 42 * s ? 256 : 256 - (x - 42 * s) * 256 / (132 * s);
-    int r = 256 - (fw - 1 - x) * 256 / (190 * s);
-    int a = smooth(l) > smooth(r) ? smooth(l) : smooth(r);
-    if (y >= top) {
-        /* Down the borders it fades out over a couple of hundred rows. */
-        int v = 256 - (y - top) * 256 / (184 * s);
-        a = a * smooth(v) >> 8;
-    }
-    return (a * 95) >> 8;          /* 0.37 of white */
-}
-
 void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
                     int row0, int row1, int active, int btn_hot, int btn_down,
                     int close_only, int buttons)
@@ -425,6 +409,8 @@ void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
     int bot0 = row0 > fh - b ? row0 : fh - b;
     if (row1 > bot0) { parts[np].x = 0; parts[np].y = bot0; parts[np].w = fw; parts[np].h = row1 - bot0; np++; }
 
+    /* The pieces share one walk of the window stack. */
+    if (w2k_glass_batch) w2k_glass_batch(1);
     for (int p = 0; p < np; p++) {
         int px = parts[p].x, py = parts[p].y, pw = parts[p].w, ph = parts[p].h;
         if (pw <= 0 || ph <= 0) continue;
@@ -432,13 +418,30 @@ void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
         unsigned char *out = malloc((size_t)pw * ph * 3);
         if (!bg || !out) { free(bg); free(out); continue; }
         w2k_glass_law(bg, out, (size_t)pw * ph, &w2k_glass_frame);
-        /* The reflection. */
-        for (int y = 0; y < ph; y++)
+        /* The reflection. Its shape along x does not change down the
+         * piece and its fade down y does not change across it, so both
+         * are worked out once instead of two divisions and two
+         * smoothsteps for every pixel. */
+        int top = w2k_px(AERO_TOP);
+        int *col = malloc((size_t)pw * sizeof *col);
+        if (col) {
             for (int x = 0; x < pw; x++) {
-                int a = sheen_at(px + x, py + y, fw, s);
-                if (!active) a = a * 3 / 5;
-                lighten(out + ((size_t)y * pw + x) * 3, a);
+                int gx = px + x;
+                int l = gx < 42 * s ? 256 : 256 - (gx - 42 * s) * 256 / (132 * s);
+                int r = 256 - (fw - 1 - gx) * 256 / (190 * s);
+                int a = smooth(l) > smooth(r) ? smooth(l) : smooth(r);
+                col[x] = (a * 95) >> 8;                 /* 0.37 of white */
             }
+            for (int y = 0; y < ph; y++) {
+                int gy = py + y, fade = 256;
+                if (gy >= top) fade = smooth(256 - (gy - top) * 256 / (184 * s));
+                if (!active) fade = fade * 3 / 5;
+                if (fade <= 0) continue;
+                unsigned char *row = out + (size_t)y * pw * 3;
+                for (int x = 0; x < pw; x++) lighten(row + x * 3, col[x] * fade >> 8);
+            }
+            free(col);
+        }
         /* Lines, in frame coordinates, clipped to the piece: white, black
          * or grey laid over the glass at the measured strengths. */
 #define HL(Y, C, A) do { int yy = (Y); for (int i = 0; i < s; i++) ov_h(out, pw, ph, 0, yy + i - py, pw, C, A); } while (0)
@@ -471,8 +474,16 @@ void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
              * ones with the colour taken out. */
             int inact = !active && btn2_rgba && btn2_w == btn_w && btn2_h == btn_h;
             size_t cell = (size_t)btn_w * btn_h * 4;
-            unsigned char *art = malloc(cell);
-            if (art) {
+            /* Kept: the strip depends only on these four, so it is
+             * composed once per state rather than on every repaint. */
+            static unsigned char *art;
+            static int art_key = -1, art_bytes;
+            int key = (active ? 1 : 0) | (inact ? 2 : 0) | ((btn_hot + 1) << 2) |
+                      ((btn_down + 1) << 5) | (w2k_ui_scale << 8);
+            if (art && art_bytes != (int)cell) { free(art); art = NULL; art_key = -1; }
+            if (!art) { art = malloc(cell); art_bytes = (int)cell; art_key = -1; }
+            if (art && art_key != key) {
+                art_key = key;
                 memcpy(art, inact ? btn2_rgba : btn_rgba, cell);
                 /* Skin columns of each button: Minimise 1..29, Maximise
                  * 30..56, Close 57..106 -- measured. */
@@ -491,14 +502,16 @@ void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
                             else if (state == 2) darken(q, 70);
                         }
                 }
-                composite(out, pw, ph, bx + x0 - px, by - py, art, btn_w, btn_h, x0, 0, btn_w - x0, btn_h);
-                free(art);
             }
+            if (art)
+                composite(out, pw, ph, bx + x0 - px, by - py, art, btn_w, btn_h,
+                          x0, 0, btn_w - x0, btn_h);
         }
         w2k_rgb_put(d, dx + px, dy + py, out, pw, ph);
         free(bg);
         free(out);
     }
+    if (w2k_glass_batch) w2k_glass_batch(0);
 }
 
 /* ------------------------------------------------------------------ *
@@ -589,7 +602,7 @@ void w2k_aero_taskbutton(Drawable d, int x, int y, int w, int h, int state, int 
  * blue-white one along the bottom, in a dark line with a light one inside;
  * the white pane cut into it, outlined, with the search band across its
  * foot. All in the panel's pixels; (rx, ry) is the slab's root position. */
-static unsigned char *tile_rgba; static int tile_w, tile_h, tile_tried;
+static unsigned char *tile_rgba; static int tile_w, tile_h, tile_tried, tile_scale;
 
 void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h, int over,
                     int pane_x, int pane_y, int pane_w, int pane_h, int band_y, int tile_x)
@@ -606,7 +619,9 @@ void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h, in
     w2k_glass_law(bg + (size_t)w * over * 3, out + (size_t)w * over * 3, (size_t)w * h, &w2k_glass_bar);
     /* The tile: its frame, cut from Windows 7 with its transparency; the
      * picture inside is the caller's. */
-    if (skins_scale != w2k_ui_scale) { free(tile_rgba); tile_rgba = NULL; tile_tried = 0; }
+    /* Keyed on its own scale: skins_scale belongs to skins(), which this
+     * function never calls, so testing it reloaded the art every time. */
+    if (tile_scale != w2k_ui_scale) { free(tile_rgba); tile_rgba = NULL; tile_tried = 0; tile_scale = w2k_ui_scale; }
     if (!tile_tried) { tile_tried = 1; tile_rgba = load_rgba("aero-usertile.png", &tile_w, &tile_h); }
     unsigned char *slab = out + (size_t)w * over * 3;
     bg += (size_t)w * over * 3;

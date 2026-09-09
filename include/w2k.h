@@ -589,6 +589,10 @@ unsigned char *w2k_glass_bg(int rx, int ry, int w, int h);
  * windows behind it. NULL, or a NULL result, falls back on the wallpaper. */
 extern unsigned char *(*w2k_glass_live)(int rx, int ry, int w, int h);
 extern Window w2k_glass_above;
+/* A frame is drawn in pieces, each asking for its own background. The
+ * window manager uses this to walk the window stack once for the set
+ * rather than once per piece: begin(1) before, begin(0) after. */
+extern void (*w2k_glass_batch)(int begin);
 void w2k_glass_law(const unsigned char *bg, unsigned char *out, size_t n, const W2kGlass *g);
 void w2k_rgb_put(Drawable d, int dx, int dy, const unsigned char *rgb, int w, int h);
 void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,

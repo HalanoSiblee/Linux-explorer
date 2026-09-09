@@ -616,10 +616,23 @@ void w2k_text_vertical(Drawable d, int font, int x, int y, const char *s,
          * back 32-bit pixels whose top byte is not the colour we filled. */
         unsigned long white = w2k.col[C_WHITE] & 0xffffffu;
         XSetForeground(w2k.dpy, w2k.gc, w2k.col[color]);
+        /* Batched: a dark pixel used to be a request of its own, and the
+         * Start menu repaints its banner every time the highlighted item
+         * changes -- some five hundred and sixty requests per hover. */
+        XRectangle run[256];
+        int k = 0;
         for (int ty = 0; ty < th; ty++)
-            for (int tx = 0; tx < tw; tx++)
-                if ((XGetPixel(im, tx, ty) & 0xffffffu) != white)
-                    XFillRectangle(w2k.dpy, d, w2k.gc, x + ty, y - tx, 1, 1);
+            for (int tx = 0; tx < tw; tx++) {
+                if ((XGetPixel(im, tx, ty) & 0xffffffu) == white) continue;
+                run[k].x = (short)(x + ty);
+                run[k].y = (short)(y - tx);
+                run[k].width = run[k].height = 1;
+                if (++k == (int)(sizeof run / sizeof *run)) {
+                    XFillRectangles(w2k.dpy, d, w2k.gc, run, k);
+                    k = 0;
+                }
+            }
+        if (k) XFillRectangles(w2k.dpy, d, w2k.gc, run, k);
         XDestroyImage(im);
     }
     w2k_free_pixmap(tmp);

@@ -165,6 +165,7 @@ int w2k_scroll_motion(W2kScroll *s, int px, int py)
 
 void w2k_scroll_release(W2kScroll *s)
 {
+    w2k_scroll_anim_forget(s);          /* it may be mid smooth-scroll */
     if (s->pressed && s->pressed != SB_THUMB) w2k_del_timer(repeat_tick, s);
     s->pressed = SB_NONE;
 }

@@ -40,11 +40,21 @@ int w2k_icon_register(unsigned char *rgba16, unsigned char *rgba32)
     if (!rgba16 && !rgba32) return ICO_APP;
     if (nextra == extra_cap) {
         int cap = extra_cap ? extra_cap * 2 : 64;
+        /* Committed one at a time: a realloc that succeeds has already
+         * freed the old block, so a later failure must not leave the old
+         * pointer in place -- it would be a dangling one. */
         Extra *e = realloc(extra, (size_t)cap * sizeof *e);
+        if (!e) return ICO_APP;
+        extra = e;
         Cached *c1 = realloc(ecache16, (size_t)cap * sizeof *c1);
+        if (!c1) return ICO_APP;
+        ecache16 = c1;
         Cached *c2 = realloc(ecache32, (size_t)cap * sizeof *c2);
+        if (!c2) return ICO_APP;
+        ecache32 = c2;
         Cached *c3 = realloc(edim16, (size_t)cap * sizeof *c3);
-        if (!e || !c1 || !c2 || !c3) return ICO_APP;
+        if (!c3) return ICO_APP;
+        edim16 = c3;
         memset(e + extra_cap, 0, (size_t)(cap - extra_cap) * sizeof *e);
         memset(c1 + extra_cap, 0, (size_t)(cap - extra_cap) * sizeof *c1);
         memset(c2 + extra_cap, 0, (size_t)(cap - extra_cap) * sizeof *c2);
@@ -239,14 +249,17 @@ static void blit(Drawable d, int x, int y, int id, int size, int dimmed)
         c = dimmed ? &dim16[id] : (size == 16 ? &cache16[id] : &cache32[id]);
     }
     if (c->built && c->smooth != smooth_wanted()) cached_drop(c);   /* the effect changed */
-    if (!c->built) build(c, rgba, size, dimmed);
 
     if (w2k_ui_scale != 100) {
+        /* Built below, not here: draw_scaled keeps its own cache, so
+         * building this one first made a pixmap and a mask per icon that
+         * nothing ever drew. */
         /* On a scaled desktop the 16-pixel icon is drawn from the 32-pixel
          * art (exact at 200%), and the 32 from itself, enlarged. */
         draw_scaled(d, x, y, id, size, dimmed);
         return;
     }
+    if (!c->built) build(c, rgba, size, dimmed);
     blit_cached(d, x, y, c, size);
 }
 

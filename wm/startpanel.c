@@ -1076,13 +1076,17 @@ static int open_submenu(int id, int x, int y)
     return chosen;
 }
 
-static void panel_regrab(void)
+/* 0 when the pointer could not be taken back: without it the click-away
+ * dismissal never fires and the panel sits on top of everything. */
+static int panel_regrab(void)
 {
-    XGrabPointer(w2k.dpy, panel, True,
-                 ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-                 GrabModeAsync, GrabModeAsync, None, w2k.cur_arrow, CurrentTime);
-    XGrabKeyboard(w2k.dpy, panel, True, GrabModeAsync, GrabModeAsync,
-                  CurrentTime);
+    if (XGrabPointer(w2k.dpy, panel, True,
+                     ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
+                     GrabModeAsync, GrabModeAsync, None, w2k.cur_arrow,
+                     CurrentTime) != GrabSuccess)
+        return 0;
+    XGrabKeyboard(w2k.dpy, panel, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+    return 1;
 }
 
 int startpanel_run(int bx, int by)
@@ -1235,7 +1239,7 @@ int startpanel_run(int bx, int by)
                     int id = row_id(col, row);
                     if (id >= SM_PIN_BASE && id < SM_PIN_BASE + PIN_MAX) {
                         startmenu_context(id, e.xbutton.x_root, e.xbutton.y_root);
-                        panel_regrab();
+                        if (!panel_regrab()) { done = 1; break; }
                         build_rows();
                         hot_col = hot_row = -1;
                         opened = w2k_now_ms();
@@ -1281,7 +1285,7 @@ int startpanel_run(int bx, int by)
                                           seven() ? panel_y + w2k_px(P7_OVER + P7_AP_Y + P7_AP_H)
                                                   : panel_y + w2k_px(panel_h - FOOTER_H));
                 if (chosen) { result = chosen; done = 1; break; }
-                panel_regrab();
+                if (!panel_regrab()) { done = 1; break; }
                 opened = w2k_now_ms();
                 panel_paint();
                 break;

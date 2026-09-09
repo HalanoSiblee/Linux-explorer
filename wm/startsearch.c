@@ -48,6 +48,11 @@ static void search_update(SearchState *s)
         r->kind = SR_PROG; r->id = ids[i]; r->alias = NULL;
         r->icon = programs_icon(ids[i]);
         snprintf(r->name, sizeof r->name, "%s", names[i]);
+        /* Taken now: opening All Programs rescans and re-sorts, and the
+         * id would then name a different program. */
+        r->cmd[0] = 0;
+        r->terminal = 0;
+        programs_command(ids[i], r->cmd, sizeof r->cmd, &r->terminal, NULL, 0);
     }
     const W2kAlias *al[16];
     int na = w2k_alias_search(s->query, al, 16);
@@ -68,6 +73,8 @@ static void search_update(SearchState *s)
         r->kind = SR_RECENT; r->id = i; r->alias = NULL;
         r->icon = w2k_file_icon(l, 0);
         snprintf(r->name, sizeof r->name, "%s", l);
+        const char *rf = recent_file(i);      /* the list is rebuilt on every load */
+        snprintf(r->cmd, sizeof r->cmd, "%s", rf ? rf : "");
     }
 }
 
@@ -111,10 +118,19 @@ int startsearch_run(SearchState *s, int i)
     if (i < 0 || i >= s->n) return 0;
     SResult *r = &s->res[i];
     switch (r->kind) {
-    case SR_PROG:   return programs_run(r->id, wm_terminal_cmd());
+    case SR_PROG: {
+        if (!r->cmd[0]) return 0;
+        programs_note_use(r->name);
+        const char *term = wm_terminal_cmd();
+        char line[1200];
+        if (r->terminal && term) snprintf(line, sizeof line, "%s -e %s", term, r->cmd);
+        else                     snprintf(line, sizeof line, "%s", r->cmd);
+        wm_spawn(line);
+        return 1;
+    }
     case SR_ALIAS:  wm_run_alias(r->alias); return 1;
     case SR_RECENT: {
-        const char *f = recent_file(r->id);
+        const char *f = r->cmd[0] ? r->cmd : NULL;
         if (!f) return 0;
         char q[2200], open[2300];
         w2k_shell_quote(f, q, sizeof q);
@@ -225,7 +241,14 @@ void startsearch_classic(const char *first, int bx, int by, int mw, int mh,
         XDestroyWindow(w2k.dpy, win);
         return;
     }
-    XGrabKeyboard(w2k.dpy, win, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+    if (XGrabKeyboard(w2k.dpy, win, True, GrabModeAsync, GrabModeAsync,
+                      CurrentTime) != GrabSuccess) {
+        /* Without the keys there is nothing to type into: give up rather
+         * than leave a panel that only a click can dismiss. */
+        XUngrabPointer(w2k.dpy, CurrentTime);
+        XDestroyWindow(w2k.dpy, win);
+        return;
+    }
 
     int left = bd + banner_w;
     int box_x = left + 4, box_y = bd + 4, box_w = mw - left - bd - 8, box_h = 22;

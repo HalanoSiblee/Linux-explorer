@@ -2,7 +2,7 @@
  *
  * One nested event loop drives an entire chain of open menus, which is how
  * Windows does it and is far simpler than a retained widget hierarchy. */
-#include "w2k.h"
+#include "w2kui.h"
 #include <stdio.h>
 #include <X11/extensions/shape.h>
 #include <unistd.h>
@@ -720,7 +720,9 @@ static int menu_popup(W2kMenu *m, int x, int y, int flags)
     int result = 0, done = 0;
     int repaint = 1;
 
-    while (!done) {
+    /* w2k_win_abort is set by the shell's SIGTERM handler: unwind rather
+     * than sit in XNextEvent with the pointer and keyboard grabbed. */
+    while (!done && !w2k_win_abort) {
         if (repaint) {
             for (int i = 0; i < n; i++)
                 menu_paint(lv[i].m, lv[i].win, lv[i].w, lv[i].h, lv[i].sel);
@@ -808,6 +810,15 @@ static int menu_popup(W2kMenu *m, int x, int y, int flags)
         case KeyPress: {
             KeySym ks = XLookupKeysym(&e.xkey, 0);
             Level *top = &lv[n - 1];
+            /* The character this key stands for, looked up into a buffer of
+             * our own: XLookupString writes before any test can reject the
+             * key, and a Tab or a Ctrl+letter left behind in the caller's
+             * typeahead buffer would be read afterwards as something the
+             * user typed. */
+            char probe[8] = "";
+            int pn = XLookupString(&e.xkey, probe, sizeof probe - 1, NULL, NULL);
+            int printable = pn == 1 && (unsigned char)probe[0] >= ' ' &&
+                            (unsigned char)probe[0] != 127;
             if (ks == XK_Escape) {
                 if (n > 1) { level_destroy(top); n--; repaint = 1; }
                 else done = 1;
@@ -838,13 +849,12 @@ static int menu_popup(W2kMenu *m, int x, int y, int flags)
                         repaint = 1;
                     } else { result = it->id; done = 1; }
                 }
-            } else if (w2k_menu_typeahead && n == 1 &&
-                       XLookupString(&e.xkey, w2k_menu_typeahead, 2, NULL, NULL) == 1 &&
-                       (unsigned char)w2k_menu_typeahead[0] >= ' ') {
+            } else if (w2k_menu_typeahead && n == 1 && printable) {
                 /* A printable key at the top level: the caller wanted it
                  * (the Start menu turns it into a search, and the search
                  * comes before the mnemonics -- "c" is a search for c, not
                  * Search), so close up and hand it over. */
+                w2k_menu_typeahead[0] = probe[0];
                 w2k_menu_typeahead[1] = 0;
                 done = 1;
             } else {

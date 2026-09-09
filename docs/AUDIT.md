@@ -194,3 +194,88 @@ What did not, and what changed:
     # a desktop paint at 4K with the wallpaper in ~/.w2k/scheme
     W2K_RENDER=desk.ppm W2K_RENDER_DIALOG=desktop W2K_RENDER_W=3840 \
         W2K_RENDER_H=2160 bin/l2kwm
+
+## Third pass, 9 September 2026
+
+Against 1.25.0, over the whole tree (52,000 lines, 15,000 of them added
+since the second pass: the Aero look, the live glass, the Start menu
+search, the Windows names, the logon screen). What was run, what it
+found, and what changed.
+
+### What was run
+
+- **The whole tree with a wide warning set** (`-Wshadow -Wpointer-arith
+  -Wstrict-prototypes -Wmissing-prototypes -Wformat=2 -Wvla
+  -Wnull-dereference -Wduplicated-cond -Wlogical-op -Warray-bounds=2
+  -Wstringop-overflow=4`): no bounds or overflow warnings; the rest are
+  the same bounded `snprintf` truncations and shadowed locals as before.
+- **GCC's static analyzer** over the newest and hottest twenty files: one
+  report, `lib/aero.c`'s `w2k_rgb_put`, whose trace needs zero pixels on
+  a path that returns early. A false positive.
+- **AddressSanitizer and UndefinedBehaviorSanitizer** through some five
+  hundred harness renders -- every desktop dialog, both Start panels, the
+  classic menu, the taskbar at both button sizes and three orb frames,
+  frames active, inactive, maximised and fixed-size, four Display
+  Properties and four Task Manager tabs, eighteen Control Panel applets,
+  Explorer, Disk Management, the updater and the logon screen with each
+  of its three artworks -- in the classic, XP, Vista, Windows 7 Basic,
+  Aero and Modern looks: **no reports**, before and after the changes.
+- **A 264-picture comparison** of every harness in every look, before
+  against after. Forty-three vary between two runs of the same build (a
+  clock, Task Manager's live figures). Of the rest, four differ: the Aero
+  frames, by one step in one channel, from reordering the reflection's
+  arithmetic.
+- **Benchmarks** of the paths the reading suggested were hot, and a
+  before-and-after test of the two most serious bugs driven through
+  XTest.
+
+### Bugs found and fixed
+
+| Where | What | Fix |
+|---|---|---|
+| `apps/l2kexplorer.c` | With the Search box in use the list showed fewer rows than `entries[]` held, but Delete, Rename, Open and drop all indexed `entries[]` by row: **acting on the wrong file**. Searching `zzz` in a folder of `aaa bbb zzz` and pressing Delete offered to bin `aaa.txt`. | A row-to-entry map, and every consumer goes through `entry_at_row()`. |
+| `apps/l2kdm.c` | The logon screen runs as root before anyone logs on and opened `Wallpaper=` and `Picture=` verbatim out of a user-writable file: any user could have root render `/root/anything.png` full-screen, and every keystroke in the name box pointed root's image decoders at another user's file. | A picture is loaded only when it is a regular file, inside that user's own home, owned by them and not a symlink. |
+| `apps/l2kpaint.c` | After twelve edits the undo ring's shift left two slots naming one buffer; the next push freed it, so a later undo read and freed it again. | The vacated slot is cleared after the shift. |
+| `lib/menu.c` | `XLookupString` wrote into the caller's type-ahead buffer before the printable test could reject the key, so Tab or a Ctrl-letter left a character behind and the Start menu opened a search **instead of running the item that was clicked**. | Looked up into a local buffer and copied out only when accepted. |
+| `apps/l2kdevmgmt.c` | The Properties sheet held a raw device pointer while the one-second rescan timer, which frees them all, kept running under the modal loop. | The timer is stopped around the sheet. |
+| `lib/wine.c` | `rm -rf` and `wrestool -o` on an unquoted path built from `$HOME`. | The path is quoted, and the cleanup unlinks rather than shelling out. |
+| `apps/l2kdiskmgmt.c` | `widths[MAX_PARTS + 2]` indexed by a disk's *region* count, which is up to two per partition. Runs as root. | Sized like `regions[]`. |
+| `wm/taskbar.c` | The task-drag index was never re-checked against `ntasks`, so a window closing mid-drag left a write through freed memory. | Cleared in `layout()`. |
+| `wm/taskbar.c` | The orb took its overhang from how much of the art shows rather than how far it stands above the bar: no wallpaper was fetched, and it copied 54 rows out of a 40-row buffer. | The overhang is the window's height less the bar's. |
+| `wm/taskbar.c` | The orb's click was rewritten with a screen-pixel `y` into a hit test that works in logical pixels, so the Start button missed at 200%. | The logical thickness. |
+| `wm/frame.c` | `btn_hot` was only ever set while a button was held, so the Aero caption buttons could never light under the pointer. | Set from the hit test on hover. |
+| `wm/balloon.c` | The balloon destroyed its window without `w2k_font_forget()`, leaving an Xft surface bound to a dead drawable. | Forgotten first, as the tooltip already does. |
+| `lib/menu.c`, `lib/dialogs.c` | Three modal loops ignored the shutdown flag, so a SIGTERM while a menu, a colour popup or a combo was open left the pointer and keyboard grabbed. | They unwind like their siblings. |
+| `wm/tray.c` | Losing the tray selection leaked the manager window and left the docked icons reparented inside a bar that no longer answered for them. | The icons go back to the root and the window is destroyed. |
+| `wm/client.c`, `apps/l2ktaskmgr.c` | `XGetTextProperty` allocates even for an empty property; both callers returned without freeing it, on paths that run per title change and per refresh tick. | Freed either way. |
+| `lib/edit.c` | `ensure_cap` failed silently and its three callers wrote past the old capacity; the password mask fell back to the plaintext when its own allocation failed; growing the buffer left a typed password in the freed block. | It reports failure, the callers check it, the mask fails closed, and the old buffer is scrubbed. |
+| `apps/l2ksnip.c` | `p = realloc(p, n)` unchecked, then dereferenced. | Checked into a temporary; a failed stroke is refused. |
+| `apps/l2kdisplay.c` | The wallpaper preview stamped its cache before the path that could fail, so every later repaint copied a pixmap nothing had drawn into; and the wallpaper list leaked a path per row on every rebuild. | The stamp is undone on failure; the rows are freed. |
+| `apps/l2kupdate.c` | The checkout path was spliced unquoted into a script that runs `make install` as root. | Quoted. |
+| `wm/startsearch.c` | A result held a bare index into the program list, which All Programs re-sorts: clicking one afterwards could **launch a different program**. | A result carries its own command line. |
+| `lib/icon.c` | Four reallocs in a row, any of which could leave a freed pointer in place. | Committed one at a time. |
+| `apps/l2kpaint.c` | A failed allocation part way through a resize left the dimensions disagreeing with the layers. | All layers are built first and swapped in together. |
+| `wm/glass.c` | A window's origin was taken as the inside of its border. | Corrected. |
+| `wm/startpanel.c`, `wm/startsearch.c` | Unchecked grabs could leave a panel that nothing dismissed. | Checked; the panel closes instead. |
+| `lib/aero.c` | The user tile's cache was keyed on a variable belonging to another function, so it could reload the artwork on every repaint. | Its own key. |
+| `apps/l2kscaler.c` | A failed SHM fetch cleared the accumulated damage, leaving that region stale on screen. | Cleared only after the fetch works. |
+
+### Speed and memory
+
+| Where | Was | Now |
+|---|---|---|
+| `wm/volume.c` | A shell and two `pactl` processes every five seconds for the life of the session -- 6.7 ms and a wakeup, some seventeen thousand times a day | One long-lived `pactl subscribe`, read from the main loop; the level is asked for when something changes it. The timer stays only for bare ALSA |
+| `lib/list.c` | Smooth scrolling slept 21 ms inside the button handler and forced three full repaints a notch | Driven by the timer; the event loop keeps running |
+| `wm/pins.c` | Every taskbar repaint re-read the pinned-items file, nine times in a quarter second through the orb's glow | Kept until the file changes |
+| `lib/win.c` | A radio button was about 226 X requests | Five, one per colour |
+| `lib/list.c` | A tree connector dot was two requests | One per run |
+| `lib/draw.c` | The Start menu's vertical banner was 559 single-pixel requests per hover | Batched |
+| `lib/icon.c` | At any scale but 100% every icon built a pixmap and mask that nothing drew | Built only on the path that uses it |
+| `lib/aero.c` | The reflection did two divisions and two smoothsteps per pixel; the caption buttons were recoloured on every repaint | Separated into a row term and a column table; the strip is kept per state |
+| `wm/glass.c` | Each of a frame's four pieces re-walked the window stack | One walk per frame |
+| `wm/input.c` | Show Desktop grabbed the server for a tenth of a second per window and relaid the bar twice each | Once for the set |
+| `wm/frame.c` | The caption buffer was freed and remade on every motion event of a horizontal resize; the cursor was set on every motion event | Widened in steps; set only when it changes |
+| `apps/l2ktaskmgr.c` | `/proc/<pid>/cmdline` re-read every tick for every process with a truncated name | Once, when the process is first seen |
+| `apps/l2kscaler.c` | Around 25 uniform lookups by name per monitor per frame | Looked up once |
+| `apps/l2kdevmgmt.c` | The Resources tab read sysfs on every expose, and Details ran a `modinfo` whose answer was discarded | Read once per device; the dead call is gone |
+| `lib/list.c` | The view rectangle was recomputed for every item on every motion event of a rubber-band sweep | Once per sweep |

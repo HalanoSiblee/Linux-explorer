@@ -521,6 +521,20 @@ int programs_entry(int id, char *cmd, int cn, char *name, int nn,
 }
 
 /* Called with the id the Start menu got back; returns 1 if it was ours. */
+/* The command line an id stands for, and whether it wants a terminal.
+ * A caller that keeps a result across a rescan must keep this, not the
+ * id: scan_all() re-sorts apps[] and the id would then name another
+ * program. */
+int programs_command(int id, char *cmd, int cn, int *terminal, char *name, int nn)
+{
+    int i = id - PROG_BASE;
+    if (i < 0 || i >= napps) return 0;
+    if (cmd && cn) snprintf(cmd, (size_t)cn, "%s", apps[i].exec);
+    if (name && nn) snprintf(name, (size_t)nn, "%s", apps[i].name);
+    if (terminal) *terminal = apps[i].terminal;
+    return 1;
+}
+
 int programs_run(int id, const char *terminal)
 {
     int i = id - PROG_BASE;

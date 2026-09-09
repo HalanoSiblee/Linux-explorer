@@ -111,7 +111,7 @@ static void command(void *u,int id){(void)u;W2kDevice*d=selected();char err[1024
     case ID_EXIT:w2k_win_close(dm.win,0);break;
     case ID_SCAN:scan();break;
     case ID_PROPERTIES:if(d)show_properties(d);break;
-    case ID_DETAILS:if(d){char out[8192];w2k_device_modinfo(d->driver,out,sizeof out);/* dialog implemented by properties */show_properties(d); }break;
+    case ID_DETAILS:if(d)show_properties(d);break;   /* the sheet reads modinfo itself */
     case ID_ENABLE: if(d && d->disabled){ if(w2k_device_set_enabled(d,1,err,sizeof err)==0) scan(); else w2k_notify("Device Manager",err); } break;
     case ID_DISABLE: if(d && !d->disabled){ if(w2k_device_set_enabled(d,0,err,sizeof err)==0) scan(); else w2k_notify("Device Manager",err); } break;
     case ID_UNINSTALL:if(d&&d->is_dkms){if(w2k_device_uninstall_dkms(d,err,sizeof err)==0)scan();else w2k_notify("Device Manager",err);}break;
@@ -144,7 +144,11 @@ static void props_paint(W2kWin*w,Drawable d){Props*p=w->user;w2k_tabs_draw(d,p->
         w2k_draw_pushbutton(d,&p->enable,q->disabled?"Enable Device":"Disable Device",q->disabled?0:0);
         if(q->is_dkms){p->uninstall=(W2kRect){c.x+384,c.y+95,110,23};w2k_draw_pushbutton(d,&p->uninstall,"Uninstall...",0);}}
     else if(p->tab==2){snprintf(b,sizeof b,"sysfs path: %.480s",q->sysfs_path);w2k_text(d,F_UI,16,y,b,C_WINDOWTEXT);y+=24;draw_pair(d,y,"Name:",q->name);y+=22;draw_pair(d,y,"Raw location:",q->raw_location);y+=22;draw_pair(d,y,"Subsystem:",q->subsystem);y+=22;draw_pair(d,y,"Vendor ID:",q->vendor_id);y+=22;draw_pair(d,y,"Device ID:",q->device_id);y+=22;draw_pair(d,y,"Modalias:",q->modalias);}
-    else {w2k_text(d,F_UI,16,y,"Resource information",C_WINDOWTEXT);y+=24;char out[4096];w2k_device_resources(q,out,sizeof out);for(char*line=strtok(out,"\n");line&&y<c.y+c.h-30;line=strtok(NULL,"\n")){w2k_text(d,F_FIXED,16,y,line,C_WINDOWTEXT);y+=15;}}
+    else {w2k_text(d,F_UI,16,y,"Resource information",C_WINDOWTEXT);y+=24;
+        /* Read when the tab is first shown, not on every expose. */
+        static char out[4096]; static W2kDevice *res_for; static int res_done;
+        if(res_for!=q||!res_done){w2k_device_resources(q,out,sizeof out);res_for=q;res_done=1;}
+        char work[4096]; snprintf(work,sizeof work,"%s",out); char *out_p=work;for(char*line=strtok(out_p,"\n");line&&y<c.y+c.h-30;line=strtok(NULL,"\n")){w2k_text(d,F_FIXED,16,y,line,C_WINDOWTEXT);y+=15;}}
     w2k_draw_pushbutton(d,&p->ok,"OK",BS_DEFAULT|(p->down==1?BS_PRESSED:0));}
 static void props_layout(W2kWin*w){Props*p=w->user;p->tabs->r=(W2kRect){8,MENUBAR_H+4,w->w-16,w->h-MENUBAR_H-12};W2kRect c=w2k_tabs_client(p->tabs);p->ok=(W2kRect){w->w-92,w->h-34,76,23};p->details=(W2kRect){c.x+16,c.y+95,120,23};p->update=(W2kRect){c.x+144,c.y+95,120,23};}
 static void driver_paint(W2kWin *x, Drawable d) {
@@ -174,10 +178,15 @@ static void show_modinfo_dialog(Props*p) {
     w->min_w=400; w->min_h=260; w->user=strdup(out); w->paint=driver_paint; w->event=driver_event; w->closing=driver_close;
     w2k_win_center(w,p->win); w2k_win_modal(w);
 }
+static void uevent_tick(void *u);
 static int props_event(W2kWin*w,XEvent*e){Props*p=w->user;if(e->type==ButtonPress){if(w2k_tabs_press(p->tabs,&e->xbutton)){w2k_win_dirty(w);return 1;}if(w2k_rect_hit(&p->ok,e->xbutton.x,e->xbutton.y)){p->down=1;w2k_win_dirty(w);return 1;}if(p->tab==1&&w2k_rect_hit(&p->details,e->xbutton.x,e->xbutton.y)){show_modinfo_dialog(p);return 1;}if(p->tab==1&&w2k_rect_hit(&p->update,e->xbutton.x,e->xbutton.y)){update_driver_wizard(p->d);return 1;}
         if(p->tab==1&&w2k_rect_hit(&p->enable,e->xbutton.x,e->xbutton.y)){char err[1024];if(w2k_device_set_enabled(p->d,p->d->disabled,err,sizeof err)==0){w2k_win_close(w,0);scan();}else w2k_notify("Device Manager",err);return 1;}
         if(p->tab==1&&p->d->is_dkms&&w2k_rect_hit(&p->uninstall,e->xbutton.x,e->xbutton.y)){char err[1024];if(w2k_device_uninstall_dkms(p->d,err,sizeof err)==0){w2k_win_close(w,0);scan();}else w2k_notify("Uninstall failed",err);return 1;}}else if(e->type==ButtonRelease){if(p->down&&w2k_rect_hit(&p->ok,e->xbutton.x,e->xbutton.y))w2k_win_close(w,0);p->down=0;w2k_win_dirty(w);}else if(e->type==KeyPress){if(w2k_tabs_key(p->tabs,&e->xkey)){w2k_win_dirty(w);return 1;}KeySym ks=XLookupKeysym(&e->xkey,0);if(ks==XK_Escape||ks==XK_Return){w2k_win_close(w,0);return 1;}}return 0;}
-static void show_properties(W2kDevice*d){if(!d)return;w2k_device_driver_details(d);Props*p=calloc(1,sizeof*p);if(!p)return;p->d=d;p->win=w2k_win_new(d->name,"l2kdevmgmt-properties",520,360,0);p->win->user=p;p->win->paint=props_paint;p->win->event=props_event;p->win->resized=props_layout;p->tabs=w2k_tabs_new(p,props_tab);w2k_tabs_add(p->tabs,"General");w2k_tabs_add(p->tabs,"Driver");w2k_tabs_add(p->tabs,"Details");w2k_tabs_add(p->tabs,"Resources");props_layout(p->win);w2k_win_center(p->win,dm.win);w2k_win_modal(p->win);w2k_tabs_free(p->tabs);free(p);}
+static void show_properties(W2kDevice*d){if(!d)return;w2k_device_driver_details(d);Props*p=calloc(1,sizeof*p);if(!p)return;p->d=d;p->win=w2k_win_new(d->name,"l2kdevmgmt-properties",520,360,0);p->win->user=p;p->win->paint=props_paint;p->win->event=props_event;p->win->resized=props_layout;p->tabs=w2k_tabs_new(p,props_tab);w2k_tabs_add(p->tabs,"General");w2k_tabs_add(p->tabs,"Driver");w2k_tabs_add(p->tabs,"Details");w2k_tabs_add(p->tabs,"Resources");props_layout(p->win);w2k_win_center(p->win,dm.win);
+    /* The uevent timer rescans, which frees every W2kDevice -- including
+     * the one this sheet points at. Stop it while the sheet is up. */
+    w2k_del_timer(uevent_tick,NULL);w2k_win_modal(p->win);w2k_add_timer(1000,uevent_tick,NULL);
+    w2k_tabs_free(p->tabs);free(p);}
 
 static void uevent_tick(void *u){(void)u;if(w2k_device_monitor_poll())scan();}
 

@@ -309,15 +309,16 @@ static void sample_procs(unsigned long long dtotal)
 static char *win_name(Window w)
 {
     XTextProperty tp;
-    if (XGetTextProperty(w2k.dpy, w, &tp, w2k.a_net_wm_name) && tp.nitems) {
-        char *s = w2k_strdup((char *)tp.value);
+    /* A property that is set but empty still allocates: free it either way. */
+    if (XGetTextProperty(w2k.dpy, w, &tp, w2k.a_net_wm_name)) {
+        char *s = tp.nitems ? w2k_strdup((char *)tp.value) : NULL;
         XFree(tp.value);
-        return s;
+        if (s) return s;
     }
-    if (XGetTextProperty(w2k.dpy, w, &tp, XA_WM_NAME) && tp.nitems) {
-        char *s = w2k_strdup((char *)tp.value);
+    if (XGetTextProperty(w2k.dpy, w, &tp, XA_WM_NAME)) {
+        char *s = tp.nitems ? w2k_strdup((char *)tp.value) : NULL;
         XFree(tp.value);
-        return s;
+        if (s) return s;
     }
     return w2k_strdup("(untitled)");
 }

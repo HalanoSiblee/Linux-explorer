@@ -577,16 +577,21 @@ static void strokes_free(void)
 static Stroke *stroke_new(int type)
 {
     if (st.nstrokes == st.strokes_cap) {
-        st.strokes_cap = st.strokes_cap ? st.strokes_cap * 2 : 16;
-        st.strokes = realloc(st.strokes, sizeof *st.strokes * (size_t)st.strokes_cap);
+        int cap = st.strokes_cap ? st.strokes_cap * 2 : 16;
+        Stroke *g = realloc(st.strokes, sizeof *g * (size_t)cap);
+        if (!g) return NULL;               /* keep the strokes there are */
+        st.strokes = g;
+        st.strokes_cap = cap;
     }
-    Stroke *s = &st.strokes[st.nstrokes++];
+    Stroke *s = &st.strokes[st.nstrokes];
     memset(s, 0, sizeof *s);
     s->type = type;
     if (type == TOOL_HIGHLIGHT) { s->r = 255; s->g = 255; s->b = 0; }
     else { s->r = st.pen_r; s->g = st.pen_g; s->b = st.pen_b; }
     s->x = malloc(sizeof *s->x * MAXPTS);
     s->y = malloc(sizeof *s->y * MAXPTS);
+    if (!s->x || !s->y) { free(s->x); free(s->y); return NULL; }
+    st.nstrokes++;
     return s;
 }
 
@@ -1412,6 +1417,7 @@ static int event(W2kWin *w, XEvent *e)
             if (st.tool == TOOL_ERASER) erase_at(ix, iy);
             else if (st.tool == TOOL_PEN || st.tool == TOOL_HIGHLIGHT) {
                 st.cur = stroke_new(st.tool);
+                if (!st.cur) break;
                 stroke_add(st.cur, ix, iy);
                 w2k_win_dirty(w);
             }

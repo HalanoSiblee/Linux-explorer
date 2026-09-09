@@ -205,12 +205,40 @@ static void home_of(const char *user, char *buf, int n)
 
 /* The look: from the last user's ~/.w2k/logon -- the colour or wallpaper,
  * the banner's artwork, whether the user's picture shows. */
+/* The logon screen runs as root before anyone has logged on, and the
+ * paths it is pointed at come out of a file an unprivileged user writes.
+ * A picture is opened only when it is a real file, inside that user's own
+ * home, owned by them and not a symlink -- so "Wallpaper=/root/secret.png"
+ * shows nothing, and root's decoders are never handed another user's or
+ * root's files. */
+static int safe_user_file(const char *path, const char *home, uid_t uid)
+{
+    if (!path || !path[0] || !home || !home[0]) return 0;
+    size_t hl = strlen(home);
+    if (strncmp(path, home, hl) || path[hl] != '/') return 0;
+    if (strstr(path, "/../")) return 0;
+    struct stat st;
+    if (lstat(path, &st) != 0) return 0;             /* lstat: a symlink is refused */
+    return S_ISREG(st.st_mode) && st.st_uid == uid;
+}
+
+/* The uid that owns `home`, or (uid_t)-1. */
+static uid_t uid_of_home(const char *home)
+{
+    struct stat st;
+    if (!home || !home[0] || stat(home, &st) != 0) return (uid_t)-1;
+    return st.st_uid;
+}
+
 static void look_load(const char *user)
 {
     char home[1024];
     home_of(user, home, sizeof home);
     w2k_logon_load(&lg.cfg, home[0] ? home : NULL);
     w2k_account_load_from(home);
+    uid_t owner = uid_of_home(home);
+    if (!safe_user_file(lg.cfg.wallpaper, home, owner)) lg.cfg.wallpaper[0] = 0;
+    if (!safe_user_file(w2k_account_picture(), home, owner)) w2k_account_preview("");
     if (lg.wall) { XFreePixmap(w2k.dpy, lg.wall); lg.wall = 0; }
     if (lg.art)  { XFreePixmap(w2k.dpy, lg.art);  lg.art = 0; }
     if (lg.cfg.wallpaper[0]) {
@@ -256,9 +284,10 @@ static void user_changed(void *u)
     if (!lg.user || getenv("W2K_RENDER")) return;
     char home[1024];
     struct passwd *pw = getpwnam(w2k_edit_text(lg.user));
-    if (!pw || !pw->pw_dir) return;
+    if (!pw || !pw->pw_dir || pw->pw_uid < 1000) return;
     snprintf(home, sizeof home, "%s", pw->pw_dir);
     w2k_account_load_from(home);
+    if (!safe_user_file(w2k_account_picture(), home, pw->pw_uid)) w2k_account_preview("");
     if (lg.win) w2k_win_dirty(lg.win);
 }
 

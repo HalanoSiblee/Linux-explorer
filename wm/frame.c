@@ -128,13 +128,18 @@ static void frame_draw_raw(Client *c, Drawable d)
      * at a time and would otherwise tear on focus changes. */
     /* One buffer per window, kept until the caption changes size: a
      * caption repaints on every focus change and every title change. */
-    if (c->capbuf && (c->capbuf_w != cap.w || c->capbuf_h != cap.h)) {
+    /* Widened in steps of 256: dragging a window's edge changes cap.w on
+     * every motion event, and an exact fit meant freeing and remaking a
+     * pixmap the width of the window at up to 120 Hz. */
+    int want_w = (cap.w + 255) & ~255;
+    if (c->capbuf && (c->capbuf_w < cap.w || c->capbuf_w > want_w + 256 ||
+                      c->capbuf_h != cap.h)) {
         w2k_free_pixmap(c->capbuf);
         c->capbuf = 0;
     }
     if (!c->capbuf) {
-        c->capbuf = XCreatePixmap(w2k.dpy, w2k.root, cap.w, cap.h, w2k.depth);
-        c->capbuf_w = cap.w;
+        c->capbuf = XCreatePixmap(w2k.dpy, w2k.root, want_w, cap.h, w2k.depth);
+        c->capbuf_w = want_w;
         c->capbuf_h = cap.h;
     }
     Pixmap pm = c->capbuf;
@@ -519,12 +524,18 @@ void frame_motion(Client *c, XMotionEvent *e)
         if (hot != c->btn_hot) { c->btn_hot = hot; frame_paint(c); }
         return;
     }
-    XDefineCursor(w2k.dpy, c->frame, frame_cursor(ht));
+    /* With no button held the caption buttons still light under the
+     * pointer, which is what the themed painters draw a hot state for. */
+    int hot = (ht == HT_MINBUTTON || ht == HT_MAXBUTTON || ht == HT_CLOSE) ? ht : 0;
+    if (hot != c->btn_hot) { c->btn_hot = hot; frame_paint(c); }
+    /* One request per change, not one per pointer position. */
+    Cursor cur = frame_cursor(ht);
+    if (cur != c->cursor) { XDefineCursor(w2k.dpy, c->frame, cur); c->cursor = cur; }
 }
 
 void frame_leave(Client *c)
 {
-    if (c->btn_down && c->btn_hot) { c->btn_hot = 0; frame_paint(c); }
+    if (c->btn_hot) { c->btn_hot = 0; frame_paint(c); }
     /* The pointer has left the frame -- or gone into the client, which
      * inherits the frame's cursor unless it sets its own. Either way the
      * sizing arrow must not stay behind. */

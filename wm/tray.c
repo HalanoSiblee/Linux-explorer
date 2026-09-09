@@ -210,6 +210,13 @@ int tray_event(XEvent *e)
     }
     case SelectionClear:
         if (e->xselectionclear.selection == a_tray_sel) {
+            /* Another tray took the selection: give the icons back to the
+             * root and destroy the manager window, or they stay reparented
+             * inside a bar that no longer answers for them. */
+            for (int k = 0; k < nicons; k++)
+                XReparentWindow(w2k.dpy, icons[k].win, w2k.root, 0, 0);
+            nicons = 0;
+            if (manager) XDestroyWindow(w2k.dpy, manager);
             manager = None;
             return 1;
         }

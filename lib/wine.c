@@ -91,9 +91,10 @@ int w2k_wine_exe_icon(const char *path)
         char tmp[1300];
         snprintf(tmp, sizeof tmp, "%s/%lx.d", dir, h);
         mkdir(tmp, 0755);
-        char q[4200], cmd[6000];
+        char q[4200], qt[2700], cmd[8000];
         w2k_shell_quote(path, q, sizeof q);
-        snprintf(cmd, sizeof cmd, "wrestool -x -t 14 -o %s %s >/dev/null 2>&1", tmp, q);
+        w2k_shell_quote(tmp, qt, sizeof qt);      /* $HOME may hold a space */
+        snprintf(cmd, sizeof cmd, "wrestool -x -t 14 -o %s %s >/dev/null 2>&1", qt, q);
         if (system(cmd) == 0) {
             DIR *dp = opendir(tmp);
             char best[1400] = "";
@@ -109,10 +110,21 @@ int w2k_wine_exe_icon(const char *path)
             }
             if (best[0]) rename(best, ico);
         }
-        /* Whatever else came out is not needed. */
-        char rm[1400];
-        snprintf(rm, sizeof rm, "rm -rf %s", tmp);
-        if (system(rm) != 0) { }
+        /* Whatever else came out is not needed. Unlinked here rather than
+         * through a shell: the path holds $HOME, and "rm -rf" on an
+         * unquoted one with a space in it deletes the wrong thing. */
+        DIR *rd = opendir(tmp);
+        if (rd) {
+            struct dirent *e;
+            while ((e = readdir(rd))) {
+                if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+                char victim[1500];
+                snprintf(victim, sizeof victim, "%s/%s", tmp, e->d_name);
+                unlink(victim);
+            }
+            closedir(rd);
+        }
+        rmdir(tmp);
     }
     if (access(ico, R_OK) == 0) id = w2k_icon_from_file(ico);
     if (id < 0) id = ICO_APP;

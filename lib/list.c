@@ -403,11 +403,15 @@ void w2k_list_draw(Drawable d, W2kList *l)
 
 /* Where item `i` is drawn, in window coordinates. The inverse of
  * w2k_list_hit(), and what the rubber band tests against. */
-static int item_rect(W2kList *l, int i, W2kRect *out)
+/* With `pv` given, the caller has already worked out the view rectangle:
+ * a rubber-band sweep asks for every item in the folder on every motion
+ * event, and view_rect walks the columns twice each time. */
+static int item_rect_in(W2kList *l, int i, W2kRect *out, const W2kRect *pv)
 {
     W2kRect v;
     int vs, hs;
-    view_rect(l, &v, &vs, &hs);
+    if (pv) v = *pv;
+    else    view_rect(l, &v, &vs, &hs);
     if (i < 0 || i >= l->n) return 0;
 
     if (l->mode == LV_REPORT) {
@@ -439,6 +443,40 @@ static int rect_overlap(const W2kRect *a, const W2kRect *b)
 }
 
 /* Select everything the band covers. */
+static int item_rect(W2kList *l, int i, W2kRect *out)
+{
+    return item_rect_in(l, i, out, NULL);
+}
+
+/* The smooth-scroll walk: one scrollbar at a time, advanced by the timer
+ * so the event loop keeps running while it moves. */
+#define SCROLL_ANIM_MS 7
+#define SCROLL_ANIM_STEPS 4
+static struct { W2kScroll *sb; int from, to, step; } anim;
+
+static void scroll_anim(void *u)
+{
+    (void)u;
+    W2kScroll *s = anim.sb;
+    if (!s || !s->owner) { w2k_del_timer(scroll_anim, NULL); anim.sb = NULL; return; }
+    anim.step++;
+    if (anim.step >= SCROLL_ANIM_STEPS) {
+        s->pos = anim.to;
+        w2k_del_timer(scroll_anim, NULL);
+        anim.sb = NULL;
+    } else {
+        s->pos = anim.from + (anim.to - anim.from) * anim.step / SCROLL_ANIM_STEPS;
+        w2k_add_timer(SCROLL_ANIM_MS, scroll_anim, NULL);
+    }
+    w2k_win_dirty(s->owner);
+}
+
+/* The scrollbar is going away: stop walking it. */
+void w2k_scroll_anim_forget(W2kScroll *s)
+{
+    if (anim.sb == s) { w2k_del_timer(scroll_anim, NULL); anim.sb = NULL; }
+}
+
 static void band_select(W2kList *l)
 {
     W2kRect band = {
@@ -520,13 +558,17 @@ int w2k_list_press(W2kList *l, XButtonEvent *b)
          * go. Only worth it when the jump is more than a line. */
         if (r && w2k_effects[FX_SMOOTH_SCROLL] && s->owner &&
             abs(s->pos - before) > 1) {
-            int target = s->pos;
-            for (int step = 1; step < 4; step++) {
-                s->pos = before + (target - before) * step / 4;
-                w2k_win_repaint_now(s->owner);
-                usleep(7000);
-            }
-            s->pos = target;
+            /* Walked to the new position over a few frames on the timer.
+             * It used to usleep(7000) three times inside this handler,
+             * which froze the event loop for 21 ms a notch and made a
+             * spun wheel lag behind the pointer. */
+            anim.sb = s;
+            anim.from = before;
+            anim.to = s->pos;
+            anim.step = 0;
+            s->pos = before;
+            w2k_del_timer(scroll_anim, NULL);
+            w2k_add_timer(SCROLL_ANIM_MS, scroll_anim, NULL);
         }
         return r;
     }
@@ -859,18 +901,36 @@ static void draw_box(Drawable d, int x, int y, int expanded)
     if (!expanded) w2k_vline(d, x + BOX / 2, y + 2, BOX - 4, C_WINDOWTEXT);
 }
 
+/* The dotted connectors. Batched: a dot used to be an XSetForeground and
+ * an XFillRectangle of its own, and a three-deep tree of 25 rows spent
+ * some two thousand requests on them per repaint. */
+static void dotted_run(Drawable d, int x, int y, int n, int parity, int horiz)
+{
+    if (n <= 0) return;
+    XRectangle r[512];
+    int k = 0;
+    for (int i = 0; i < n && k < (int)(sizeof r / sizeof *r); i++) {
+        int px = horiz ? x + i : x, py = horiz ? y : y + i;
+        if ((((horiz ? px : py) + parity) & 1) != 0) continue;
+        r[k].x = (short)w2k_cx(px);
+        r[k].y = (short)w2k_cx(py);
+        r[k].width = (unsigned short)w2k_cw(px, 1);
+        r[k].height = (unsigned short)w2k_cw(py, 1);
+        k++;
+    }
+    if (!k) return;
+    XSetForeground(w2k.dpy, w2k.gc, w2k.col[C_SHADOW]);
+    XFillRectangles(w2k.dpy, d, w2k.gc, r, k);
+}
+
 static void dotted_h(Drawable d, int x, int y, int w, int parity)
 {
-    for (int i = 0; i < w; i++)
-        if (((x + i + parity) & 1) == 0)
-            w2k_fill(d, x + i, y, 1, 1, C_SHADOW);
+    dotted_run(d, x, y, w, parity, 1);
 }
 
 static void dotted_v(Drawable d, int x, int y, int h, int parity)
 {
-    for (int i = 0; i < h; i++)
-        if (((y + i + parity) & 1) == 0)
-            w2k_fill(d, x, y + i, 1, 1, C_SHADOW);
+    dotted_run(d, x, y, h, parity, 0);
 }
 
 void w2k_tree_draw(Drawable d, W2kTree *t)

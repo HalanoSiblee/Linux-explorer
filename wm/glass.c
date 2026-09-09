@@ -68,6 +68,43 @@ static void blur(unsigned char *p, int w, int h, int rad)
 /* What lies under the root rectangle, below w2k_glass_above (the window
  * being painted), blurred: RGB, malloc'd; NULL to fall back on the
  * wallpaper. */
+/* The stacking order below w2k_glass_above, held for the length of one
+ * batch: a frame asks for four pieces and each used to re-walk the tree
+ * and re-ask for every window's geometry. */
+#define STACK_MAX 256
+static struct { Window w; int x, y, cw, ch; } stack_snap[STACK_MAX];
+static int stack_n = -1, batching;
+
+static void stack_gather(void)
+{
+    stack_n = 0;
+    Window root, parent, *kids = NULL;
+    unsigned nk = 0;
+    if (!XQueryTree(w2k.dpy, w2k.root, &root, &parent, &kids, &nk)) return;
+    for (unsigned i = 0; i < nk && stack_n < STACK_MAX; i++) {
+        Window k = kids[i];
+        if (k == w2k_glass_above) break;
+        XWindowAttributes wa;
+        if (!XGetWindowAttributes(w2k.dpy, k, &wa)) continue;
+        if (wa.map_state != IsViewable || wa.class == InputOnly) continue;
+        stack_snap[stack_n].w = k;
+        /* wa.x/y name the inside of the border; the window covers from
+         * bw before it. */
+        stack_snap[stack_n].x = wa.x - wa.border_width;
+        stack_snap[stack_n].y = wa.y - wa.border_width;
+        stack_snap[stack_n].cw = wa.width + 2 * wa.border_width;
+        stack_snap[stack_n].ch = wa.height + 2 * wa.border_width;
+        stack_n++;
+    }
+    if (kids) XFree(kids);
+}
+
+static void glass_batch(int begin)
+{
+    batching = begin;
+    stack_n = -1;                        /* re-gathered on the next ask */
+}
+
 static unsigned char *live_bg(int rx, int ry, int w, int h)
 {
     if (!enabled || w <= 0 || h <= 0) return NULL;
@@ -84,17 +121,13 @@ static unsigned char *live_bg(int rx, int ry, int w, int h)
     const unsigned char *dc = w2k_scheme_rgb(C_DESKTOP);
     for (size_t i = 0; i < (size_t)ew * eh; i++) memcpy(buf + i * 3, dc, 3);
 
-    Window root, parent, *kids = NULL;
-    unsigned nk = 0;
     int (*old)(Display *, XErrorEvent *) = XSetErrorHandler(quiet);
-    if (XQueryTree(w2k.dpy, w2k.root, &root, &parent, &kids, &nk)) {
-        for (unsigned i = 0; i < nk; i++) {        /* bottom to top */
-            Window k = kids[i];
-            if (k == w2k_glass_above) break;
-            XWindowAttributes wa;
-            if (!XGetWindowAttributes(w2k.dpy, k, &wa)) continue;
-            if (wa.map_state != IsViewable || wa.class == InputOnly) continue;
-            int wx = wa.x, wy = wa.y, ww = wa.width + 2 * wa.border_width, wh = wa.height + 2 * wa.border_width;
+    if (stack_n < 0 || !batching) stack_gather();
+    {
+        for (int i = 0; i < stack_n; i++) {        /* bottom to top */
+            Window k = stack_snap[i].w;
+            int wx = stack_snap[i].x, wy = stack_snap[i].y;
+            int ww = stack_snap[i].cw, wh = stack_snap[i].ch;
             int ix = ex > wx ? ex : wx, iy = ey > wy ? ey : wy;
             int ix1 = ex + ew < wx + ww ? ex + ew : wx + ww, iy1 = ey + eh < wy + wh ? ey + eh : wy + wh;
             if (ix1 <= ix || iy1 <= iy) continue;
@@ -120,7 +153,6 @@ static unsigned char *live_bg(int rx, int ry, int w, int h)
                 }
             XDestroyImage(im);
         }
-        if (kids) XFree(kids);
     }
     XSync(w2k.dpy, False);
     XSetErrorHandler(old);
@@ -173,4 +205,6 @@ void glass_live_apply(void)
     XSetErrorHandler(old);
     enabled = want;
     w2k_glass_live = want ? live_bg : NULL;
+    w2k_glass_batch = want ? glass_batch : NULL;
+    stack_n = -1;
 }

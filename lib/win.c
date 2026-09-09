@@ -594,32 +594,55 @@ void w2k_draw_checkbox(Drawable d, int x, int y, const char *text,
 }
 
 /* The 12x12 radio button: a dark arc above-left, a light arc below-right. */
+/* The 12x12 dot. Drawn a colour at a time -- one XSetForeground and one
+ * XFillRectangles per colour -- rather than a request per pixel: a page
+ * of eight radio buttons was costing some eighteen hundred requests on
+ * every repaint. */
 static void radio_glyph(Drawable d, int x, int y, int checked, int disabled)
 {
     const double cx = 5.5, cy = 5.5;
-    for (int j = 0; j < 12; j++) {
-        for (int i = 0; i < 12; i++) {
-            double dx = i - cx, dy = j - cy;
-            double r2 = dx * dx + dy * dy;
-            int col = -1;
-            if (r2 <= 16.0)       col = disabled ? C_FACE : C_WINDOW;
-            else if (r2 <= 25.0)  col = (dx + dy < 0) ? C_DKSHADOW : C_LIGHT;
-            else if (r2 <= 36.0)  col = (dx + dy < 0) ? C_SHADOW : C_HILIGHT;
-            if (col >= 0) {
-                XSetForeground(w2k.dpy, w2k.gc, w2k.col[col]);
-                w2k_fill_fg(d, x + i, y + j, 1, 1);
-            }
-        }
-    }
-    if (!checked) return;
-    XSetForeground(w2k.dpy, w2k.gc,
-                   w2k.col[disabled ? C_GRAYTEXT : C_WINDOWTEXT]);
+    int cols[5];
+    cols[0] = disabled ? C_FACE : C_WINDOW;
+    cols[1] = C_DKSHADOW; cols[2] = C_LIGHT;
+    cols[3] = C_SHADOW;   cols[4] = C_HILIGHT;
+    XRectangle run[5][144];
+    int n[5] = { 0, 0, 0, 0, 0 };
     for (int j = 0; j < 12; j++)
         for (int i = 0; i < 12; i++) {
             double dx = i - cx, dy = j - cy;
-            if (dx * dx + dy * dy <= 4.0)
-                w2k_fill_fg(d, x + i, y + j, 1, 1);
+            double r2 = dx * dx + dy * dy;
+            int k = -1;
+            if (r2 <= 16.0)       k = 0;
+            else if (r2 <= 25.0)  k = (dx + dy < 0) ? 1 : 2;
+            else if (r2 <= 36.0)  k = (dx + dy < 0) ? 3 : 4;
+            if (k < 0) continue;
+            run[k][n[k]].x = (short)w2k_cx(x + i);
+            run[k][n[k]].y = (short)w2k_cx(y + j);
+            run[k][n[k]].width = (unsigned short)w2k_cw(x + i, 1);
+            run[k][n[k]].height = (unsigned short)w2k_cw(y + j, 1);
+            n[k]++;
         }
+    for (int k = 0; k < 5; k++) {
+        if (!n[k]) continue;
+        XSetForeground(w2k.dpy, w2k.gc, w2k.col[cols[k]]);
+        XFillRectangles(w2k.dpy, d, w2k.gc, run[k], n[k]);
+    }
+    if (!checked) return;
+    int m = 0;
+    for (int j = 0; j < 12; j++)
+        for (int i = 0; i < 12; i++) {
+            double dx = i - cx, dy = j - cy;
+            if (dx * dx + dy * dy > 4.0) continue;
+            run[0][m].x = (short)w2k_cx(x + i);
+            run[0][m].y = (short)w2k_cx(y + j);
+            run[0][m].width = (unsigned short)w2k_cw(x + i, 1);
+            run[0][m].height = (unsigned short)w2k_cw(y + j, 1);
+            m++;
+        }
+    if (m) {
+        XSetForeground(w2k.dpy, w2k.gc, w2k.col[disabled ? C_GRAYTEXT : C_WINDOWTEXT]);
+        XFillRectangles(w2k.dpy, d, w2k.gc, run[0], m);
+    }
 }
 
 void w2k_draw_radio(Drawable d, int x, int y, const char *text, int checked,

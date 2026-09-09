@@ -151,7 +151,7 @@ int w2k_color_popup(int rx, int ry, int *r, int *g, int *b)
         if (basic_colors[i][0] == *r && basic_colors[i][1] == *g && basic_colors[i][2] == *b)
             hot = i;
     long opened = w2k_now_ms();
-    while (!done) {
+    while (!done && !w2k_win_abort) {       /* SIGTERM must not leave the grabs held */
         if (repaint) {
             Pixmap pm = XCreatePixmap(w2k.dpy, win, (unsigned)pw, (unsigned)ph, w2k.depth);
             w2k_fill(pm, 0, 0, w, h, C_FACE);
@@ -495,7 +495,7 @@ static int combo_dropdown(W2kCombo *c, int rx, int ry)
     int result = -1, done = 0, repaint = 1;
     long opened = w2k_now_ms();
 
-    while (!done) {
+    while (!done && !w2k_win_abort) {       /* SIGTERM must not leave the grabs held */
         if (repaint) {
             Pixmap pm = XCreatePixmap(w2k.dpy, win, (unsigned)pw, (unsigned)ph, w2k.depth);
             w2k_fill(pm, 0, 0, w, h, C_WINDOW);

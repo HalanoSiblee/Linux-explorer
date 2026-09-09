@@ -598,16 +598,33 @@ static void quad(int x0, int y0, int x1, int y1, int vw, int vh)
     glEnd();
 }
 
+/* A uniform's location is fixed once the program is linked, but it was
+ * looked up by name on every use -- around twenty-five string lookups per
+ * monitor per frame at up to 125 frames a second. The names are literals,
+ * so the pointer identifies them. */
+static GLint uloc(GLuint prog, const char *name)
+{
+    static struct { GLuint prog; const char *name; GLint loc; } cache[64];
+    static int n;
+    for (int i = 0; i < n; i++)
+        if (cache[i].prog == prog && cache[i].name == name) return cache[i].loc;
+    GLint l = p_glGetUniformLocation(prog, name);
+    if (n < (int)(sizeof cache / sizeof *cache)) {
+        cache[n].prog = prog; cache[n].name = name; cache[n].loc = l; n++;
+    }
+    return l;
+}
+
 static void bind_common(GLuint prog, GLuint tex, int tw, int th, double ox, double oy, double scale, int flipy)
 {
     p_glUseProgram(prog);
-    if (prog == prog_blit) p_glUniform1f(p_glGetUniformLocation(prog, "flipy"), flipy ? 1.0f : 0.0f);
+    if (prog == prog_blit) p_glUniform1f(uloc(prog, "flipy"), flipy ? 1.0f : 0.0f);
     p_glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
-    p_glUniform1i(p_glGetUniformLocation(prog, "tex"), 0);
-    p_glUniform2f(p_glGetUniformLocation(prog, "texsize"), (float)tw, (float)th);
-    p_glUniform2f(p_glGetUniformLocation(prog, "origin"), (float)ox, (float)oy);
-    p_glUniform1f(p_glGetUniformLocation(prog, "scale"), (float)scale);
+    p_glUniform1i(uloc(prog, "tex"), 0);
+    p_glUniform2f(uloc(prog, "texsize"), (float)tw, (float)th);
+    p_glUniform2f(uloc(prog, "origin"), (float)ox, (float)oy);
+    p_glUniform1f(uloc(prog, "scale"), (float)scale);
 }
 
 /* ------------------------------------------------------------------ *
@@ -719,22 +736,26 @@ static void fetch_damage(void)
     if (y0 < 0) y0 = 0;
     if (x1 > NW) x1 = NW;
     if (y1 > NH) y1 = NH;
-    dmg_any = 0;
-    if (x1 <= x0 || y1 <= y0) return;
+    if (x1 <= x0 || y1 <= y0) { dmg_any = 0; return; }
     if (xwin) {
         /* The texture is the pixmap: let go and take it again, which is
          * what the extension asks of a reader after the drawer has drawn. */
+        dmg_any = 0;
         glBindTexture(GL_TEXTURE_2D, desk_tex);
         p_glXReleaseTexImageEXT(hd, xglx, GLX_FRONT_LEFT_EXT);
         p_glXBindTexImageEXT(hd, xglx, GLX_FRONT_LEFT_EXT, NULL);
     } else {
         int rw = x1 - x0, rh = y1 - y0;
         shmimg->width = rw; shmimg->height = rh; shmimg->bytes_per_line = rw * 4;
+        /* Cleared only once the fetch has worked: dropping the damage on
+         * a failure left that region stale on screen until something else
+         * dirtied it. */
         if (!XShmGetImage(nd, nroot, shmimg, x0, y0, AllPlanes)) return;
         glBindTexture(GL_TEXTURE_2D, desk_tex);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, rw);
         glTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, rw, rh, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, shmimg->data);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        dmg_any = 0;
     }
     /* Which windows it touches, and where in their scaled picture. */
     for (int i = 0; i < nmons; i++) {
@@ -790,18 +811,18 @@ static void draw_mon(Mon *m)
         glViewport(0, 0, m->hw, m->hh);
         bind_common(prog_ewa, desk_tex, NW, NH, m->nx, m->ny, m->scale, 0);
         p_glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_1D, lut_tex);
-        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "lut"), 1);
+        p_glUniform1i(uloc(prog_ewa, "lut"), 1);
         p_glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_1D, sig_tex);
-        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "sig"), 2);
+        p_glUniform1i(uloc(prog_ewa, "sig"), 2);
         p_glActiveTexture(GL_TEXTURE3); glBindTexture(GL_TEXTURE_1D, unsig_tex);
-        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "unsig"), 3);
+        p_glUniform1i(uloc(prog_ewa, "unsig"), 3);
         p_glActiveTexture(GL_TEXTURE4); glBindTexture(GL_TEXTURE_1D, lut2_tex);
-        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "lut2"), 4);
-        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "radius"), (float)EWA_RADIUS);
-        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "linlight"), linear_light ? 1.0f : 0.0f);
-        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "texflip"), tex_flip ? 1.0f : 0.0f);
-        p_glUniform1f(p_glGetUniformLocation(prog_ewa, "antiring"), antiring ? 1.0f : 0.0f);
-        p_glUniform1i(p_glGetUniformLocation(prog_ewa, "method"), method);
+        p_glUniform1i(uloc(prog_ewa, "lut2"), 4);
+        p_glUniform1f(uloc(prog_ewa, "radius"), (float)EWA_RADIUS);
+        p_glUniform1f(uloc(prog_ewa, "linlight"), linear_light ? 1.0f : 0.0f);
+        p_glUniform1f(uloc(prog_ewa, "texflip"), tex_flip ? 1.0f : 0.0f);
+        p_glUniform1f(uloc(prog_ewa, "antiring"), antiring ? 1.0f : 0.0f);
+        p_glUniform1i(uloc(prog_ewa, "method"), method);
         p_glActiveTexture(GL_TEXTURE0);
         glEnable(GL_SCISSOR_TEST);
         /* The framebuffer texture is y-up; our quad is y-down, so the

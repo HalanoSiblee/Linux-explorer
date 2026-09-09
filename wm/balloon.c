@@ -162,6 +162,7 @@ static void show_next(void);
 static void dismiss(int reason)
 {
     if (!balloon) return;
+    w2k_font_forget(balloon);   /* the Xft surface is keyed by the drawable */
     XDestroyWindow(w2k.dpy, balloon);
     balloon = 0;
     b_until = 0;
@@ -234,7 +235,8 @@ void balloon_queue(const char *title, const char *text, int icon, int ms, unsign
         snprintf(cur.title, sizeof cur.title, "%s", title);
         snprintf(cur.text, sizeof cur.text, "%s", text);
         cur.icon = icon;
-        XDestroyWindow(w2k.dpy, balloon);
+        w2k_font_forget(balloon);   /* the Xft surface is keyed by the drawable */
+    XDestroyWindow(w2k.dpy, balloon);
         balloon = 0;
         Note again = cur;
         memmove(queue + 1, queue, (size_t)(nqueue < QUEUE_MAX - 1 ? nqueue : QUEUE_MAX - 1) * sizeof *queue);

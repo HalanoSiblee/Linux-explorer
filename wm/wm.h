@@ -72,6 +72,7 @@ struct Client {
 
     int      icon;                 /* w2k icon id for caption/taskbar */
     int      btn_down;             /* caption button being clicked    */
+    Cursor   cursor;               /* last set on the frame: set it once */
     int      btn_hot;              /* caption button under pointer    */
     int      ignore_unmap;         /* UnmapNotifys we caused ourselves */
     Pixmap   capbuf;               /* caption back buffer, kept between paints */
@@ -108,6 +109,7 @@ void    client_focus(Client *c);
 void    client_raise(Client *c);
 void    client_close(Client *c);
 void    client_minimize(Client *c);
+void    client_minimize_quiet(Client *c);   /* no animation, no restack */
 void    client_restore(Client *c);
 void    client_maximize(Client *c, int on);
 void    client_fullscreen(Client *c, int on);
@@ -176,6 +178,8 @@ void tray_fini(void);
 
 /* volume.c -- the speaker in the notification area */
 void volume_poll(void);
+int  volume_fd(void);              /* "pactl subscribe", or -1 */
+int  volume_subscribed_event(void);/* drain it; 1 = re-read the level */
 int  volume_available(void);   /* is there a mixer to talk to at all? */
 int  volume_level(void);          /* 0..100, -1 when there is no mixer */
 int  volume_is_muted(void);
@@ -275,6 +279,8 @@ void        recent_clear(void);
 /* programs.c */
 void     programs_add_groups(W2kMenu *m);
 int      programs_run(int id, const char *terminal);
+int      programs_command(int id, char *cmd, int cn, int *terminal,
+                          char *name, int nn);
 int      programs_search(const char *query, int *ids, const char **names,
                          int max);
 int      programs_icon(int id);
@@ -293,7 +299,13 @@ void     programs_collapse_all(void);
 /* startsearch.c -- searching from the Start menu, drawn inside it */
 enum { SS_NONE, SS_CHANGED, SS_RUN, SS_ESC, SS_EMPTY };
 enum { SR_PROG, SR_ALIAS, SR_RECENT };
-typedef struct { int kind, id, icon; const W2kAlias *alias; char name[128]; } SResult;
+/* A result holds what it takes to run the thing: a program's own command
+ * line rather than an index into a list that a rescan re-sorts. */
+typedef struct {
+    int kind, id, icon, terminal;
+    const W2kAlias *alias;
+    char name[128], cmd[1024];
+} SResult;
 typedef struct { char query[128]; SResult res[20]; int n, sel; } SearchState;
 void startsearch_begin(SearchState *s, const char *first);
 int  startsearch_key(SearchState *s, XKeyEvent *k);

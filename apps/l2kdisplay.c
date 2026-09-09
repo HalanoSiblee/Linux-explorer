@@ -792,7 +792,12 @@ static void wallpaper_preview(Drawable d, int x, int y, int w, int h)
     char *pixels = malloc((size_t)w * h * 4);
     XImage *im = pixels ? XCreateImage(w2k.dpy, w2k.visual, w2k.depth, ZPixmap, 0,
                                        pixels, (unsigned)w, (unsigned)h, 32, 0) : NULL;
-    if (!im) { free(pixels); free(rgba); return; }
+    if (!im) {
+        /* The cache was stamped above: unstamp it, or every later repaint
+         * copies this pixmap without ever having drawn into it. */
+        cache_path[0] = 0;
+        free(pixels); free(rgba); return;
+    }
     /* The stretched styles are shown through the chosen resampler, as
      * the desktop will draw them: the picture at the size it takes on
      * the little screen, then placed. */
@@ -841,6 +846,9 @@ static void wallpaper_preview(Drawable d, int x, int y, int w, int h)
 
 static void fill_walls(void)
 {
+    /* The rows carry a malloc'd path in `data`, which w2k_list_clear does
+     * not free: hand them back before it drops the rows. */
+    for (int i = 0; i < dl.walls->n; i++) free(dl.walls->items[i].data);
     w2k_list_clear(dl.walls);
     int r = w2k_list_add(dl.walls, ICO_NONE, NULL);
     w2k_list_set(dl.walls, r, 0, "(None)");

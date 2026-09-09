@@ -62,7 +62,8 @@ static char *get_text_prop(Window w, Atom prop)
 {
     XTextProperty tp;
     char *out = NULL;
-    if (!XGetTextProperty(w2k.dpy, w, &tp, prop) || !tp.nitems) return NULL;
+    if (!XGetTextProperty(w2k.dpy, w, &tp, prop)) return NULL;
+    if (!tp.nitems) { XFree(tp.value); return NULL; }   /* set but empty: still allocated */
     if (tp.encoding == XA_STRING || tp.encoding == w2k.a_utf8) {
         out = w2k_strdup((char *)tp.value);
     } else {
@@ -486,6 +487,26 @@ void client_close(Client *c)
 /* ------------------------------------------------------------------ *
  * Show / hide states
  * ------------------------------------------------------------------ */
+/* `animate` flies the wire frame (which grabs the server for a tenth of
+ * a second) and `settle` restacks and repaints the bar. Show Desktop
+ * minimises a whole screenful, so it asks for neither and settles once
+ * at the end -- ten windows used to mean a second of grabbed server and
+ * twenty full bar relayouts. */
+void client_minimize_quiet(Client *c)
+{
+    if (!c || c->minimized || c->skip_taskbar) return;
+    c->minimized = 1;
+    XUnmapWindow(w2k.dpy, c->frame);
+    wm_set_state(c->win, IconicState);
+    client_publish_state(c);
+    if (focused == c) {
+        focused = NULL;
+        for (Client *n = stack; n; n = n->snext)
+            if (!n->minimized && n->mapped) { client_focus(n); break; }
+        if (!focused) client_focus(NULL);
+    }
+}
+
 void client_minimize(Client *c)
 {
     w2k_sound_play(SND_MINIMIZE);

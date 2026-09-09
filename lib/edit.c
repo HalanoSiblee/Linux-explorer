@@ -98,16 +98,25 @@ static int max_i(int a, int b) { return a > b ? a : b; }
 /* ------------------------------------------------------------------ *
  * Buffer
  * ------------------------------------------------------------------ */
-static void ensure_cap(W2kEdit *e, int need)
+/* Grow the buffer to hold `need` characters and a NUL. 0 when it could
+ * not be grown -- callers must not write past e->cap on that answer. */
+static int ensure_cap(W2kEdit *e, int need)
 {
-    if (need + 1 <= e->cap) return;
+    if (need + 1 <= e->cap) return 1;
     int cap = e->cap ? e->cap : 256;
     while (cap < need + 1) cap *= 2;
-    char *grown = realloc(e->text, (size_t)cap);
-    if (!grown) return;                    /* keep what there is */
+    char *grown = malloc((size_t)cap);
+    if (!grown) return 0;                  /* keep what there is */
+    if (e->text) {
+        memcpy(grown, e->text, (size_t)e->cap < (size_t)cap ? (size_t)e->cap : (size_t)cap);
+        /* Scrubbed rather than realloc'd: a password must not be left
+         * behind in the freed block (w2k_edit_wipe promises as much). */
+        memset(e->text, 0, (size_t)e->cap);
+        free(e->text);
+    } else grown[0] = 0;
     e->text = grown;
-    if (!e->text) abort();
     e->cap = cap;
+    return 1;
 }
 
 W2kEdit *w2k_edit_new(int multiline)
@@ -159,7 +168,7 @@ static const char *shown(W2kEdit *e)
 {
     if (!e->password) return e->text;
     char *m = realloc(e->mask, (size_t)e->len + 1);
-    if (!m) return e->text;
+    if (!m) return "";                     /* never fall back to the plaintext */
     e->mask = m;
     memset(m, '*', (size_t)e->len);
     m[e->len] = 0;
@@ -387,7 +396,7 @@ void w2k_edit_wipe(W2kEdit *e)
 void w2k_edit_set(W2kEdit *e, const char *text)
 {
     int n = text ? (int)strlen(text) : 0;
-    ensure_cap(e, n);
+    if (!ensure_cap(e, n)) return;         /* no room: keep what is there */
     memcpy(e->text, text ? text : "", n);
     e->text[n] = 0;
     e->len = n;
@@ -427,14 +436,14 @@ void w2k_edit_insert(W2kEdit *e, const char *s)
         for (int i = 0; i < n; i++)
             if (copy[i] != '\n' && copy[i] != '\r') copy[k++] = copy[i];
         copy[k] = 0;
-        ensure_cap(e, e->len + k);
+        if (!ensure_cap(e, e->len + k)) { free(copy); return; }
         memmove(e->text + e->caret + k, e->text + e->caret, e->len - e->caret + 1);
         memcpy(e->text + e->caret, copy, k);
         e->len += k;
         e->caret += k;
         free(copy);
     } else {
-        ensure_cap(e, e->len + n);
+        if (!ensure_cap(e, e->len + n)) return;
         memmove(e->text + e->caret + n, e->text + e->caret, e->len - e->caret + 1);
         memcpy(e->text + e->caret, s, n);
         e->len += n;

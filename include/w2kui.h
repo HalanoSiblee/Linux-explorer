@@ -133,6 +133,8 @@ int  w2k_scroll_part(W2kScroll *s, int x, int y);
 int  w2k_scroll_press(W2kScroll *s, int x, int y);
 int  w2k_scroll_motion(W2kScroll *s, int x, int y);
 void w2k_scroll_release(W2kScroll *s);
+/* A scrollbar being freed must not be left mid-animation. */
+void w2k_scroll_anim_forget(W2kScroll *s);
 int  w2k_scroll_wheel(W2kScroll *s, int dir);
 void w2k_scroll_clamp(W2kScroll *s);
 int  w2k_scroll_needed(W2kScroll *s);

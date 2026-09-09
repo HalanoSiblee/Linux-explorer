@@ -550,11 +550,13 @@ static void show_desktop(void)
     int any = 0;
     for (Client *c = clients; c; c = c->next)
         if (!c->minimized && !c->skip_taskbar) { any = 1; break; }
+    if (any) w2k_sound_play(SND_MINIMIZE);
     for (Client *c = clients; c; c = c->next) {
         if (c->skip_taskbar) continue;
-        if (any) client_minimize(c);
+        if (any) client_minimize_quiet(c);
         else if (c->minimized) client_restore(c);
     }
+    if (any) { clients_restack(); taskbar_paint(); }
 }
 
 /* The Windows key opens the Start menu when pressed and released on its

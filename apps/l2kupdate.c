@@ -291,12 +291,14 @@ static void install_release(void)
     if (up.source[0]) {
         /* A source checkout: pull it, build it, install it, and restart
          * the running desktop in place. */
+        char qsrc[2200];
+        w2k_shell_quote(up.source, qsrc, sizeof qsrc);   /* an apostrophe would break out */
         snprintf(body, sizeof body,
-                 "cd '%s' || exit 1\n"
+                 "cd %s || exit 1\n"
                  "git pull --ff-only || exit 1\n"
                  "make -j\"$(nproc 2>/dev/null || echo 2)\" || exit 1\n"
                  "as_root make install || exit 1\n"
-                 "l2kwm --restart 2>/dev/null || true\n", up.source);
+                 "l2kwm --restart 2>/dev/null || true\n", qsrc);
     } else {
         /* The installed copy: the same one-line installer that put it
          * there, which updates and restarts a running desktop. */

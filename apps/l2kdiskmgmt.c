@@ -715,7 +715,10 @@ static void layout_regions(int w)
         if (n == 0) continue;
         int minw = 58;
         if (minw * n > w) minw = w / n;
-        int widths[MAX_PARTS + 2];
+        /* A disk contributes a gap and a partition per entry, so its
+         * region count is not bounded by MAX_PARTS: size this like
+         * regions[] itself. */
+        int widths[MAX_DISKS * (MAX_PARTS + 2)];
         int sum = 0;
         for (int k = 0; k < n; k++) {
             DRegion *r = &regions[first + k];

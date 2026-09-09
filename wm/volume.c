@@ -5,16 +5,26 @@
  * driven by pactl (PulseAudio or PipeWire's Pulse server, which is what a
  * desktop has) with amixer as the fallback for bare ALSA.
  *
- * The level is polled rather than subscribed to: once every few seconds
- * costs nothing and keeps the icon honest when something else changes it. */
+ * The level is subscribed to, not polled: "pactl subscribe" is one
+ * long-lived process that says when a sink changes, so the shell asks for
+ * the level only when there is news. Polling it every few seconds instead
+ * meant forking a shell and two pactl processes around seventeen thousand
+ * times a day, and waking the machine to do it. Bare ALSA has nothing to
+ * subscribe to, so amixer keeps the slow timer. */
 #include "wm.h"
 #include "w2kui.h"
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static int vol_level = -1;           /* 0..100, -1 = unknown  */
 static int vol_muted;
+static FILE *sub;                    /* "pactl subscribe", while it lives */
+static int   sub_fd = -1;
 static int have_pactl = -1;          /* -1 = not yet looked   */
 static int have_amixer = -1;
 
@@ -43,6 +53,62 @@ int volume_available(void)
     if (have_pactl) return 1;
     if (have_amixer < 0) have_amixer = tool_exists("amixer");
     return have_amixer;
+}
+
+/* One long-lived "pactl subscribe": its stdout carries a line per change,
+ * and the shell asks for the level only when a sink event arrives. The fd
+ * joins the window manager's select loop (volume_fd). */
+static void sub_open(void)
+{
+    if (sub || have_pactl != 1) return;
+    /* SIGPIPE would kill the shell if the child went away mid-write. */
+    signal(SIGPIPE, SIG_IGN);
+    sub = popen("pactl subscribe 2>/dev/null", "r");
+    if (!sub) return;
+    sub_fd = fileno(sub);
+    int fl = fcntl(sub_fd, F_GETFL, 0);
+    if (fl >= 0) fcntl(sub_fd, F_SETFL, fl | O_NONBLOCK);
+    fcntl(sub_fd, F_SETFD, FD_CLOEXEC);
+}
+
+static void sub_close(void)
+{
+    if (!sub) return;
+    pclose(sub);
+    sub = NULL;
+    sub_fd = -1;
+}
+
+/* The fd to watch, or -1 when there is nothing to subscribe to. */
+int volume_fd(void)
+{
+    if (!volume_available()) return -1;
+    if (have_pactl == 1 && !sub) sub_open();
+    return sub_fd;
+}
+
+/* Something arrived on the subscription: drain it, and say whether any of
+ * it was a sink change worth re-reading the level for. */
+int volume_subscribed_event(void)
+{
+    if (!sub) return 0;
+    char buf[1024];
+    int want = 0, got = 0;
+    for (;;) {
+        ssize_t n = read(sub_fd, buf, sizeof buf - 1);
+        if (n > 0) {
+            buf[n] = 0;
+            got = 1;
+            if (strstr(buf, "sink") || strstr(buf, "server")) want = 1;
+            if ((size_t)n < sizeof buf - 1) break;
+            continue;
+        }
+        if (n == 0) { sub_close(); break; }        /* the child has gone */
+        if (errno == EINTR) continue;
+        break;                                      /* EAGAIN: drained */
+    }
+    (void)got;
+    return want;
 }
 
 void volume_poll(void)

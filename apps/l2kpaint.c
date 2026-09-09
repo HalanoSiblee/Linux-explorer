@@ -214,6 +214,9 @@ static void push_undo(void)
     if (pt.nundo == MAX_UNDO) {
         snap_free(&pt.undo[0]);
         memmove(pt.undo, pt.undo + 1, (MAX_UNDO - 1) * sizeof pt.undo[0]);
+        /* The shift leaves the vacated slot naming the same buffer as the
+         * one below it; clear it, or freeing it frees theirs too. */
+        memset(&pt.undo[MAX_UNDO - 1], 0, sizeof pt.undo[0]);
         pt.nundo--;
     }
     Snap *s = &pt.undo[pt.nundo];
@@ -697,18 +700,30 @@ static void do_properties(void)
         return;
     }
     if (nw == pt.w && nh == pt.h) return;
-    /* Reallocate each layer, copy the overlapping region. */
+    /* Every layer is built first and swapped in together: giving up half
+     * way would leave pt.w/pt.h disagreeing with the buffers, and the
+     * next composite would read the old stride out of a smaller one. */
+    unsigned char *fresh[MAX_LAYERS];
+    for (int li = 0; li < pt.nlayers; li++) fresh[li] = NULL;
     for (int li = 0; li < pt.nlayers; li++) {
         unsigned char *nbuf = buf_new(nw, nh, li == 0);
-        if (!nbuf) return;
+        if (!nbuf) {
+            for (int k = 0; k < li; k++) free(fresh[k]);
+            w2k_msgbox(pt.win, "Paint", "Not enough memory for that size.",
+                       MB_OK | MB_ICONERROR);
+            return;
+        }
         int cw = nw < pt.w ? nw : pt.w;
         int ch = nh < pt.h ? nh : pt.h;
         for (int y = 0; y < ch; y++)
             memcpy(nbuf + (size_t)y * nw * 4,
                    pt.layer[li].rgba + (size_t)y * pt.w * 4,
                    (size_t)cw * 4);
+        fresh[li] = nbuf;
+    }
+    for (int li = 0; li < pt.nlayers; li++) {
         free(pt.layer[li].rgba);
-        pt.layer[li].rgba = nbuf;
+        pt.layer[li].rgba = fresh[li];
     }
     pt.w = nw;
     pt.h = nh;
@@ -740,10 +755,17 @@ static void do_scale(void)
                    MB_OK | MB_ICONERROR);
         return;
     }
+    unsigned char *scaled[MAX_LAYERS];
+    for (int li = 0; li < pt.nlayers; li++) scaled[li] = NULL;
     for (int li = 0; li < pt.nlayers; li++) {
         unsigned char *src = pt.layer[li].rgba;
         unsigned char *dst = buf_new(nw, nh, 0);
-        if (!dst) return;
+        if (!dst) {                       /* commit all or nothing */
+            for (int k = 0; k < li; k++) free(scaled[k]);
+            w2k_msgbox(pt.win, "Paint", "Not enough memory for that size.",
+                       MB_OK | MB_ICONERROR);
+            return;
+        }
         for (int y = 0; y < nh; y++) {
             int sy = y * pt.h / nh;
             for (int x = 0; x < nw; x++) {
@@ -753,8 +775,11 @@ static void do_scale(void)
                 o[0] = p[0]; o[1] = p[1]; o[2] = p[2]; o[3] = p[3];
             }
         }
+        scaled[li] = dst;
+    }
+    for (int li = 0; li < pt.nlayers; li++) {
         free(pt.layer[li].rgba);
-        pt.layer[li].rgba = dst;
+        pt.layer[li].rgba = scaled[li];
     }
     pt.w = nw;
     pt.h = nh;

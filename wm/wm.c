@@ -916,6 +916,8 @@ int main(int argc, char **argv)
         FD_SET(fd, &r);
         int nfd = notifyd_fd();
         if (nfd >= 0) FD_SET(nfd, &r);
+        int vfd = volume_fd();          /* pactl subscribe, when there is one */
+        if (vfd >= 0) FD_SET(vfd, &r);
         int wait = taskbar_next_tick_ms();
         int d = desktop_next_tick_ms();
         if (d < wait) wait = d;
@@ -929,7 +931,10 @@ int main(int argc, char **argv)
         if (wait > 60000) wait = 60000;
         struct timeval tv = { .tv_sec = wait / 1000,
                               .tv_usec = (wait % 1000) * 1000 };
-        int rc = select((nfd > fd ? nfd : fd) + 1, &r, NULL, NULL, &tv);
+        int maxfd = fd;
+        if (nfd > maxfd) maxfd = nfd;
+        if (vfd > maxfd) maxfd = vfd;
+        int rc = select(maxfd + 1, &r, NULL, NULL, &tv);
         power_idle_poll();
         if (rc < 0 && errno == EBADF && nfd >= 0) {
             /* The notification service's connection has gone bad; drop
@@ -939,6 +944,13 @@ int main(int argc, char **argv)
         }
         if (rc < 0 && errno != EINTR) break;
         if (nfd >= 0) notifyd_dispatch();
+        /* A sink changed: read the level once, rather than every few
+         * seconds whether or not anything happened. */
+        if (vfd >= 0 && FD_ISSET(vfd, &r) && volume_subscribed_event()) {
+            int before = volume_level(), mb = volume_is_muted();
+            volume_poll();
+            if (before != volume_level() || mb != volume_is_muted()) taskbar_paint();
+        }
         taskbar_tick();
         taskbar_hover_tick();
         balloon_tick();

@@ -5,6 +5,7 @@
  * handful of lines, and rereading means an edit from another process (or by
  * hand in Notepad) shows up immediately. */
 #include "wm.h"
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,12 +23,28 @@ static void pin_path(int which, char *buf, int n)
     snprintf(buf, n, "%s/.w2k/%s", home ? home : ".", pin_file(which));
 }
 
+/* The taskbar relays out on every repaint -- every focus change, every
+ * clock minute, nine times through the orb's glow -- and each one used to
+ * open and read this file. Kept until it changes on disk. */
+static struct { Pin p[PIN_MAX]; int n, valid; time_t mtime; off_t size; } pin_cache[2];
+
 int pins_load(int which, Pin *out, int max)
 {
     char path[1024];
     pin_path(which, path, sizeof path);
+
+    int slot = (which >= 0 && which < 2) ? which : 0;
+    struct stat st;
+    int have_st = stat(path, &st) == 0;
+    if (have_st && pin_cache[slot].valid &&
+        pin_cache[slot].mtime == st.st_mtime && pin_cache[slot].size == st.st_size) {
+        int n = pin_cache[slot].n < max ? pin_cache[slot].n : max;
+        memcpy(out, pin_cache[slot].p, (size_t)n * sizeof *out);
+        return n;
+    }
+
     FILE *f = fopen(path, "r");
-    if (!f) return 0;
+    if (!f) { pin_cache[slot].valid = 0; return 0; }
 
     int n = 0;
     char line[1024];
@@ -51,6 +68,14 @@ int pins_load(int which, Pin *out, int max)
         n++;
     }
     fclose(f);
+    if (have_st) {
+        int k = n < PIN_MAX ? n : PIN_MAX;
+        memcpy(pin_cache[slot].p, out, (size_t)k * sizeof *out);
+        pin_cache[slot].n = k;
+        pin_cache[slot].mtime = st.st_mtime;
+        pin_cache[slot].size = st.st_size;
+        pin_cache[slot].valid = 1;
+    }
     return n;
 }
 

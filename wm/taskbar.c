@@ -446,6 +446,10 @@ static void layout_vertical(void)
 
 static void layout(void)
 {
+    /* A window can close while its button is held: the drag index would
+     * then name a slot layout() no longer writes, whose Client * is
+     * freed. hover_task is guarded the same way where it is used. */
+    if (drag_task >= ntasks) drag_task = -1;
     if (vertical()) { layout_vertical(); return; }
     ql_build();
     /* A themed Start button is a bitmap, so the strip's width is the
@@ -938,7 +942,9 @@ void taskbar_tick(void)
 
     long now = w2k_now_ms();
     int vol_before = volume_level(), mute_before = volume_is_muted();
-    if (now >= next_volume_poll && volume_available()) {
+    /* With a subscription the level is read when something changes it, so
+     * the timer is only for the mixers that have none (bare ALSA). */
+    if (volume_fd() < 0 && now >= next_volume_poll && volume_available()) {
         next_volume_poll = now + VOLUME_POLL_MS;
         volume_poll();
     }
@@ -965,7 +971,9 @@ int taskbar_next_tick_ms(void)
 {
     long now = w2k_now_ms();
     int wait = 60000;
-    if (volume_available())
+    /* A subscription wakes the loop through its fd; only the timer-driven
+     * fallback needs the shell to wake for it. */
+    if (volume_available() && volume_fd() < 0)
         wait = (int)(next_volume_poll > now ? next_volume_poll - now : 0);
     {
         int to_power = (int)(next_power_poll > now ? next_power_poll - now : 0);
@@ -1107,10 +1115,18 @@ static void orb_paint(void)
      * soft pixels blend into whichever they are over. (A window whose
      * bottom edge runs under the orb's overhang is not seen through it;
      * the wallpaper is what shows there.) */
-    int vis = w2k_px(w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
-    int above = orb_ph - vis;
+    /* How much of the orb window stands above the bar: the window is
+     * placed so its bottom sits on the bar's, so this is its height less
+     * the bar's -- not less the part of the art that shows. */
+    int above = orb_ph - tb_ph;
+    if (above < 0) above = 0;
     if (above > 0) desktop_wall_copy(opm, tb_x, tb_y - above, orb_pw, above, 0, 0);
-    if (tb_pm) XCopyArea(w2k.dpy, tb_pm, opm, w2k.gc, 0, 0, (unsigned)orb_pw, (unsigned)vis, 0, above);
+    if (tb_pm) {
+        int rows = orb_ph - above;              /* never more than tb_pm holds */
+        if (rows > tb_ph) rows = tb_ph;
+        if (rows > 0) XCopyArea(w2k.dpy, tb_pm, opm, w2k.gc, 0, 0,
+                                (unsigned)orb_pw, (unsigned)rows, 0, above);
+    }
     else w2k_fill_rgb(opm, 0, 0, W7_ORB_W, W7_ORB_H, 129, 148, 170);
     int sw = w2k_skin_w(skin), sh = w2k_skin_h(skin) / 3;
     int state = startmenu_is_open() ? 2 : (start_hot ? 1 : 0);
@@ -1450,7 +1466,10 @@ int taskbar_event(XEvent *e)
         if (e->type == ButtonPress || e->type == ButtonRelease) {
             e->xbutton.window = tb;
             e->xbutton.x = 20;
-            e->xbutton.y = taskbar_thickness() / 2;
+            /* Logical: the scale conversion above only rewrites events
+             * that arrived on the bar, so this must not be in screen
+             * pixels or the Start hit test misses at 200%. */
+            e->xbutton.y = tb_h / 2;
         } else return 1;
     }
 

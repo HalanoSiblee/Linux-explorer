@@ -180,6 +180,11 @@ typedef struct {
 
 static Entry *entries;
 static int    nentries, capentries;
+/* The search box hides entries, so a list row is not an index into
+ * entries[]: this maps one to the other. Everything that acts on a row --
+ * delete, rename, open, drop -- goes through entry_at_row(). */
+static int   *rowent;
+static int    nrowent, caprowent;
 
 static int cmp_entries(const void *A, const void *B)
 {
@@ -206,7 +211,33 @@ static int cmp_entries(const void *A, const void *B)
     return ex.sort_dir ? -r : r;
 }
 
-static void entries_clear(void) { nentries = 0; }
+static void entries_clear(void) { nentries = 0; nrowent = 0; }
+
+/* Remember that list row `row` shows entries[i]. */
+static void rowent_set(int row, int i)
+{
+    if (row < 0) return;
+    if (row >= caprowent) {
+        int cap = caprowent ? caprowent * 2 : 128;
+        while (cap <= row) cap *= 2;
+        int *g = realloc(rowent, (size_t)cap * sizeof *rowent);
+        if (!g) return;
+        rowent = g;
+        caprowent = cap;
+    }
+    rowent[row] = i;
+    if (row >= nrowent) nrowent = row + 1;
+}
+
+/* The entry a list row shows, or NULL: the only way to go from a row to a
+ * file, since a filtered list has fewer rows than entries. */
+static Entry *entry_at_row(int row)
+{
+    if (row < 0 || row >= nrowent) return NULL;
+    int i = rowent[row];
+    if (i < 0 || i >= nentries) return NULL;
+    return &entries[i];
+}
 
 static Entry *entry_push(void)
 {
@@ -228,12 +259,13 @@ static void status_update(void)
     for (int i = 0; i < ex.list->n; i++)
         if (ex.list->items[i].selected) {
             nsel++;
-            if (i < nentries) selsize += entries[i].size;
+            Entry *se = entry_at_row(i);
+            if (se) selsize += se->size;
         }
-    if (nsel == 1 && ex.list->sel >= 0 && ex.list->sel < nentries &&
-        !entries[ex.list->sel].isdir) {
+    Entry *one = entry_at_row(ex.list->sel);
+    if (nsel == 1 && one && !one->isdir) {
         char sz[32];
-        size_text(entries[ex.list->sel].size, sz, sizeof sz);
+        size_text(one->size, sz, sizeof sz);
         snprintf(buf, sizeof buf, "1 object(s) selected");
         w2k_status_set(ex.sb, 0, buf);
         w2k_status_set(ex.sb, 1, sz);
@@ -364,6 +396,7 @@ static void refill_list(void)
         Entry *e = &entries[i];
         if (!entry_matches(e->name)) continue;
         int r = w2k_list_add(ex.list, e->icon, NULL);
+        rowent_set(r, i);
         ex.list->items[r].link = e->link;
         char shown[256];
         if (!e->isdir && !e->link &&
@@ -821,9 +854,10 @@ static int remove_tree(const char *path, int depth)
 static void selected_paths(char out[][1024], int max, int *n)
 {
     *n = 0;
-    for (int i = 0; i < ex.list->n && *n < max; i++)
-        if (ex.list->items[i].selected && i < nentries)
-            path_join(out[(*n)++], 1024, ex.cur.path, entries[i].name);
+    for (int i = 0; i < ex.list->n && *n < max; i++) {
+        Entry *e = ex.list->items[i].selected ? entry_at_row(i) : NULL;
+        if (e) path_join(out[(*n)++], 1024, ex.cur.path, e->name);
+    }
 }
 
 /* Delete moves to the Recycle Bin; holding Shift destroys instead, exactly
@@ -880,8 +914,9 @@ static void do_delete(void) { do_delete_ex(0); }
 
 static void do_rename(void)
 {
-    if (ex.cur.kind != K_FS || ex.list->sel < 0 || ex.list->sel >= nentries) return;
-    const char *old = entries[ex.list->sel].name;
+    Entry *re = entry_at_row(ex.list->sel);
+    if (ex.cur.kind != K_FS || !re) return;
+    const char *old = re->name;
     char out[256];
     if (!w2k_prompt(ex.win, "Rename", "&New name:", old, out, sizeof out,
                     ICO_NONE))
@@ -1096,15 +1131,15 @@ static void do_send_to_mydocs(void)
  * which is the "Always use this program" check box. */
 static void do_open_with(void)
 {
-    if (ex.list->sel < 0 || ex.list->sel >= nentries) return;
+    Entry *oe = entry_at_row(ex.list->sel);
+    if (!oe) return;
     char full[2048];
-    path_join(full, sizeof full, ex.cur.path, entries[ex.list->sel].name);
+    path_join(full, sizeof full, ex.cur.path, oe->name);
 
     char cur[256], out[256];
     w2k_assoc_get(w2k_assoc_class_for(full), cur, sizeof cur);
     char label[128];
-    snprintf(label, sizeof label, "&Open %.60s with:",
-             entries[ex.list->sel].name);
+    snprintf(label, sizeof label, "&Open %.60s with:", oe->name);
     if (!w2k_prompt(ex.win, "Open With", label, cur, out, sizeof out,
                     ICO_QUESTION))
         return;
@@ -1158,8 +1193,8 @@ static void do_undo(void)
 
 static void do_properties(void)
 {
-    if (ex.list->sel < 0 || ex.list->sel >= nentries) return;
-    Entry *e = &entries[ex.list->sel];
+    Entry *e = entry_at_row(ex.list->sel);
+    if (!e) return;
     if (ex.cur.kind != K_FS) return;         /* virtual folders have none */
     char full[2048];
     path_join(full, sizeof full, ex.cur.path, e->name);
@@ -1191,8 +1226,8 @@ static void spawn(const char *fmt, const char *arg)
 static void on_activate(void *u, int idx)
 {
     (void)u;
-    if (idx < 0 || idx >= nentries) return;
-    Entry *e = &entries[idx];
+    Entry *e = entry_at_row(idx);
+    if (!e) return;
 
     if (ex.cur.kind == K_DESKTOP || ex.cur.kind == K_MYCOMPUTER) {
         Node nd = { K_FS };
@@ -1291,8 +1326,9 @@ static int drop_target_dir(int x, int y, char *out, int n)
 {
     if (ex.cur.kind != K_FS) return 0;
     int row = w2k_list_hit(ex.list, x, y);
-    if (row >= 0 && row < nentries && entries[row].isdir) {
-        path_join(out, (size_t)n, ex.cur.path, entries[row].name);
+    Entry *re = entry_at_row(row);
+    if (re && re->isdir) {
+        path_join(out, (size_t)n, ex.cur.path, re->name);
         return 1;
     }
     snprintf(out, (size_t)n, "%s", ex.cur.path);

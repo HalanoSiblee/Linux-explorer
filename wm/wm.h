@@ -302,7 +302,8 @@ void startsearch_draw_rows(Drawable d, SearchState *s, int x, int y, int w, int 
                            int rowh, unsigned long bg, int menu_look);
 int  startsearch_row_at(SearchState *s, int y0, int rowh, int maxh, int y);
 void startsearch_draw_box(Drawable d, SearchState *s, int x, int y, int w, int h);
-void startsearch_classic(const char *first, int bx, int by);
+void startsearch_classic(const char *first, int bx, int by, int mw, int mh,
+                         int banner_w, const char *banner);
 void wm_run_alias(const W2kAlias *a);
 
 /* desktop.c */

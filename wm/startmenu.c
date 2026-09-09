@@ -339,12 +339,16 @@ void startmenu_open(void)
     w2k_menu_closed = NULL;
     w2k_menu_on_context = NULL;
     w2k_menu_typeahead = NULL;
+    int mw, mh, bw = w2k_menu_banner_width(m);
+    char btext[128];
+    w2k_menu_size(m, &mw, &mh);
+    snprintf(btext, sizeof btext, "%s", w2k_menu_banner_text(m));
     w2k_menu_free(m);
     open_flag = 0;
     taskbar_paint();
 
     /* The letter typed opens the search where the menu was, with it. */
-    if (typed[0]) { startsearch_classic(typed, bx, by); return; }
+    if (typed[0]) { startsearch_classic(typed, bx, by, mw, mh, bw, btext); return; }
     startmenu_dispatch(id);
 }
 

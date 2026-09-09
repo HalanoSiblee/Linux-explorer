@@ -752,6 +752,10 @@ int      w2k_menu_count(W2kMenu *m);
  * command id, or 0 if the menu was dismissed. */
 int      w2k_menu_popup(W2kMenu *m, int x, int y, int flags);
 void     w2k_menu_banner_fill(Drawable d, int x, int y, int w, int h);
+void     w2k_menu_size(W2kMenu *m, int *w, int *h);
+int      w2k_menu_banner_width(W2kMenu *m);
+const char *w2k_menu_banner_text(W2kMenu *m);
+int      w2k_menu_border(void);
 
 /* While a menu is modal the rest of the desktop still needs to repaint.
  * The window manager points this at its own event handler. */

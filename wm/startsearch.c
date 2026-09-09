@@ -192,20 +192,19 @@ void startsearch_draw_box(Drawable d, SearchState *s, int x, int y, int w, int h
 }
 
 /* ------------------------------------------------------------------ *
- * The classic menu's search: a panel in the menu's style, where the
- * menu was, with the banner down its left.
+ * The classic menu's search: a panel in the menu's style, exactly where
+ * the menu was and as big as it was, with its banner down the left.
  * ------------------------------------------------------------------ */
-#define CS_W      300
-#define CS_H      340
-#define CS_BANNER 21
 #define CS_ROW    20
 
-void startsearch_classic(const char *first, int bx, int by)
+void startsearch_classic(const char *first, int bx, int by, int mw, int mh,
+                         int banner_w, const char *banner)
 {
     SearchState s;
     startsearch_begin(&s, first);
 
-    int pw = w2k_px(CS_W), ph = w2k_px(CS_H);
+    int bd = w2k_menu_border();
+    int pw = w2k_px(mw), ph = w2k_px(mh);
     const W2kMonitor *m = w2k_monitor_primary();
     int px = bx, py = w2k_taskbar_edge == TB_TOP ? by : by - ph;
     if (py < m->y) py = m->y;
@@ -228,8 +227,9 @@ void startsearch_classic(const char *first, int bx, int by)
     }
     XGrabKeyboard(w2k.dpy, win, True, GrabModeAsync, GrabModeAsync, CurrentTime);
 
-    int box_x = CS_BANNER + 6, box_y = 8, box_w = CS_W - CS_BANNER - 12, box_h = 22;
-    int rows_y = box_y + box_h + 6, rows_h = CS_H - rows_y - 4;
+    int left = bd + banner_w;
+    int box_x = left + 4, box_y = bd + 4, box_w = mw - left - bd - 8, box_h = 22;
+    int rows_y = box_y + box_h + 4, rows_h = mh - bd - 2 - rows_y;
     int done = 0, run = -1;
     Pixmap pm = XCreatePixmap(w2k.dpy, win, (unsigned)pw, (unsigned)ph, w2k.depth);
     while (!done && running) {
@@ -263,11 +263,16 @@ void startsearch_classic(const char *first, int bx, int by)
         default: wm_handle_event(&e); break;
         }
         if (paint) {
-            w2k_fill(pm, 0, 0, CS_W, CS_H, C_MENU);
-            w2k_edge(pm, 0, 0, CS_W, CS_H, EDGE_RAISED, BF_RECT);
-            w2k_menu_banner_fill(pm, 2, 2, CS_BANNER, CS_H - 4);
+            w2k_fill(pm, 0, 0, mw, mh, C_MENU);
+            w2k_edge(pm, 0, 0, mw, mh, EDGE_RAISED, BF_RECT);
+            if (banner_w > 0) {
+                /* As the menu draws it: the gradient, the name reading up. */
+                int bh = mh - 2 * bd;
+                w2k_menu_banner_fill(pm, bd, bd, banner_w, bh);
+                w2k_text_vertical(pm, F_UI_BOLD, bd + 4, bd + bh - 6, banner, C_WHITE);
+            }
             startsearch_draw_box(pm, &s, box_x, box_y, box_w, box_h);
-            startsearch_draw_rows(pm, &s, CS_BANNER + 4, rows_y, CS_W - CS_BANNER - 8, rows_h,
+            startsearch_draw_rows(pm, &s, left + 2, rows_y, mw - left - bd - 4, rows_h,
                                   CS_ROW, w2k.col[C_MENU], 1);
             XCopyArea(w2k.dpy, pm, win, w2k.gc, 0, 0, (unsigned)pw, (unsigned)ph, 0, 0);
         }

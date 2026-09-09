@@ -201,6 +201,13 @@ static void menu_size(W2kMenu *m, int *w, int *h)
     *h = m->body_h + 2 * MENU_BORDER;
 }
 
+/* The size the menu would pop up at, its banner's width and text: what
+ * stands in for it (the Start menu's search) takes its place exactly. */
+void w2k_menu_size(W2kMenu *m, int *w, int *h) { menu_size(m, w, h); }
+int  w2k_menu_banner_width(W2kMenu *m) { return banner_w(m); }
+const char *w2k_menu_banner_text(W2kMenu *m) { return m->banner ? m->banner : ""; }
+int  w2k_menu_border(void) { return MENU_BORDER; }
+
 /* y offset of item i inside the menu window */
 static int item_y(W2kMenu *m, int idx) { return m->iy[idx]; }
 
@@ -831,13 +838,13 @@ static int menu_popup(W2kMenu *m, int x, int y, int flags)
                         repaint = 1;
                     } else { result = it->id; done = 1; }
                 }
-            } else if (w2k_menu_typeahead &&
-                       match_mnemonic(top->m, ks) < 0 &&
+            } else if (w2k_menu_typeahead && n == 1 &&
                        XLookupString(&e.xkey, w2k_menu_typeahead, 2, NULL, NULL) == 1 &&
                        (unsigned char)w2k_menu_typeahead[0] >= ' ') {
-                /* A printable key that is nobody's mnemonic: the caller
-                 * wanted it (the Start menu turns it into a search), so
-                 * close up and hand it over. */
+                /* A printable key at the top level: the caller wanted it
+                 * (the Start menu turns it into a search, and the search
+                 * comes before the mnemonics -- "c" is a search for c, not
+                 * Search), so close up and hand it over. */
                 w2k_menu_typeahead[1] = 0;
                 done = 1;
             } else {

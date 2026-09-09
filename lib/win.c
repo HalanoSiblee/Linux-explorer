@@ -643,6 +643,19 @@ void w2k_draw_groupbox(Drawable d, const W2kRect *r, const char *text)
 {
     int fh = w2k_font_height(F_UI);
     int top = r->y + fh / 2;
+    if (W2K_THEME_IS7(w2k_theme)) {
+        /* Windows 7: a single pale line, broken for the label, over
+         * whatever the page is -- no patch of face colour behind it. */
+        int gh = r->h - (top - r->y);
+        int tw = text && *text ? w2k_mnemonic_width(F_UI, text) : 0;
+        w2k_fill_rgb(d, r->x, top, tw ? 8 : r->w, 1, 213, 223, 229);
+        if (tw) w2k_fill_rgb(d, r->x + 8 + tw + 6, top, r->w - 8 - tw - 6, 1, 213, 223, 229);
+        w2k_fill_rgb(d, r->x, top + gh - 1, r->w, 1, 213, 223, 229);
+        w2k_fill_rgb(d, r->x, top, 1, gh, 213, 223, 229);
+        w2k_fill_rgb(d, r->x + r->w - 1, top, 1, gh, 213, 223, 229);
+        if (tw) w2k_text_mnemonic(d, F_UI, r->x + 11, top - fh / 2, text, C_TEXT, 1);
+        return;
+    }
     w2k_edge(d, r->x, top, r->w, r->h - (top - r->y), EDGE_ETCHED, BF_RECT);
     if (text && *text) {
         int tw = w2k_mnemonic_width(F_UI, text);

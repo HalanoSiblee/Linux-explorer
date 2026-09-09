@@ -63,15 +63,40 @@ static void menubar_layout(W2kMenubar *mb)
 void w2k_menubar_draw(Drawable d, W2kMenubar *mb)
 {
     menubar_layout(mb);
-    w2k_fill(d, mb->r.x, mb->r.y, mb->r.w, MENUBAR_H, C_MENU);
+    int seven = W2K_THEME_IS7(w2k_theme);
+    if (seven) {
+        /* Windows 7's menu bar: white fading to a pale blue over its
+         * upper part, a step to a deeper blue-white that lightens again
+         * below, and a blue-grey line along the bottom. Measured. */
+        int n = MENUBAR_H - 1, split = n * 2 / 5;
+        for (int i = 0; i < n; i++) {
+            int r, g, b;
+            if (i < split) {
+                int t = split > 1 ? i * 256 / (split - 1) : 0;
+                r = 252 + (229 - 252) * t / 256; g = 253 + (234 - 253) * t / 256; b = 254 + (245 - 254) * t / 256;
+            } else {
+                int m = n - split, t = m > 1 ? (i - split) * 256 / (m - 1) : 0;
+                r = 212 + (225 - 212) * t / 256; g = 219 + (230 - 219) * t / 256; b = 237 + (246 - 237) * t / 256;
+            }
+            w2k_fill_rgb(d, mb->r.x, mb->r.y + i, mb->r.w, 1, r, g, b);
+        }
+        w2k_fill_rgb(d, mb->r.x, mb->r.y + n, mb->r.w, 1, 182, 188, 204);
+    } else {
+        w2k_fill(d, mb->r.x, mb->r.y, mb->r.w, MENUBAR_H, C_MENU);
+    }
     int fh = w2k_font_height(F_UI);
     for (int i = 0; i < mb->n; i++) {
         int x = mb->item[i].x, w = mb->item[i].w;
         int hot = (i == mb->open);
-        if (hot) w2k_fill(d, x, mb->r.y + 1, w, MENUBAR_H - 2, C_HIGHLIGHT);
+        if (hot && seven) {
+            /* The open item: a pale blue box in a blue line. */
+            static const int fill[3] = { 185, 209, 234 }, line[3] = { 125, 162, 206 };
+            w2k_round_rect_rgb(d, x, mb->r.y + 1, w, MENUBAR_H - 3, 2, fill, line);
+        } else if (hot)
+            w2k_fill(d, x, mb->r.y + 1, w, MENUBAR_H - 2, C_HIGHLIGHT);
         w2k_text_mnemonic(d, F_UI, x + 8, mb->r.y + (MENUBAR_H - fh) / 2,
                           mb->item[i].text,
-                          hot ? C_HIGHLIGHTTEXT : C_MENUTEXT, 1);
+                          hot && !seven ? C_HIGHLIGHTTEXT : C_MENUTEXT, 1);
     }
 }
 
@@ -505,9 +530,52 @@ static void tab_shape(Drawable d, int l, int top, int w, int bottom)
     w2k_vline(d, l + w - 1, top + 2, h - 1, C_DKSHADOW);
 }
 
+/* Windows 7's tabs, measured: the page is white in a grey line; a tab
+ * is the same line round a two-tone grey gradient, starting two rows
+ * below the selected one, which is white and opens on to the page. */
+static void tabs7(Drawable d, W2kTabs *t)
+{
+    int by = t->r.y + TABS_H;
+    int fh = w2k_font_height(F_UI);
+    int label_dy = (TABS_H - 2 - fh) / 2 + 1;
+    w2k_fill_rgb(d, t->r.x, by, t->r.w, t->r.h - TABS_H, 255, 255, 255);
+    w2k_fill_rgb(d, t->r.x, by, t->r.w, 1, 137, 140, 149);
+    w2k_fill_rgb(d, t->r.x, by + t->r.h - TABS_H - 1, t->r.w, 1, 137, 140, 149);
+    w2k_fill_rgb(d, t->r.x, by, 1, t->r.h - TABS_H, 137, 140, 149);
+    w2k_fill_rgb(d, t->r.x + t->r.w - 1, by, 1, t->r.h - TABS_H, 137, 140, 149);
+    for (int pass = 0; pass < 2; pass++)
+        for (int i = 0; i < t->n; i++) {
+            int sel = (i == t->sel);
+            if (sel != pass) continue;
+            int l = t->tab[i].x - (sel ? 2 : 0);
+            int w = t->tab[i].w + (sel ? 4 : 0);
+            int top = t->r.y + (sel ? 0 : 2);
+            int h = (sel ? by + 1 : by) - top;
+            if (sel) {
+                w2k_fill_rgb(d, l + 1, top + 1, w - 2, h - 1, 255, 255, 255);
+            } else {
+                int ih = h - 2, half = ih / 2;
+                w2k_fill_rgb(d, l + 1, top + 1, w - 2, 1, 252, 252, 252);
+                for (int k = 1; k < ih; k++) {
+                    int up = k < half, n = up ? half : ih - half, j = up ? k : k - half;
+                    int c0 = up ? 242 : 221, c1 = up ? 237 : 207;
+                    int c = c0 + (c1 - c0) * j / (n > 1 ? n - 1 : 1);
+                    w2k_fill_rgb(d, l + 1, top + 1 + k, w - 2, 1, c, c, c);
+                }
+            }
+            w2k_fill_rgb(d, l + 1, top, w - 2, 1, 137, 140, 149);
+            w2k_fill_rgb(d, l, top + 1, 1, h - 1, 137, 140, 149);
+            w2k_fill_rgb(d, l + w - 1, top + 1, 1, h - 1, 137, 140, 149);
+            w2k_text_mnemonic(d, F_UI,
+                              t->tab[i].x + (t->tab[i].w - w2k_mnemonic_width(F_UI, t->tab[i].text)) / 2,
+                              top + label_dy, t->tab[i].text, C_TEXT, 1);
+        }
+}
+
 void w2k_tabs_draw(Drawable d, W2kTabs *t)
 {
     tabs_layout(t);
+    if (W2K_THEME_IS7(w2k_theme)) { tabs7(d, t); return; }
     int by = t->r.y + TABS_H;              /* top edge row of the body */
 
     /* The body's white edge is on the outside, one pixel, with the two

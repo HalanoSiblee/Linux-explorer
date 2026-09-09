@@ -165,6 +165,10 @@ Light and a Dark scheme. The Windows 7 wallpaper is carried in
 from the basic-colours palette or by its red, green and blue values, and
 title bars have a Color 2 for the far end of their gradient. The XP and 7
 chrome is cropped from screenshots and checked by diffing against them.
+Under the Vista and 7 looks the programs' own controls follow Windows 7
+too, measured off it: rounded gradient buttons, tabs on white pages,
+the two-tone menu bar, flat bordered wells and status panes, pale group
+boxes.
 
 Each look, as a desktop at 1280 by 800 with Explorer, Display Properties, Calculator and Notepad open and the Start menu up:
 

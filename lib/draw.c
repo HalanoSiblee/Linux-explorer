@@ -150,9 +150,33 @@ void w2k_frame(Drawable d, int x, int y, int w, int h, int color)
     ring_phys(d, x0, y0, x1, y1, t, color, color, BF_RECT);
 }
 
+static void rect_rgb_sides(Drawable d, int x, int y, int w, int h, int flags, int r, int g, int b);
+
 void w2k_edge(Drawable d, int x, int y, int w, int h, int style, int flags)
 {
     if (style == EDGE_FLAT || w <= 0 || h <= 0) return;
+    if (W2K_THEME_IS7(w2k_theme)) {
+        /* Windows 7 draws its wells, panes and group lines flat: one grey
+         * line, with a white one inside a well so what is filled at the
+         * old two-pixel inset still meets it. Measured. */
+        switch (style) {
+        case EDGE_SUNKEN:
+            rect_rgb_sides(d, x, y, w, h, flags, 171, 173, 179);
+            rect_rgb_sides(d, x + ((flags & BF_LEFT) ? 1 : 0), y + ((flags & BF_TOP) ? 1 : 0),
+                           w - ((flags & BF_LEFT) ? 1 : 0) - ((flags & BF_RIGHT) ? 1 : 0),
+                           h - ((flags & BF_TOP) ? 1 : 0) - ((flags & BF_BOTTOM) ? 1 : 0),
+                           flags, 255, 255, 255);
+            return;
+        case EDGE_SUNKEN_THIN:
+            rect_rgb_sides(d, x, y, w, h, flags, 215, 215, 215);
+            return;
+        case EDGE_ETCHED:
+            rect_rgb_sides(d, x, y, w, h, flags, 213, 223, 229);
+            return;
+        default:
+            break;
+        }
+    }
     const signed char *e = edge_tab[style];
     int n = e[1] >= 0 ? 2 : 1;
     int t = w2k_ui_scale == 100 ? 1 : w2k_th(1);
@@ -255,9 +279,51 @@ void w2k_round_rect_rgb(Drawable d, int x, int y, int w, int h, int r,
                        fill[0], fill[1], fill[2]);
 }
 
+/* A vertical gradient, row by row, in the caller's coordinates. */
+static void vgrad_rgb(Drawable d, int x, int y, int w, int h,
+                      const int c0[3], const int c1[3])
+{
+    if (w <= 0 || h <= 0) return;
+    for (int i = 0; i < h; i++) {
+        int t = h > 1 ? i * 256 / (h - 1) : 0;
+        w2k_fill_rgb(d, x, y + i, w, 1,
+                     c0[0] + (c1[0] - c0[0]) * t / 256,
+                     c0[1] + (c1[1] - c0[1]) * t / 256,
+                     c0[2] + (c1[2] - c0[2]) * t / 256);
+    }
+}
+
+/* Windows 7's push button: a rounded outline, a white line inside it and
+ * a two-tone gradient -- light over the upper half, darker over the
+ * lower -- from its theme; pressed, the same in blue. */
+static void button7(Drawable d, int x, int y, int w, int h, int pressed)
+{
+    static const int line_n[3] = { 112, 112, 112 }, line_p[3] = { 44, 98, 139 };
+    static const int top0_n[3] = { 242, 242, 242 }, top1_n[3] = { 235, 235, 235 };
+    static const int bot0_n[3] = { 221, 221, 221 }, bot1_n[3] = { 207, 207, 207 };
+    static const int top0_p[3] = { 229, 244, 252 }, top1_p[3] = { 196, 229, 246 };
+    static const int bot0_p[3] = { 152, 209, 239 }, bot1_p[3] = { 104, 179, 219 };
+    static const int inner_n[3] = { 252, 252, 252 }, inner_p[3] = { 198, 226, 241 };
+    w2k_round_rect_rgb(d, x, y, w, h, 3, pressed ? inner_p : inner_n, pressed ? line_p : line_n);
+    int ih = h - 4, half = ih / 2;
+    if (ih <= 0) return;
+    vgrad_rgb(d, x + 2, y + 2, w - 4, half, pressed ? top0_p : top0_n, pressed ? top1_p : top1_n);
+    vgrad_rgb(d, x + 2, y + 2 + half, w - 4, ih - half, pressed ? bot0_p : bot0_n, pressed ? bot1_p : bot1_n);
+}
+
+/* A one-pixel rectangle in a colour, the sides `flags` asks for. */
+static void rect_rgb_sides(Drawable d, int x, int y, int w, int h, int flags, int r, int g, int b)
+{
+    if (flags & BF_TOP)    w2k_fill_rgb(d, x, y, w, 1, r, g, b);
+    if (flags & BF_BOTTOM) w2k_fill_rgb(d, x, y + h - 1, w, 1, r, g, b);
+    if (flags & BF_LEFT)   w2k_fill_rgb(d, x, y, 1, h, r, g, b);
+    if (flags & BF_RIGHT)  w2k_fill_rgb(d, x + w - 1, y, 1, h, r, g, b);
+}
+
 void w2k_button(Drawable d, int x, int y, int w, int h, int pressed)
 {
     if (w <= 0 || h <= 0) return;
+    if (W2K_THEME_IS7(w2k_theme)) { button7(d, x, y, w, h, pressed); return; }
     if (w2k_theme == THEME_MODERN) {
         /* A flat rounded box; the corners keep whatever is behind. */
         int f[3], l[3];

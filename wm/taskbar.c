@@ -30,9 +30,9 @@ static int seven_bar(void) { return w2k_theme == THEME_BASIC7 || w2k_theme == TH
  * XP buttons; Windows 7's fill the row. */
 #define BTN_TOP      ((TASKBAR_ROW - BTN_H) / 2 + (BTN_H < TASKBAR_ROW ? 1 : 0))
 #define W7_SLIVER    15       /* Windows 7's Show Desktop, at the bar's far end: measured */
-#define W7_ORB_W     58       /* the orb's artwork, and how much of it shows over the big and small bars */
-#define W7_ORB_H     46
-#define W7_ORB_SMALL 43
+#define W7_ORB_W     60       /* the orb's artwork (Windows 7's own, scaled to the measured sphere), */
+#define W7_ORB_H     54       /* and how much of it shows over the big and small bars */
+#define W7_ORB_SMALL 51
 #define W7_ARROW     14       /* the "show hidden icons" arrow and its air */
 #define TRAY_PAD      6
 
@@ -636,8 +636,8 @@ static void taskbar_draw(Pixmap pm, int h)
          * its top: the bar itself shows the lower part; the orb window
          * over it shows the whole. */
         if (seven_bar() && !vert) sy = h - (w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
-        /* Measured: Windows 7's orb starts two columns in. */
-        int sx0 = seven_bar() && !vert ? 2 : TB_PAD - 2;
+        /* The art puts the sphere where Windows 7 has it: 27 columns in. */
+        int sx0 = seven_bar() && !vert ? 0 : TB_PAD - 2;
         if (state != 2 && orb_frames[0] && W2K_THEME_IS7(w2k_theme))
             /* Part way through the glow: the mixed frame. */
             w2k_skin_draw(pm, orb_frames[orb_frame], sx0, sy, 0, 0, sw, sh);
@@ -1083,7 +1083,7 @@ static void orb_place(void)
         return;
     }
     int vis = w2k_px(w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
-    XMoveWindow(w2k.dpy, orb, tb_x + w2k_px(2), tb_y + tb_ph - vis);
+    XMoveWindow(w2k.dpy, orb, tb_x, tb_y + tb_ph - vis);
     if (!orb_mapped) { XMapRaised(w2k.dpy, orb); orb_mapped = 1; }
     else XRaiseWindow(w2k.dpy, orb);
 }
@@ -1104,8 +1104,8 @@ static void orb_paint(void)
      * the wallpaper is what shows there.) */
     int vis = w2k_px(w2k_taskbar_small ? W7_ORB_SMALL : W7_ORB_H);
     int above = orb_ph - vis;
-    if (above > 0) desktop_wall_copy(opm, tb_x + w2k_px(2), tb_y - above, orb_pw, above, 0, 0);
-    if (tb_pm) XCopyArea(w2k.dpy, tb_pm, opm, w2k.gc, w2k_px(2), 0, (unsigned)orb_pw, (unsigned)vis, 0, above);
+    if (above > 0) desktop_wall_copy(opm, tb_x, tb_y - above, orb_pw, above, 0, 0);
+    if (tb_pm) XCopyArea(w2k.dpy, tb_pm, opm, w2k.gc, 0, 0, (unsigned)orb_pw, (unsigned)vis, 0, above);
     else w2k_fill_rgb(opm, 0, 0, W7_ORB_W, W7_ORB_H, 129, 148, 170);
     int sw = w2k_skin_w(skin), sh = w2k_skin_h(skin) / 3;
     int state = startmenu_is_open() ? 2 : (start_hot ? 1 : 0);

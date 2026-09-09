@@ -388,7 +388,8 @@ int w2k_aero_corner_inset(int row, int bottom)
     int best = n;
     for (int r = 0; r <= row; r++) {
         int y = bottom ? n - 1 - r : r;
-        int cut = n;
+        /* A row with no line pixel at all lies wholly inside the curve. */
+        int cut = 0;
         for (int x = 0; x < n; x++)
             if (cor_rgba[((size_t)y * cor_w + cell * n + x) * 4 + 3] >= 96) { cut = x; break; }
         if (cut < best) best = cut;
@@ -628,14 +629,28 @@ void w2k_aero_taskbutton(Drawable d, int x, int y, int w, int h, int state, int 
  * blue-white one along the bottom, in a dark line with a light one inside;
  * the white pane cut into it, outlined, with the search band across its
  * foot. All in the panel's pixels; (rx, ry) is the slab's root position. */
-void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h,
-                    int pane_x, int pane_y, int pane_w, int pane_h, int band_y)
+static unsigned char *tile_rgba; static int tile_w, tile_h, tile_tried;
+
+void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h, int over,
+                    int pane_x, int pane_y, int pane_w, int pane_h, int band_y, int tile_x)
 {
-    unsigned char *bg = w2k_glass_bg(rx, ry, w, h);
-    unsigned char *out = malloc((size_t)w * h * 3);
+    /* The whole pixmap: `over` rows of desktop above the slab, where only
+     * the user's tile is window (the rest is shaped away), then the slab. */
+    int th = over + h;
+    unsigned char *bg = w2k_glass_bg(rx, ry, w, th);
+    unsigned char *out = malloc((size_t)w * th * 3);
     if (!bg || !out) { free(bg); free(out); return; }
     int s = w2k_px(1) > 0 ? w2k_px(1) : 1;
-    w2k_glass_law(bg, out, (size_t)w * h, &w2k_glass_dark);
+    memcpy(out, bg, (size_t)w * over * 3);
+    w2k_glass_law(bg + (size_t)w * over * 3, out + (size_t)w * over * 3, (size_t)w * h, &w2k_glass_dark);
+    /* The tile: its frame, cut from Windows 7 with its transparency; the
+     * picture inside is the caller's. */
+    if (skins_scale != w2k_ui_scale) { free(tile_rgba); tile_rgba = NULL; tile_tried = 0; }
+    if (!tile_tried) { tile_tried = 1; tile_rgba = load_rgba("aero-usertile.png", &tile_w, &tile_h); }
+    unsigned char *slab = out + (size_t)w * over * 3;
+    bg += (size_t)w * over * 3;
+    out = slab;
+#define OUT_BASE (slab - (size_t)w * over * 3)
     band_h(bg, out, w, 0, 2 * s, w, 5 * s, &dark_top);
     band_h(bg, out, w, 0, h - 8 * s, w, 7 * s, &dark_bottom);
     band_h(bg, out, w, 0, h - 8 * s, w, s, &sm_bot_edge);
@@ -673,6 +688,41 @@ void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h,
                 if (x >= 0 && y >= 0) memcpy(out + ((size_t)y * w + x) * 3, col, 3);
         }
     }
+    if (tile_rgba && over > 0)
+        composite(OUT_BASE, w, th, tile_x, 0, tile_rgba, tile_w, tile_h, 0, 0, tile_w, tile_h);
+    w2k_rgb_put(d, dx, dy, OUT_BASE, w, th);
+    free(bg - (size_t)w * over * 3);
+    free(OUT_BASE);
+#undef OUT_BASE
+}
+
+/* A glass button on the Start menu's slab (Shut down, and the lit row
+ * under the pointer): the dark glass a shade lighter, in a light line
+ * with a fainter one inside it; `divider` splits it at that column
+ * (-1 for none); `hot` lights it. Rectangle and root position in screen
+ * pixels. */
+void w2k_aero_button(Drawable d, int dx, int dy, int rx, int ry, int w, int h, int divider, int hot)
+{
+    if (w <= 2 || h <= 2) return;
+    unsigned char *bg = w2k_glass_bg(rx, ry, w, h);
+    unsigned char *out = malloc((size_t)w * h * 3);
+    if (!bg || !out) { free(bg); free(out); return; }
+    int s = w2k_px(1) > 0 ? w2k_px(1) : 1;
+    w2k_glass_law(bg, out, (size_t)w * h, &w2k_glass_dark);
+    int fill = hot ? 70 : 22;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            unsigned char *p = out + ((size_t)y * w + x) * 3;
+            int ox = x < s || x >= w - s, oy = y < s || y >= h - s;
+            int ix = (x >= s && x < 2 * s) || (x >= w - 2 * s && x < w - s);
+            int iy = (y >= s && y < 2 * s) || (y >= h - 2 * s && y < h - s);
+            int corner = (x < s || x >= w - s) && (y < s || y >= h - s);
+            if (corner) continue;                       /* rounded: the glass shows */
+            if (ox || oy) lighten(p, 60);
+            else if (ix || iy) lighten(p, 90);
+            else lighten(p, fill);
+            if (divider >= 0 && (x == divider || x == divider + s)) lighten(p, x == divider ? 60 : 30);
+        }
     w2k_rgb_put(d, dx, dy, out, w, h);
     free(bg);
     free(out);

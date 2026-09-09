@@ -103,6 +103,16 @@ static const PanelMetrics metrics7 = {
     P7_SHUT_X, P7_SHUT_Y, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H,
     2, { { 1, P7_SHUT_W }, { 0, P7_ARROW_W }, { 0, 0 } }
 };
+/* Aero: the same panel, its tile taller and standing higher. */
+#define PA_OVER        25
+#define PA_TILE_W      58
+#define PA_TILE_H      57
+static const PanelMetrics metricsa = {
+    PA_OVER, P7_H, P7_LEFT_TOP, P7_LEFT_BOT, P7_LEFT_Y, P7_AP_Y, P7_AP_H,
+    P7_SEARCH_Y, P7_SEARCH_H, P7_RIGHT_Y, P7_RROW_H, P7_RSEP_H,
+    P7_SHUT_X, P7_SHUT_Y, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H,
+    2, { { 1, P7_SHUT_W }, { 0, P7_ARROW_W }, { 0, 0 } }
+};
 static const PanelMetrics metricsv = {
     0, PV_H, PV_LEFT_TOP, PV_LEFT_BOT, PV_LEFT_Y, PV_AP_Y, PV_AP_H,
     PV_SEARCH_Y, PV_SEARCH_H, PV_RIGHT_Y, PV_RROW_H, PV_RSEP_H,
@@ -396,7 +406,7 @@ static struct { const char *name; W2kSkin *s; int tried; } panel_skins[NPANEL_SK
     { "vista-power.png", NULL, 0 }
 };
 
-static const PanelMetrics *pm7(void) { return vista() ? &metricsv : &metrics7; }
+static const PanelMetrics *pm7(void) { return vista() ? &metricsv : aero() ? &metricsa : &metrics7; }
 
 void startpanel_skins_reload(void)
 {
@@ -541,11 +551,9 @@ static void panel7_draw(Drawable pm)
         /* Aero: a slab of dark glass over the wallpaper, the white pane
          * cut into it with the search band across its foot. In screen
          * pixels, from where the panel stands. */
-        fill(pm, 0, 0, P7_W, oy, w2k.col[C_DESKTOP]);
-        w2k_aero_panel(pm, 0, w2k_px(oy), panel_x, panel_y + w2k_px(oy),
-                       w2k_px(P7_W), w2k_px(P7_H),
+        w2k_aero_panel(pm, 0, 0, panel_x, panel_y, w2k_px(P7_W), w2k_px(P7_H), w2k_px(oy),
                        w2k_px(P7_LEFT_X), w2k_px(m->left_top), w2k_px(P7_LEFT_W), w2k_px(lh),
-                       w2k_px(m->ap_y + m->ap_h + 2));
+                       w2k_px(m->ap_y + m->ap_h + 2), w2k_px(P7_TILE_X));
     } else {
         /* Above the panel only the tile is window (the rest is shaped
          * away); the desktop colour is for the W2K_RENDER picture of it. */
@@ -570,6 +578,9 @@ static void panel7_draw(Drawable pm)
         if (tile) w2k_skin_draw(pm, tile, PV_TILE_X, PV_TILE_Y, 0, 0, PV_TILE_W, PV_TILE_H);
         w2k_account_picture_draw(pm, PV_TILE_X + (PV_TILE_W - 46) / 2,
                                  PV_TILE_Y + (PV_TILE_H - 46) / 2, 46, ICO_MYCOMPUTER);
+    } else if (aero()) {
+        /* The frame came with the glass; the picture fills it. */
+        w2k_account_picture_draw(pm, P7_TILE_X + 5, 6, 48, ICO_MYCOMPUTER);
     } else {
         W2kSkin *tile = skin7("w7-usertile.png");
         if (tile) w2k_skin_draw(pm, tile, P7_TILE_X, 0, 0, 0, P7_TILE_W, P7_TILE_H);
@@ -642,6 +653,10 @@ static void panel7_draw(Drawable pm)
         if (y + m->rrow_h > oy + m->btn_y - 4) break;
         if (hot_col == 1 && hot_row == i) {
             if (v) hoverv(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, m->rrow_h);
+            else if (aero())
+                w2k_aero_button(pm, w2k_px(P7_RIGHT_X + 2), w2k_px(y),
+                                panel_x + w2k_px(P7_RIGHT_X + 2), panel_y + w2k_px(y),
+                                w2k_px(P7_RIGHT_W - 4), w2k_px(m->rrow_h), -1, 1);
             else   hover7(pm, P7_RIGHT_X + 2, y, P7_RIGHT_W - 4, m->rrow_h, 0);
         }
         w2k_ellipsis(F_UI, r->label, P7_RIGHT_W - 30, buf, sizeof buf);
@@ -677,13 +692,19 @@ static void panel7_draw(Drawable pm)
 
     /* Shut down, and the arrow beside it that stands in for Log Off. */
     int shy = oy + P7_SHUT_Y;
-    fill(pm, P7_SHUT_X, shy, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H,
-         hot_col == 2 ? w2k_rgb(190, 210, 232) : w2k_rgb(164, 187, 211));
-    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(101, 120, 138));
-    rect_fg(pm, P7_SHUT_X, shy, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H);
-    w2k_fill_fg(pm, P7_SHUT_X + P7_SHUT_W, shy, 1, P7_SHUT_H);
-    XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(214, 226, 240));
-    rect_fg(pm, P7_SHUT_X + 1, shy + 1, P7_SHUT_W - 2, P7_SHUT_H - 2);
+    if (aero()) {
+        w2k_aero_button(pm, w2k_px(P7_SHUT_X), w2k_px(shy), panel_x + w2k_px(P7_SHUT_X),
+                        panel_y + w2k_px(shy), w2k_px(P7_SHUT_W + P7_ARROW_W), w2k_px(P7_SHUT_H),
+                        w2k_px(P7_SHUT_W), hot_col == 2);
+    } else {
+        fill(pm, P7_SHUT_X, shy, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H,
+             hot_col == 2 ? w2k_rgb(190, 210, 232) : w2k_rgb(164, 187, 211));
+        XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(101, 120, 138));
+        rect_fg(pm, P7_SHUT_X, shy, P7_SHUT_W + P7_ARROW_W, P7_SHUT_H);
+        w2k_fill_fg(pm, P7_SHUT_X + P7_SHUT_W, shy, 1, P7_SHUT_H);
+        XSetForeground(w2k.dpy, w2k.gc, w2k_rgb(214, 226, 240));
+        rect_fg(pm, P7_SHUT_X + 1, shy + 1, P7_SHUT_W - 2, P7_SHUT_H - 2);
+    }
     w2k_text_rgb(pm, F_UI, P7_SHUT_X + 7, shy + (P7_SHUT_H - fh) / 2,
                  "Shut down", 255, 255, 255);
     arrow7(pm, P7_SHUT_X + P7_SHUT_W + 10, shy + P7_SHUT_H / 2, 255, 255, 255);
@@ -1089,28 +1110,31 @@ int startpanel_run(int bx, int by)
         #define R(x, y, w, h) (XRectangle){ (short)w2k_px(x), (short)w2k_px(y), \
                                 (unsigned short)(w2k_px((x) + (w)) - w2k_px(x)), \
                                 (unsigned short)(w2k_px((y) + (h)) - w2k_px(y)) }
+        int tw = aero() ? PA_TILE_W : P7_TILE_W, over = aero() ? PA_OVER : P7_OVER;
         if (aero()) {
             /* Aero's slab: top corners five, three, two, one, one; the
              * bottom ones square on the bar. Measured. */
             static const int insa[5] = { 5, 3, 2, 1, 1 };
-            for (int i = 0; i < 5; i++) rs[n++] = R(insa[i], P7_OVER + i, P7_W - 2 * insa[i], 1);
-            rs[n++] = R(0, P7_OVER + 5, P7_W, P7_H - 5);
+            for (int i = 0; i < 5; i++) rs[n++] = R(insa[i], over + i, P7_W - 2 * insa[i], 1);
+            rs[n++] = R(0, over + 5, P7_W, P7_H - 5);
         } else {
             for (int i = 0; i < 4; i++) {
-                rs[n++] = R(ins[i], P7_OVER + i, P7_W - 2 * ins[i], 1);
-                rs[n++] = R(ins[i], P7_OVER + P7_H - 1 - i, P7_W - 2 * ins[i], 1);
+                rs[n++] = R(ins[i], over + i, P7_W - 2 * ins[i], 1);
+                rs[n++] = R(ins[i], over + P7_H - 1 - i, P7_W - 2 * ins[i], 1);
             }
-            rs[n++] = R(0, P7_OVER + 4, P7_W, P7_H - 8);
+            rs[n++] = R(0, over + 4, P7_W, P7_H - 8);
         }
-        /* The tile above the panel, its top corners cut like the skin's. */
+        /* The tile above the panel, its top corners cut like the skin's;
+         * Aero's stands higher and is wider. */
         for (int i = 0; i < 3; i++)
-            rs[n++] = R(P7_TILE_X + ins[i], i, P7_TILE_W - 2 * ins[i], 1);
-        rs[n++] = R(P7_TILE_X, 3, P7_TILE_W, P7_OVER - 3);
+            rs[n++] = R(P7_TILE_X + ins[i], i, tw - 2 * ins[i], 1);
+        rs[n++] = R(P7_TILE_X, 3, tw, over - 3);
         #undef R
         XShapeCombineRectangles(w2k.dpy, panel, ShapeBounding, 0, 0, rs, n,
                                 ShapeSet, Unsorted);
     }
     XMapRaised(w2k.dpy, panel);
+    taskbar_orb_raise();               /* the menu opens behind the orb */
     if (XGrabPointer(w2k.dpy, panel, True,
                      ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
                      GrabModeAsync, GrabModeAsync, None, w2k.cur_arrow,

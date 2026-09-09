@@ -235,6 +235,9 @@ Window taskbar_window(void) { return tb; }
  * with the bar, or a window raised over the bar's top edge hides the
  * part of it that rises above. */
 Window taskbar_orb_window(void) { return orb_mapped ? orb : 0; }
+/* Over whatever was just mapped above it: the Start menu opens behind
+ * the orb on Windows 7. */
+void taskbar_orb_raise(void) { if (orb_mapped) XRaiseWindow(w2k.dpy, orb); }
 
 static int vertical(void);
 

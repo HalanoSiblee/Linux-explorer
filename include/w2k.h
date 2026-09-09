@@ -586,8 +586,9 @@ int  w2k_aero_corner_inset(int row, int bottom);
 int  w2k_aero_corner_rows(void);
 void w2k_aero_bar(Drawable d, int rx, int ry, int w, int h, int edge, int sliver);
 void w2k_aero_taskbutton(Drawable d, int x, int y, int w, int h, int state, int rx, int ry);
-void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h,
-                    int pane_x, int pane_y, int pane_w, int pane_h, int band_y);
+void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h, int over,
+                    int pane_x, int pane_y, int pane_w, int pane_h, int band_y, int tile_x);
+void w2k_aero_button(Drawable d, int dx, int dy, int rx, int ry, int w, int h, int divider, int hot);
 void w2k_aero_glass(Drawable d, int dx, int dy, int rx, int ry, int w, int h, const W2kGlass *g);
 #define AERO_BORDER   8       /* the frame: eight each side and along the bottom, */
 #define AERO_TOP     36       /* thirty-six from the top edge to the client */

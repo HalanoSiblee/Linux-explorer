@@ -413,12 +413,13 @@ void clients_restack(void)
     /* A full-screen window covers the bar: that is the point of it. */
     for (Client *c = stack; c && n < 250; c = c->snext)
         if (c->fullscreen && !c->minimized) wins[n++] = c->frame;
-    if (w2k_taskbar_ontop) wins[n++] = taskbar_window();
+    Window orb = taskbar_orb_window();          /* rises above the bar: just over it */
+    if (w2k_taskbar_ontop) { if (orb) wins[n++] = orb; wins[n++] = taskbar_window(); }
     for (Client *c = stack; c && n < 250; c = c->snext)
         if (c->above && !c->minimized && !c->fullscreen) wins[n++] = c->frame;
     for (Client *c = stack; c && n < 250; c = c->snext)
         if (!c->above && !c->minimized && !c->fullscreen) wins[n++] = c->frame;
-    if (!w2k_taskbar_ontop) wins[n++] = taskbar_window();
+    if (!w2k_taskbar_ontop) { if (orb) wins[n++] = orb; wins[n++] = taskbar_window(); }
     wins[n++] = desktop_window();
     XRestackWindows(w2k.dpy, wins, n);
 }

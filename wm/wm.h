@@ -158,6 +158,7 @@ void    taskbar_relayout(void);       /* edge or size changed         */
 int     taskbar_dnd_accept(int x, int y);
 void    taskbar_dnd_drop(int x, int y, const char *uris);
 Window  taskbar_window(void);
+Window  taskbar_orb_window(void);
 void    taskbar_reveal(int show);     /* auto-hide slide */
 Window  taskbar_trigger_window(void);
 void    taskbar_start_origin(int *x, int *y);

@@ -231,6 +231,10 @@ static int vol_x, notify_x, notify_w;      /* speaker and docked icons */
 static int ql_y, task_y, tray_y, vol_y, notify_y;  /* the same, down a column */
 
 Window taskbar_window(void) { return tb; }
+/* Windows 7's orb, when it is up: a window of its own that must stack
+ * with the bar, or a window raised over the bar's top edge hides the
+ * part of it that rises above. */
+Window taskbar_orb_window(void) { return orb_mapped ? orb : 0; }
 
 static int vertical(void);
 

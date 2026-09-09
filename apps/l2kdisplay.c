@@ -849,10 +849,23 @@ static void fill_walls(void)
     /* The Pictures folder first -- that is where wallpapers live -- then
      * the shell's own. */
     const char *home = getenv("HOME");
-    char dirs[3][1024];
+    char dirs[4][1024];
     int nd = 0;
     pictures_dir(dirs[nd++], 1024);
     if (home) snprintf(dirs[nd++], 1024, "%s/.w2k/wallpapers", home);
+    /* The shell's own wallpapers: beside the binaries when run in place,
+     * else where they were installed. */
+    char exe[768];
+    ssize_t len = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (len > 0) {
+        exe[len] = 0;
+        char *slash = strrchr(exe, '/');
+        if (slash) {
+            *slash = 0;
+            snprintf(dirs[nd], 1024, "%.760s/../wallpapers", exe);
+            if (access(dirs[nd], R_OK) == 0) nd++;
+        }
+    }
     snprintf(dirs[nd++], 1024, W2K_PREFIX "/share/w2k/wallpapers");
     for (int d = 0; d < nd; d++) {
         DIR *dp = opendir(dirs[d]);

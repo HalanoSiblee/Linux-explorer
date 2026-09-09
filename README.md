@@ -160,7 +160,8 @@ Windows 7 Aero (the same in glass: frames, taskbar and Start menu show
 the wallpaper through them, blurred and tinted as measured off Windows 7
 over black, white and blue desktops; without a compositor it is the
 wallpaper that shows through, not the windows behind), and Modern, in a
-Light and a Dark scheme. Every element's colour can be set
+Light and a Dark scheme. The Windows 7 wallpaper is carried in
+`wallpapers/` and listed on the Background tab. Every element's colour can be set
 from the basic-colours palette or by its red, green and blue values, and
 title bars have a Color 2 for the far end of their gradient. The XP and 7
 chrome is cropped from screenshots and checked by diffing against them.

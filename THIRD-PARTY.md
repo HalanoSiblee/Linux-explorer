@@ -6,6 +6,8 @@ repository for the desktop to look and sound the way it does, remains the
 property of its owners and is not relicensed:
 
   icons/win2k, icons/win98, icons/winxp, icons/win7   Microsoft icons
+  wallpapers/                                           Microsoft's Windows 7
+                                                        wallpaper
   icons/win95, icons/sets/reactos                       Chicago95 and ReactOS
                                                         artwork, under their
                                                         own licences

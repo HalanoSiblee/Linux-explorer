@@ -478,10 +478,16 @@ void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
         HL(fh - s, 0, 154);
         VL(0, 0, 154);
         VL(s, 255, 154);
-        VL(b - 2 * s, 255, 146);
-        VL(b - s, 32, 151);
-        VL(fw - b, 32, 151);
-        VL(fw - b + s, 255, 146);
+        /* The lines round the client stop at the caption's lines above
+         * and the bottom border's below: they outline the client, not
+         * the frame. */
+#define VLC(X, C, A) do { int xx = (X); for (int i = 0; i < s; i++) \
+        ov_v(out, pw, ph, xx + i - px, top - 2 * s - py, fh - b + 2 * s - (top - 2 * s), C, A); } while (0)
+        VLC(b - 2 * s, 255, 146);
+        VLC(b - s, 32, 151);
+        VLC(fw - b, 32, 151);
+        VLC(fw - b + s, 255, 146);
+#undef VLC
         VL(fw - 2 * s, 255, 154);
         VL(fw - s, 0, 154);
 #undef HL

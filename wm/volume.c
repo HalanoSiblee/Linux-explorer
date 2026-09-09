@@ -124,7 +124,7 @@ void volume_toggle_mute(void)
  * the Windows 7 bar it is Windows 7's own glyph, cut from a capture. */
 void volume_draw(Drawable d, int x, int y)
 {
-    if (w2k_theme == THEME_BASIC7) {
+    if (w2k_theme == THEME_BASIC7 || w2k_theme == THEME_AERO) {   /* the white speaker */
         static W2kSkin *glyph;
         static int tried;
         if (!tried) {

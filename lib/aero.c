@@ -243,20 +243,7 @@ const W2kGlass w2k_glass_frame = { { 9, 15, 20 }, { 255, 255, 255 }, 1.0f, 0.75f
 const W2kGlass w2k_glass_bar   = { { 8, 12, 16 }, { 142, 169, 195 }, 1.0f, 0.39f };
 /* The Start menu's dark glass, which lifts a dark picture. */
 const W2kGlass w2k_glass_dark  = { { 0, 0, 0 }, { 83, 99, 114 }, 0.44f, 0.10f };
-static const W2kGlass dark_top    = { { 0, 0, 0 }, { 156, 185, 213 }, 0.44f, 0.10f };
-static const W2kGlass dark_bottom = { { 0, 0, 0 }, { 181, 216, 249 }, 0.44f, 0.10f };
 
-/* The Start menu's edges and the white pane's outline. */
-static const W2kGlass sm_outer     = { { 0, 0, 0 }, {  64,  76,  88 }, 0.44f, 0.10f };
-static const W2kGlass sm_top_light = { { 0, 0, 0 }, { 181, 203, 225 }, 0.44f, 0.10f };
-static const W2kGlass sm_side_light= { { 0, 0, 0 }, { 126, 138, 149 }, 0.44f, 0.10f };
-static const W2kGlass sm_pane_light= { { 0, 0, 0 }, { 180, 201, 222 }, 0.44f, 0.10f };
-static const W2kGlass sm_pane_dark = { { 0, 0, 0 }, { 106, 118, 131 }, 0.44f, 0.10f };
-static const W2kGlass sm_pside_light={ { 0, 0, 0 }, { 126, 138, 149 }, 0.44f, 0.10f };
-static const W2kGlass sm_pside_dark= { { 0, 0, 0 }, {  75,  82,  89 }, 0.44f, 0.10f };
-static const W2kGlass sm_bot_edge  = { { 0, 0, 0 }, { 117, 132, 146 }, 0.44f, 0.10f };
-static const W2kGlass sm_bot_light = { { 0, 0, 0 }, { 200, 225, 251 }, 0.44f, 0.10f };
-static const W2kGlass sm_bot_light2= { { 0, 0, 0 }, { 201, 227, 253 }, 0.44f, 0.10f };
 
 /* A horizontal run of `n` pixels at row y, columns x.., through `law`. */
 static void run_h(const unsigned char *bg, unsigned char *out, int w, int x, int y, int n, const W2kGlass *law)
@@ -269,16 +256,6 @@ static void run_v(const unsigned char *bg, unsigned char *out, int w, int x, int
     for (int i = 0; i < n; i++)
         w2k_glass_law(bg + ((size_t)(y + i) * w + x) * 3, out + ((size_t)(y + i) * w + x) * 3, 1, law);
 }
-/* A horizontal band `t` rows thick, and a vertical one `t` columns wide. */
-static void band_h(const unsigned char *bg, unsigned char *out, int w, int x, int y, int n, int t, const W2kGlass *law)
-{
-    for (int i = 0; i < t; i++) run_h(bg, out, w, x, y + i, n, law);
-}
-static void band_v(const unsigned char *bg, unsigned char *out, int w, int x, int y, int n, int t, const W2kGlass *law)
-{
-    for (int i = 0; i < t; i++) run_v(bg, out, w, x + i, y, n, law);
-}
-
 /* White laid over a pixel, alpha 0..256. */
 static inline void lighten(unsigned char *p, int a)
 {
@@ -642,7 +619,8 @@ void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h, in
     if (!bg || !out) { free(bg); free(out); return; }
     int s = w2k_px(1) > 0 ? w2k_px(1) : 1;
     memcpy(out, bg, (size_t)w * over * 3);
-    w2k_glass_law(bg + (size_t)w * over * 3, out + (size_t)w * over * 3, (size_t)w * h, &w2k_glass_dark);
+    /* The slab is the taskbar's glass: one piece with the bar it stands on. */
+    w2k_glass_law(bg + (size_t)w * over * 3, out + (size_t)w * over * 3, (size_t)w * h, &w2k_glass_bar);
     /* The tile: its frame, cut from Windows 7 with its transparency; the
      * picture inside is the caller's. */
     if (skins_scale != w2k_ui_scale) { free(tile_rgba); tile_rgba = NULL; tile_tried = 0; }
@@ -651,28 +629,22 @@ void w2k_aero_panel(Drawable d, int dx, int dy, int rx, int ry, int w, int h, in
     bg += (size_t)w * over * 3;
     out = slab;
 #define OUT_BASE (slab - (size_t)w * over * 3)
-    band_h(bg, out, w, 0, 2 * s, w, 5 * s, &dark_top);
-    band_h(bg, out, w, 0, h - 8 * s, w, 7 * s, &dark_bottom);
-    band_h(bg, out, w, 0, h - 8 * s, w, s, &sm_bot_edge);
-    band_h(bg, out, w, 0, h - 7 * s, w, s, &sm_bot_light);
-    band_h(bg, out, w, 0, h - 2 * s, w, s, &sm_bot_light2);
-    band_h(bg, out, w, 0, 0, w, s, &sm_outer);
-    band_h(bg, out, w, 0, s, w, s, &sm_top_light);
-    band_h(bg, out, w, 0, h - s, w, s, &sm_outer);
-    band_v(bg, out, w, 0, 0, h, s, &sm_outer);
-    band_v(bg, out, w, s, 0, h, s, &sm_side_light);
-    band_v(bg, out, w, w - s, 0, h, s, &sm_outer);
-    band_v(bg, out, w, w - 2 * s, 0, h, s, &sm_side_light);
+    /* Its edge: the bar's dark line with the light one inside it. */
+    ov_h(out, w, h, 0, 0, w, 0, 128);          ov_h(out, w, h, 0, s, w, 255, 108);
+    ov_h(out, w, h, 0, h - s, w, 0, 128);      ov_h(out, w, h, 0, h - 2 * s, w, 255, 108);
+    ov_v(out, w, h, 0, 0, h, 0, 128);          ov_v(out, w, h, s, 0, h, 255, 108);
+    ov_v(out, w, h, w - s, 0, h, 0, 128);      ov_v(out, w, h, w - 2 * s, 0, h, 255, 108);
     /* The white pane and its outline. */
     if (pane_w > 0 && pane_h > 0) {
-        band_h(bg, out, w, pane_x - 2 * s, pane_y - 2 * s, pane_w + 4 * s, s, &sm_pane_light);
-        band_h(bg, out, w, pane_x - 2 * s, pane_y - s, pane_w + 4 * s, s, &sm_pane_dark);
-        band_h(bg, out, w, pane_x - 2 * s, pane_y + pane_h, pane_w + 4 * s, s, &sm_pane_dark);
-        band_h(bg, out, w, pane_x - 2 * s, pane_y + pane_h + s, pane_w + 4 * s, s, &sm_pane_light);
-        band_v(bg, out, w, pane_x - 2 * s, pane_y - 2 * s, pane_h + 4 * s, s, &sm_pside_light);
-        band_v(bg, out, w, pane_x - s, pane_y - 2 * s, pane_h + 4 * s, s, &sm_pside_dark);
-        band_v(bg, out, w, pane_x + pane_w, pane_y - 2 * s, pane_h + 4 * s, s, &sm_pside_dark);
-        band_v(bg, out, w, pane_x + pane_w + s, pane_y - 2 * s, pane_h + 4 * s, s, &sm_pside_light);
+        /* A light line, then a dark one, round the pane. */
+        ov_h(out, w, h, pane_x - 2 * s, pane_y - 2 * s, pane_w + 4 * s, 255, 80);
+        ov_h(out, w, h, pane_x - 2 * s, pane_y + pane_h + s, pane_w + 4 * s, 255, 80);
+        ov_v(out, w, h, pane_x - 2 * s, pane_y - 2 * s, pane_h + 4 * s, 255, 80);
+        ov_v(out, w, h, pane_x + pane_w + s, pane_y - 2 * s, pane_h + 4 * s, 255, 80);
+        ov_h(out, w, h, pane_x - s, pane_y - s, pane_w + 2 * s, 0, 90);
+        ov_h(out, w, h, pane_x - s, pane_y + pane_h, pane_w + 2 * s, 0, 90);
+        ov_v(out, w, h, pane_x - s, pane_y - s, pane_h + 2 * s, 0, 90);
+        ov_v(out, w, h, pane_x + pane_w, pane_y - s, pane_h + 2 * s, 0, 90);
         for (int y = pane_y; y < pane_y + pane_h && y < h; y++) {
             /* White, then the search band: (241,245,251) under a five-row
              * shadow from (204,217,234). */
@@ -708,7 +680,7 @@ void w2k_aero_button(Drawable d, int dx, int dy, int rx, int ry, int w, int h, i
     unsigned char *out = malloc((size_t)w * h * 3);
     if (!bg || !out) { free(bg); free(out); return; }
     int s = w2k_px(1) > 0 ? w2k_px(1) : 1;
-    w2k_glass_law(bg, out, (size_t)w * h, &w2k_glass_dark);
+    w2k_glass_law(bg, out, (size_t)w * h, &w2k_glass_bar);
     int fill = hot ? 70 : 22;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {

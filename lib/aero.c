@@ -437,24 +437,10 @@ void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,
 #define VL(X, C, A) do { int xx = (X); for (int i = 0; i < s; i++) ov_v(out, pw, ph, xx + i - px, 0, ph, C, A); } while (0)
         HL(0, 0, 154);                 /* the outline: black 0.6 */
         HL(s, 255, 154);               /* the light line inside it: white 0.6 */
-        HL(top - 2 * s, 255, 79);      /* over the client: white 0.31 */
-        HL(top - s, 56, 200);          /* ... and grey 0.78 */
-        HL(fh - b, 32, 151);           /* under the client: grey 0.59 */
-        HL(fh - b + s, 255, 146);      /* white 0.57 */
         HL(fh - 2 * s, 255, 154);
         HL(fh - s, 0, 154);
         VL(0, 0, 154);
         VL(s, 255, 154);
-        /* The lines round the client stop at the caption's lines above
-         * and the bottom border's below: they outline the client, not
-         * the frame. */
-#define VLC(X, C, A) do { int xx = (X); for (int i = 0; i < s; i++) \
-        ov_v(out, pw, ph, xx + i - px, top - 2 * s - py, fh - b + 2 * s - (top - 2 * s), C, A); } while (0)
-        VLC(b - 2 * s, 255, 146);
-        VLC(b - s, 32, 151);
-        VLC(fw - b, 32, 151);
-        VLC(fw - b + s, 255, 146);
-#undef VLC
         VL(fw - 2 * s, 255, 154);
         VL(fw - s, 0, 154);
 #undef HL

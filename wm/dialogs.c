@@ -1008,12 +1008,11 @@ void wm_run_dialog(void)
                 char word[64];
                 snprintf(word, sizeof word, "%.63s", cmd);
                 word[strcspn(word, " \t")] = 0;
-                if ((!strcasecmp(word, "cmd") || !strcasecmp(word, "cmd.exe") ||
-                     !strcasecmp(word, "command") || !strcasecmp(word, "command.com")) &&
-                    wm_terminal_cmd())
-                    wm_spawn(wm_terminal_cmd());
-                else
-                    wm_spawn(cmd);
+                /* The Windows names -- taskmgr, calc, winver, desk.cpl,
+                 * cmd -- run what they run there. */
+                const W2kAlias *a = w2k_alias_find(word);
+                if (a) wm_run_alias(a);
+                else   wm_spawn(cmd);
             }
         }
     }

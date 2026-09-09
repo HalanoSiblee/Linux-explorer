@@ -343,7 +343,8 @@ void startmenu_open(void)
     open_flag = 0;
     taskbar_paint();
 
-    if (typed[0]) { wm_search_dialog(typed); return; }
+    /* The letter typed opens the search where the menu was, with it. */
+    if (typed[0]) { startsearch_classic(typed, bx, by); return; }
     startmenu_dispatch(id);
 }
 

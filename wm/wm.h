@@ -290,6 +290,21 @@ int      programs_is_chevron(int id, int *group);
 void     programs_expand(int group);
 void     programs_collapse_all(void);
 
+/* startsearch.c -- searching from the Start menu, drawn inside it */
+enum { SS_NONE, SS_CHANGED, SS_RUN, SS_ESC, SS_EMPTY };
+enum { SR_PROG, SR_ALIAS, SR_RECENT };
+typedef struct { int kind, id, icon; const W2kAlias *alias; char name[128]; } SResult;
+typedef struct { char query[128]; SResult res[20]; int n, sel; } SearchState;
+void startsearch_begin(SearchState *s, const char *first);
+int  startsearch_key(SearchState *s, XKeyEvent *k);
+int  startsearch_run(SearchState *s, int i);
+void startsearch_draw_rows(Drawable d, SearchState *s, int x, int y, int w, int maxh,
+                           int rowh, unsigned long bg, int menu_look);
+int  startsearch_row_at(SearchState *s, int y0, int rowh, int maxh, int y);
+void startsearch_draw_box(Drawable d, SearchState *s, int x, int y, int w, int h);
+void startsearch_classic(const char *first, int bx, int by);
+void wm_run_alias(const W2kAlias *a);
+
 /* desktop.c */
 void    desktop_init(void);
 void    desktop_paint(void);

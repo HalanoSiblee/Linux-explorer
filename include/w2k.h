@@ -566,6 +566,12 @@ int  w2k_theme_modern_margin(void);    /* the invisible margin, in pixels */
 /* Horizontal two-stop gradient, used by title bars. */
 void w2k_gradient(Drawable d, int x, int y, int w, int h, int c1, int c2);
 
+/* alias.c -- the names Windows users type ("taskmgr", "calc", "desk.cpl")
+ * and what they run here; "@terminal" stands for the desktop's terminal. */
+typedef struct { const char *name, *label, *cmd; int icon; } W2kAlias;
+const W2kAlias *w2k_alias_find(const char *word);
+int w2k_alias_search(const char *query, const W2kAlias **out, int max);
+
 /* aero.c -- Windows 7 Aero's glass: the wallpaper blurred, coloured by a
  * measured law. Frames, the taskbar and the Start menu draw themselves
  * from it; the window manager keeps the source up to date. */

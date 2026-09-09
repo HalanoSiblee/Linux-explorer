@@ -160,6 +160,9 @@ static int  nleft, nright;
 static int  panel_x, panel_y, panel_h;
 static int  hot_col = -1, hot_row = -1;   /* what the pointer is over */
 static Window panel;
+static SearchState ss;                    /* typing searches, inside the panel */
+static int    searching;
+static void   draw_search(Drawable d);
 
 /* ------------------------------------------------------------------ *
  * Building the two columns
@@ -708,6 +711,7 @@ static void panel7_draw(Drawable pm)
     w2k_text_rgb(pm, F_UI, P7_SHUT_X + 7, shy + (P7_SHUT_H - fh) / 2,
                  "Shut down", 255, 255, 255);
     arrow7(pm, P7_SHUT_X + P7_SHUT_W + 10, shy + P7_SHUT_H / 2, 255, 255, 255);
+    if (searching) draw_search(pm);
 }
 
 /* Column 0 left, 1 right, 2 the Shut down button (row 1) and its arrow
@@ -902,7 +906,41 @@ static void panel_draw(Drawable d)
         }
     }
 
+    if (searching) draw_search(pm);
     if (!skinned) w2k_frame(pm, 0, 0, PANEL_W, panel_h, C_WINDOWFRAME);
+}
+
+/* Where the search draws when it has the left column: the results and
+ * the box the query shows in. Windows 7's box is its own; XP's stands at
+ * the top of the column. All in the panel's coordinates. */
+static void search_area(int *x, int *y, int *w, int *h, int *rowh,
+                        int *bx, int *by, int *bw, int *bh)
+{
+    *rowh = 24;
+    if (seven()) {
+        const PanelMetrics *m = pm7();
+        int oy = m->over;
+        *x = P7_LEFT_X + 2; *y = oy + m->left_top + 4; *w = P7_LEFT_W - 4;
+        *h = oy + m->ap_y - 4 - *y;
+        *bx = P7_SEARCH_X; *by = oy + m->search_y; *bw = P7_SEARCH_W; *bh = m->search_h;
+        return;
+    }
+    int body_y = HEADER_H, body_h = panel_h - HEADER_H - FOOTER_H;
+    int ap_y = body_y + body_h - ALLPROG_H;
+    *bx = 6; *by = body_y + 6; *bw = LEFT_W - 12; *bh = 22;
+    *x = 2; *y = *by + *bh + 6; *w = LEFT_W - 4;
+    *h = ap_y - 6 - *y;
+}
+
+static void draw_search(Drawable d)
+{
+    int x, y, w, h, rowh, bx, by, bw, bh;
+    search_area(&x, &y, &w, &h, &rowh, &bx, &by, &bw, &bh);
+    unsigned long white = w2k_rgb(255, 255, 255);
+    fill(d, x, y, w, h, white);
+    if (!seven()) fill(d, bx - 4, by - 4, bw + 8, bh + 8, white);
+    startsearch_draw_box(d, &ss, bx, by, bw, bh);
+    startsearch_draw_rows(d, &ss, x, y, w, h, rowh, white, 0);
 }
 
 static void panel_paint(void)
@@ -1150,7 +1188,7 @@ int startpanel_run(int bx, int by)
 
     long opened = w2k_now_ms();
     int result = 0, done = 0;
-    char typed[8] = "";              /* a key typed: the panel searches for it */
+    searching = 0;
     while (!done && running) {
         XEvent e;
         XNextEvent(w2k.dpy, &e);
@@ -1162,6 +1200,15 @@ int startpanel_run(int bx, int by)
         case MotionNotify: {
             int col, row;
             int x = w2k_lp(e.xmotion.x_root - panel_x), y = w2k_lp(e.xmotion.y_root - panel_y);
+            if (searching) {
+                int sx, sy, sw, sh, rowh, bx2, by2, bw2, bh2;
+                search_area(&sx, &sy, &sw, &sh, &rowh, &bx2, &by2, &bw2, &bh2);
+                if (x >= sx && x < sx + sw) {
+                    int i = startsearch_row_at(&ss, sy, rowh, sh, y);
+                    if (i >= 0 && i != ss.sel) { ss.sel = i; panel_paint(); }
+                    break;
+                }
+            }
             hit_test(x, y, &col, &row);
             if (col != hot_col || row != hot_row) {
                 hot_col = col;
@@ -1202,11 +1249,31 @@ int startpanel_run(int bx, int by)
             if (e.xbutton.button != Button1) break;
             int col, row;
             int x = w2k_lp(e.xbutton.x_root - panel_x), y = w2k_lp(e.xbutton.y_root - panel_y);
+            if (searching) {
+                /* A result opens; the rest of the panel goes on working. */
+                int sx, sy, sw, sh, rowh, bx2, by2, bw2, bh2;
+                search_area(&sx, &sy, &sw, &sh, &rowh, &bx2, &by2, &bw2, &bh2);
+                if (x >= sx && x < sx + sw && y >= sy && y < sy + sh) {
+                    int i = startsearch_row_at(&ss, sy, rowh, sh, y);
+                    if (i >= 0) { startsearch_run(&ss, i); done = 1; }
+                    break;
+                }
+                if (x >= bx2 && x < bx2 + bw2 && y >= by2 && y < by2 + bh2) break;
+            }
             /* Letting go over nothing -- a rule, the margin, the picture --
              * leaves the panel up, as Windows does. */
             if (!hit_test(x, y, &col, &row)) break;
             int id = row_id(col, row);
             if (!id) break;
+            if (id == SM_SEARCH) {
+                /* The search box, or Search on the right: the search
+                 * opens in the panel, empty, waiting to be typed into. */
+                searching = 1;
+                startsearch_begin(&ss, "");
+                hot_col = hot_row = -1;
+                panel_paint();
+                break;
+            }
             if (id == SM_ALLPROGRAMS || id == SM_RECENTSUB) {
                 /* The submenu takes the grab; take it back afterwards. */
                 int chosen = open_submenu(id, panel_x + pw,
@@ -1223,17 +1290,26 @@ int startpanel_run(int bx, int by)
             break;
         }
         case KeyPress: {
+            if (searching) {
+                int r = startsearch_key(&ss, &e.xkey);
+                if (r == SS_RUN) { startsearch_run(&ss, ss.sel); done = 1; }
+                else if (r == SS_ESC || r == SS_EMPTY) { searching = 0; panel_paint(); }
+                else if (r == SS_CHANGED) panel_paint();
+                break;
+            }
             KeySym ks = XLookupKeysym(&e.xkey, 0);
             if (ks == XK_Escape) { done = 1; break; }
-            /* Typing into the panel searches, as typing into Windows 7's
-             * search box does: the panel closes and the Search dialog
-             * opens with the character typed. */
+            /* Typing into the panel searches, inside the panel: the left
+             * column gives way to the results and the box shows the
+             * text, the first letter included. */
             char buf[8] = "";
             int n = XLookupString(&e.xkey, buf, sizeof buf - 1, NULL, NULL);
-            if (n > 0 && buf[0] >= ' ' && buf[0] < 127) {
+            if (n > 0 && (unsigned char)buf[0] >= ' ' && buf[0] != 127) {
                 buf[n] = 0;
-                snprintf(typed, sizeof typed, "%s", buf);
-                done = 1;
+                searching = 1;
+                startsearch_begin(&ss, buf);
+                hot_col = hot_row = -1;
+                panel_paint();
             }
             break;
         }
@@ -1247,6 +1323,5 @@ int startpanel_run(int bx, int by)
     XUngrabPointer(w2k.dpy, CurrentTime);
     XDestroyWindow(w2k.dpy, panel);
     XFlush(w2k.dpy);
-    if (typed[0]) wm_search_dialog(typed);
     return result;
 }

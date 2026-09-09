@@ -708,6 +708,10 @@ void desktop_init(void)
     XLowerWindow(w2k.dpy, dw);
     XMapWindow(w2k.dpy, dw);
     desktop_dnd_init();          /* files can be dropped here */
+    /* The wallpaper from the first paint: until now it only came with
+     * the next reload (a scheme change, the monitors settling), which a
+     * session without one never had. */
+    build_wallpaper();
     apply_background();
     /* The root itself shows through at the very edges; match the colour. */
     XSetWindowBackground(w2k.dpy, w2k.root, w2k.col[C_DESKTOP]);

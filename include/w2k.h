@@ -243,6 +243,7 @@ enum {
 
 extern unsigned char w2k_effects[N_EFFECTS];
 const char *w2k_effect_label(int i);
+int  w2k_effect_listed(int i);   /* 0 for a withdrawn one: leave it out */
 int         w2k_effect_supported(int i);
 void        w2k_effects_preset(int which);   /* 0 best appearance, 1 best
                                                 performance, 2 let us choose */

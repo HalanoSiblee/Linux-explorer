@@ -299,7 +299,11 @@ effect_info[N_EFFECTS] = {
     [FX_FADE_MENUS]        = { "Fade or slide menus into view",                  1, 0 },
     [FX_FADE_TOOLTIPS]     = { "Fade or slide ToolTips into view",               0, 0 },
     [FX_FADE_MENUITEMS]    = { "Fade out menu items after clicking",             0, 0 },
-    [FX_MENU_SHADOW]       = { "Show shadows under menus",                       1, 0 },
+    /* Withdrawn: the shaped half-tone window it drew was wrong against
+     * every backdrop and worse under a compositor. An empty label keeps
+     * the slot -- the Effects line in the scheme file is positional --
+     * and leaves the row out of the list. */
+    [FX_MENU_SHADOW]       = { "",                                             0, 0 },
     [FX_CURSOR_SHADOW]     = { "Show shadows under mouse pointer",               1, 0 },
     [FX_TRANSLUCENT_SEL]   = { "Show translucent selection rectangle",           1, 1 },
     [FX_DRAG_CONTENTS]     = { "Show window contents while dragging",            1, 1 },
@@ -320,6 +324,12 @@ effect_info[N_EFFECTS] = {
      * wallpaper alone; a few round trips per repaint (see wm/glass.c). */
     [FX_AERO_WINDOWS]      = { "Show windows through Aero glass",              1, 0 },
 };
+
+/* A withdrawn effect has no label and is left out of the list. */
+int w2k_effect_listed(int i)
+{
+    return i >= 0 && i < N_EFFECTS && effect_info[i].label[0];
+}
 
 const char *w2k_effect_label(int i)
 {

@@ -279,3 +279,13 @@ found, and what changed.
 | `apps/l2kscaler.c` | Around 25 uniform lookups by name per monitor per frame | Looked up once |
 | `apps/l2kdevmgmt.c` | The Resources tab read sysfs on every expose, and Details ran a `modinfo` whose answer was discarded | Read once per device; the dead call is gone |
 | `lib/list.c` | The view rectangle was recomputed for every item on every motion event of a rubber-band sweep | Once per sweep |
+
+### Withdrawn
+
+**Show shadows under menus.** The effect drew a second window offset down
+and right, shaped to a half-tone so what lay under it showed through at
+half strength -- which is how it looked on hardware without alpha. It was
+wrong against every backdrop and worse under a compositor, so the option
+is gone from Performance Options and the code with it. The slot in the
+scheme file's `Effects` line is kept, since that line is positional, and
+anything already set there is ignored.

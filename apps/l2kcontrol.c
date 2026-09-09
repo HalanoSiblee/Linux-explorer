@@ -252,6 +252,8 @@ typedef struct {
     W2kRect  ok, cancel, apply;
     int      preset, down, dirty;
     unsigned char fx[N_EFFECTS];
+    int      rowfx[N_EFFECTS];       /* which effect each list row shows */
+    int      nrows;
 } PerfDlg;
 
 static PerfDlg *pd_active;
@@ -259,19 +261,26 @@ static PerfDlg *pd_active;
 static void perf_fill(PerfDlg *pd)
 {
     w2k_list_clear(pd->list);
+    pd->nrows = 0;
     for (int i = 0; i < N_EFFECTS; i++) {
+        if (!w2k_effect_listed(i)) continue;      /* withdrawn */
         int r = w2k_list_add(pd->list, ICO_NONE,
                              w2k_effect_supported(i) ? NULL : (void *)-1);
         w2k_list_set(pd->list, r, 0, w2k_effect_label(i));
         pd->list->items[r].checked = pd->fx[i];
+        if (r >= 0 && r < N_EFFECTS) pd->rowfx[r] = i;
+        pd->nrows = r + 1;
     }
 }
 
 static void perf_on_check(void *u, int idx)
 {
     PerfDlg *pd = u;
-    if (idx < 0 || idx >= N_EFFECTS) return;
-    pd->fx[idx] = (unsigned char)pd->list->items[idx].checked;
+    /* A row is not an effect: withdrawn ones are left out of the list. */
+    if (idx < 0 || idx >= pd->nrows) return;
+    int fx = pd->rowfx[idx];
+    if (fx < 0 || fx >= N_EFFECTS) return;
+    pd->fx[fx] = (unsigned char)pd->list->items[idx].checked;
     pd->preset = PRESET_CUSTOM;        /* as the original does */
     pd->dirty = 1;
     w2k_win_dirty(cp.win);

@@ -462,54 +462,18 @@ static void menu_paint(W2kMenu *m, Window win, int w, int h, int sel)
 typedef struct {
     W2kMenu *m;
     Window   win;
-    Window   shadow;             /* 0 when the effect is off */
     int      x, y, w, h;         /* x, y on the screen; w, h logical */
     int      pw, ph;             /* the window's size on the screen */
     int      sel;
 } Level;
 
-/* Destroy a level's windows, shadow included. */
+/* Destroy a level's window. */
 static void level_destroy(Level *lv)
 {
     menu_buffer_drop(lv->win);
     XDestroyWindow(w2k.dpy, lv->win);
-    if (lv->shadow) {
-        XDestroyWindow(w2k.dpy, lv->shadow);
-        lv->shadow = 0;
-    }
 }
 
-
-/* The shadow is its own window, offset down and right: black, but shaped
- * to a 50% checkerboard, so every other pixel is not window at all and
- * whatever is underneath shows through at half strength. That is how the
- * effect looked without a compositor -- and shaping it, rather than
- * painting a stipple on a solid window, means nothing to repaint: an
- * exposed solid window came back plain black. */
-static Window make_shadow_window(int x, int y, int w, int h)
-{
-    XSetWindowAttributes a = {
-        .override_redirect = True,
-        .background_pixel = w2k.col[C_BLACK],
-    };
-    Window s = XCreateWindow(w2k.dpy, w2k.root, x, y, (unsigned)w, (unsigned)h,
-                             0, CopyFromParent, InputOutput, CopyFromParent,
-                             CWOverrideRedirect | CWBackPixel, &a);
-    Pixmap mask = XCreatePixmap(w2k.dpy, s, (unsigned)w, (unsigned)h, 1);
-    XGCValues gv = { .foreground = 0, .background = 0 };
-    GC g = XCreateGC(w2k.dpy, mask, GCForeground | GCBackground, &gv);
-    XFillRectangle(w2k.dpy, mask, g, 0, 0, (unsigned)w, (unsigned)h);
-    XSetForeground(w2k.dpy, g, 1);
-    XSetFillStyle(w2k.dpy, g, FillStippled);
-    XSetStipple(w2k.dpy, g, w2k.pm_dither);
-    XSetTSOrigin(w2k.dpy, g, 0, 0);
-    XFillRectangle(w2k.dpy, mask, g, 0, 0, (unsigned)w, (unsigned)h);
-    XFreeGC(w2k.dpy, g);
-    XShapeCombineMask(w2k.dpy, s, ShapeBounding, 0, 0, mask, ShapeSet);
-    XFreePixmap(w2k.dpy, mask);
-    XMapWindow(w2k.dpy, s);
-    return s;
-}
 
 static Window make_menu_window(int x, int y, int w, int h)
 {
@@ -555,7 +519,7 @@ static void open_level(Level *lv, W2kMenu *m, int px, int py, int flags,
                                            py);
     int mx = mon->x, my = mon->y, mw = mon->w, mh = mon->h;
 
-    int lap = w2k_px(SUBMENU_LAP), sh_off = w2k_px(4);
+    int lap = w2k_px(SUBMENU_LAP);
     if (parent_right >= 0) {                       /* submenu placement */
         x = parent_right - lap;
         if (x + pw > mx + mw) {
@@ -573,9 +537,6 @@ static void open_level(Level *lv, W2kMenu *m, int px, int py, int flags,
     lv->x = x; lv->y = y; lv->w = w; lv->h = h;
     lv->pw = pw; lv->ph = ph;
     lv->sel = -1;
-    /* The shadow is created first so it stacks underneath. */
-    lv->shadow = w2k_effects[FX_MENU_SHADOW]
-               ? make_shadow_window(x + sh_off, y + sh_off, pw, ph) : 0;
     lv->win = make_menu_window(x, y, pw, ph);
 
     /* "Fade or slide menus into view": the menu slides out from the edge
@@ -600,9 +561,6 @@ static void open_level(Level *lv, W2kMenu *m, int px, int py, int flags,
             if (sh < 4) sh = 4;
             int wy = up ? y + ph - sh : y;
             XMoveResizeWindow(w2k.dpy, lv->win, x, wy, (unsigned)pw, (unsigned)sh);
-            if (lv->shadow)
-                XMoveResizeWindow(w2k.dpy, lv->shadow, x + sh_off, wy + sh_off,
-                                  (unsigned)pw, (unsigned)sh);
             if (step == 1) XMapRaised(w2k.dpy, lv->win);
             XCopyArea(w2k.dpy, pm, lv->win, w2k_copy_gc(), 0, up ? ph - sh : 0,
                       (unsigned)pw, (unsigned)sh, 0, 0);

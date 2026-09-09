@@ -110,6 +110,7 @@ static void frame_draw_raw(Client *c, Drawable d)
          * the rest of the caption below. The wallpaper under the frame is
          * what shows through, so the frame's place on the screen matters. */
         int rx = c->x - b, ry = c->y - b - client_caption_h(c);
+        w2k_glass_above = c->frame;
         w2k_aero_frame(d, 0, 0, rx, ry, fw, fh, P(AERO_TOP), fh, active, -1, -1, 0, 0);
     } else {
         /* Luna's frame is the caption colour carried down both sides and
@@ -148,6 +149,7 @@ static void frame_draw_raw(Client *c, Drawable d)
         int hot = c->btn_hot == HT_MINBUTTON ? 0 : c->btn_hot == HT_MAXBUTTON ? 1
                 : c->btn_hot == HT_CLOSE ? 2 : -1;
         int down = c->btn_down && c->btn_down == c->btn_hot ? hot : -1;
+        w2k_glass_above = c->frame;
         w2k_aero_frame(pm, 0, 0, rx, ry, fw, fh, 0, cap.h, active, hot, down, mn.w == 0, 1);
     } else
         w2k_theme_caption(pm, 0, 0, cap.w, cap.h, active, frame_theme());

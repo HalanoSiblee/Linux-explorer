@@ -237,6 +237,7 @@ enum {
     FX_SLIDE_TASKBUTTONS,  FX_SMOOTH_FONTS,    FX_SMOOTH_SCROLL,
     FX_FOLDER_BACKGROUND,  FX_COMMON_TASKS,    FX_ICON_SHADOW,
     FX_VISUAL_STYLES,      FX_HIDE_ACCEL,      FX_SMOOTH_ICONS,
+    FX_AERO_WINDOWS,       /* Aero glass shows the windows behind it (wm/glass.c) */
     N_EFFECTS
 };
 
@@ -583,6 +584,11 @@ void w2k_glass_source_end(void);
 void w2k_glass_source_free(void);
 int  w2k_glass_source_ready(void);
 unsigned char *w2k_glass_bg(int rx, int ry, int w, int h);
+/* The window manager can supply what is really under a rectangle, below
+ * the window being painted (w2k_glass_above): the glass then shows the
+ * windows behind it. NULL, or a NULL result, falls back on the wallpaper. */
+extern unsigned char *(*w2k_glass_live)(int rx, int ry, int w, int h);
+extern Window w2k_glass_above;
 void w2k_glass_law(const unsigned char *bg, unsigned char *out, size_t n, const W2kGlass *g);
 void w2k_rgb_put(Drawable d, int dx, int dy, const unsigned char *rgb, int w, int h);
 void w2k_aero_frame(Drawable d, int dx, int dy, int rx, int ry, int fw, int fh,

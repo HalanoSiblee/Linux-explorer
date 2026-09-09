@@ -316,6 +316,9 @@ effect_info[N_EFFECTS] = {
     /* Ours: icons drawn with their real transparency and their stepped
      * edges softened, everywhere the desktop draws one (see icon.c). */
     [FX_SMOOTH_ICONS]      = { "Smooth edges of icons",                        1, 0 },
+    /* Ours: Aero's glass drawn from the windows behind it, not the
+     * wallpaper alone; a few round trips per repaint (see wm/glass.c). */
+    [FX_AERO_WINDOWS]      = { "Show windows through Aero glass",              1, 0 },
 };
 
 const char *w2k_effect_label(int i)

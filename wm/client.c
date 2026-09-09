@@ -431,6 +431,7 @@ void client_raise(Client *c)
     c->snext = stack;
     stack = c;
     clients_restack();
+    glass_live_refresh();
 }
 
 void client_focus(Client *c)

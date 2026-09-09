@@ -554,6 +554,7 @@ static void panel7_draw(Drawable pm)
         /* Aero: a slab of dark glass over the wallpaper, the white pane
          * cut into it with the search band across its foot. In screen
          * pixels, from where the panel stands. */
+        w2k_glass_above = panel;
         w2k_aero_panel(pm, 0, 0, panel_x, panel_y, w2k_px(P7_W), w2k_px(P7_H), w2k_px(oy),
                        w2k_px(P7_LEFT_X), w2k_px(m->left_top), w2k_px(P7_LEFT_W), w2k_px(lh),
                        w2k_px(m->ap_y + m->ap_h + 2), w2k_px(P7_TILE_X));

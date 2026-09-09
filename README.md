@@ -161,10 +161,18 @@ the wallpaper through them, blurred and tinted as measured off Windows 7
 over black, white and blue desktops; without a compositor it is the
 wallpaper that shows through, not the windows behind), and Modern, in a
 Light and a Dark scheme. The Windows 7 wallpaper is carried in
-`wallpapers/` and listed on the Background tab. Every element's colour can be set
+`wallpapers/` and listed on the Background tab. "Show windows through
+Aero glass", in Performance Options, draws the glass from the windows
+behind it rather than the wallpaper alone, through the X Composite
+extension; it costs a few round trips per repaint, so it is off unless
+asked for, and the glass is refreshed when a window moves or is raised. Every element's colour can be set
 from the basic-colours palette or by its red, green and blue values, and
 title bars have a Color 2 for the far end of their gradient. The XP and 7
 chrome is cropped from screenshots and checked by diffing against them.
+Typing at any Start menu searches inside it -- the first letter
+included -- through the programs, the recent documents and the names
+Windows users type (taskmgr, calc, winver, desk.cpl, control, cmd and
+the rest), which Run understands too.
 Under the Vista and 7 looks the programs' own controls follow Windows 7
 too, measured off it: rounded gradient buttons, tabs on white pages,
 the two-tone menu bar, flat bordered wells and status panes, pale group

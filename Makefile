@@ -45,7 +45,7 @@ LDLIBS += $(shell pkg-config --libs libwebp)
 endif
 ifneq ($(shell pkg-config --exists xscrnsaver 2>/dev/null && echo y),)
 wm/wm.o: CFLAGS += -DHAVE_XSS
-bin/l2kwm: LDLIBS += -lXss
+bin/l2kwm: LDLIBS += -lXss -lXcomposite
 endif
 ifneq ($(shell pkg-config --exists dbus-1 2>/dev/null && echo y),)
 wm/notifyd.o: CFLAGS += -DHAVE_DBUS $(shell pkg-config --cflags dbus-1)

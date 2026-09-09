@@ -284,6 +284,7 @@ static void drag_loop(Client *c, int mode, int px, int py, int keyboard)
                                ow - 2 * b, oh - 2 * b - cap);
     }
     XUngrabPointer(w2k.dpy, CurrentTime);
+    glass_live_refresh();          /* the glass over and under it shows the new place */
 }
 
 void do_move(Client *c, XButtonEvent *e)

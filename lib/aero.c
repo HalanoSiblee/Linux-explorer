@@ -133,10 +133,18 @@ void w2k_glass_source_free(void)
 
 int w2k_glass_source_ready(void) { return src_ready; }
 
-/* The blurred wallpaper under the root rectangle, RGB, malloc'd. */
+unsigned char *(*w2k_glass_live)(int rx, int ry, int w, int h);
+Window w2k_glass_above;
+
+/* The blurred wallpaper under the root rectangle, RGB, malloc'd -- or,
+ * when the window manager offers it, what really lies there. */
 unsigned char *w2k_glass_bg(int rx, int ry, int w, int h)
 {
     if (w <= 0 || h <= 0) return NULL;
+    if (w2k_glass_live) {
+        unsigned char *live = w2k_glass_live(rx, ry, w, h);
+        if (live) return live;
+    }
     unsigned char *out = malloc((size_t)w * h * 3);
     if (!out) return NULL;
     if (!src_ready || !src) {

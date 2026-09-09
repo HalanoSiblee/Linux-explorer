@@ -309,6 +309,10 @@ void wm_run_alias(const W2kAlias *a);
 void    desktop_init(void);
 void    desktop_paint(void);
 void    desktop_reload(void);         /* colours / wallpaper changed */
+/* glass.c */
+void    glass_live_apply(void);       /* the effect and the look decide */
+void    glass_live_refresh(void);     /* repaint the glass after the windows changed */
+
 void    desktop_wall_copy(Drawable d, int sx, int sy, int w, int h, int dx, int dy);
 void    desktop_bin_tick(void);       /* has the Recycle Bin filled up? */
 /* How long the shell may sleep before each part needs attention again.

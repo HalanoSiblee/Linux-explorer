@@ -584,6 +584,7 @@ void wm_handle_event(XEvent *e)
                 w2k_cursors_init();
                 XDefineCursor(w2k.dpy, w2k.root, w2k.cur_arrow);
                 desktop_reload();
+                glass_live_apply();
                 for (Client *k = clients; k; k = k->next) {
                     /* ForceDecorations lives in the scheme file too, so a
                      * window may have just gained or lost its frame. */
@@ -867,6 +868,7 @@ int main(int argc, char **argv)
     pins_seed();                    /* Windows Update on the Start menu, once */
     desktop_init();
     taskbar_init();
+    glass_live_apply();
     grab_keys();
     /* Start Windows -- once per session, not again on an in-place restart. */
     if (!getenv("W2K_RESTARTED")) w2k_sound_play(SND_SYSTEMSTART);

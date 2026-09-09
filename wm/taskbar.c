@@ -597,6 +597,7 @@ static void draw_grip(Drawable d, int x, int y, int h)
 static void task_button(Pixmap pm, int x, int y, int w, int h, int state)
 {
     if (w2k_theme == THEME_AERO)
+        w2k_glass_above = tb,
         w2k_aero_taskbutton(pm, w2k_cx(x), w2k_cx(y), w2k_cw(x, w), w2k_cw(y, h), state, tb_x, tb_y);
     else
         w2k_theme_taskbutton(pm, x, y, w, h, state, w2k_theme);
@@ -619,6 +620,7 @@ static void taskbar_draw(Pixmap pm, int h)
         /* Glass over the wallpaper under the bar, Show Desktop at its end. */
         int edge = w2k_taskbar_edge == TB_TOP ? 1 : w2k_taskbar_edge == TB_LEFT ? 2
                  : w2k_taskbar_edge == TB_RIGHT ? 3 : 0;
+        w2k_glass_above = tb;
         w2k_aero_bar(pm, tb_x, tb_y, tb_pw, tb_ph, edge, !vertical());
     } else {
         w2k_theme_bar(pm, 0, 0, tb_w, h, w2k_theme);

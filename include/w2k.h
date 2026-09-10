@@ -282,9 +282,16 @@ int  w2k_fs_move(const char *from, const char *to);      /* rename, or copy and 
  * many landed. */
 int  w2k_fs_transfer(char paths[][1024], int n, const char *dir, int move,
                      int (*confirm)(const char *dst, void *user), void *user);
-/* Mounted media and /mnt, lettered from D:. */
-typedef struct { char path[512], label[128]; char letter; int optical, removable; } W2kDrive;
+/* Mounted media and /mnt, lettered from D:. `dev` is what is mounted
+ * (/dev/sdb1, or a network or FUSE source); `path` is empty for a volume
+ * that is not mounted; `ejectable` when it sits on a USB stick, a card or
+ * a disc, which Eject can power off or open. */
+typedef struct { char path[512], label[128]; char letter; int optical, removable;
+                 char dev[128]; int mounted, ejectable; } W2kDrive;
 int  w2k_fs_drives(W2kDrive *out, int max);
+/* The same, then every volume with a file system that could be mounted and
+ * is not (from lsblk), lettered on from the mounted ones. */
+int  w2k_fs_drives_all(W2kDrive *out, int max);
 int  w2k_fs_write_url_shortcut(const char *dir, const char *url);
 int  w2k_uri_list_urls(const char *uris, char urls[][1024], int max);
 

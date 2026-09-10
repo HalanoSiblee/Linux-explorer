@@ -100,7 +100,7 @@ if [ "$DO_DEPS" = 1 ]; then
             cabextract qt5ct qt6ct libpam0g-dev xauth libdbus-1-dev libnotify-bin \
             qt5-style-plugins qt-style-kvantum lxpolkit brightnessctl \
             xserver-xephyr xvfb libgl1-mesa-dev libxtst-dev libxdamage-dev libxfixes-dev libxcomposite-dev \
-            wine icoutils dosfstools exfatprogs ntfs-3g ;;
+            wine icoutils udisks2 dosfstools exfatprogs ntfs-3g ;;
     *fedora*|*rhel*|*centos*|*rocky*|*alma*)
         # strict=0: a name this release no longer has is skipped, not fatal.
         as_root dnf install -y --setopt=strict=0 gcc make libX11-devel libXext-devel libXrandr-devel \
@@ -110,7 +110,7 @@ if [ "$DO_DEPS" = 1 ]; then
             dejavu-sans-fonts dbus-x11 cabextract qt5ct qt6ct pam-devel xorg-x11-xauth dbus-devel libnotify \
             qt5-qtstyleplugins kvantum kvantum-qt5 lxpolkit brightnessctl \
             xorg-x11-server-Xephyr xorg-x11-server-Xvfb mesa-libGL-devel libXtst-devel libXdamage-devel libXfixes-devel libXcomposite-devel \
-            wine icoutils dosfstools exfatprogs ntfsprogs ;;
+            wine icoutils udisks2 dosfstools exfatprogs ntfsprogs ;;
     *arch*|*manjaro*|*endeavouros*)
         # -Syu, never -Sy: a refreshed database with an unrefreshed system
         # is the partial upgrade Arch warns about.
@@ -120,27 +120,27 @@ if [ "$DO_DEPS" = 1 ]; then
             p7zip libpulse alsa-utils xterm python git curl ttf-dejavu dbus cabextract qt5ct qt6ct pam xorg-xauth libnotify \
             kvantum kvantum-qt5 polkit-gnome brightnessctl \
             xorg-server-xephyr xorg-server-xvfb mesa libxtst libxdamage libxfixes libxcomposite \
-            wine icoutils dosfstools exfatprogs ntfs-3g ;;
+            wine icoutils udisks2 dosfstools exfatprogs ntfs-3g ;;
     *suse*)
         as_root zypper --non-interactive install gcc make libX11-devel libXext-devel \
             libXrandr-devel libXcursor-devel libXft-devel fontconfig-devel \
             freetype2-devel zlib-devel libjpeg8-devel libwebp-devel libXss-devel xrandr xset xsetroot xrdb xmessage \
             xdg-utils zip unzip tar p7zip-full pulseaudio-utils alsa-utils xterm python3 git curl \
             dejavu-fonts dbus-1-x11 cabextract qt5ct qt6ct pam-devel xauth dbus-1-devel libnotify-tools brightnessctl \
-            dosfstools exfatprogs ntfs-3g ntfsprogs ;;
+            udisks2 dosfstools exfatprogs ntfs-3g ntfsprogs ;;
     *alpine*)
         as_root apk add build-base libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxft-dev fontconfig-dev freetype-dev zlib-dev libjpeg-turbo-dev libwebp-dev libxscrnsaver-dev xrandr \
             xset xsetroot xrdb xmessage xdg-utils zip unzip tar p7zip pulseaudio-utils \
             xterm python3 git curl font-dejavu dbus-x11 cabextract linux-pam-dev xauth dbus-dev libnotify brightnessctl \
-            dosfstools exfatprogs ntfs-3g-progs ;;
+            udisks2 dosfstools exfatprogs ntfs-3g-progs ;;
     *void*)
         as_root xbps-install -Sy base-devel libX11-devel libXext-devel libXrandr-devel \
             libXcursor-devel libXft-devel fontconfig-devel freetype-devel zlib-devel \
             libjpeg-turbo-devel libwebp-devel libXScrnSaver-devel xrandr xset xsetroot xrdb xmessage xdg-utils zip unzip \
             tar p7zip pulseaudio-utils xterm python3 git curl dejavu-fonts-ttf dbus \
             cabextract qt5ct qt6ct pam-devel xauth dbus-devel libnotify brightnessctl \
-            dosfstools exfatprogs ntfs-3g ;;
+            udisks2 dosfstools exfatprogs ntfs-3g ;;
     *)
         echo "install.sh: I do not know this distribution's package manager." >&2
         echo "  Install: a C compiler and make; the development packages for X11," >&2

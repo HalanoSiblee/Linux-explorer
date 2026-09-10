@@ -181,6 +181,8 @@ int w2k_fs_drives(W2kDrive *out, int max)
         W2kDrive *d = &out[n];
         memset(d, 0, sizeof *d);
         snprintf(d->path, sizeof d->path, "%s", mnt);
+        snprintf(d->dev, sizeof d->dev, "%s", dev);
+        d->mounted = 1;
         const char *base = strrchr(mnt, '/');
         snprintf(d->label, sizeof d->label, "%.127s", base && base[1] ? base + 1 : mnt);
         d->letter = (char)('D' + n);
@@ -189,6 +191,88 @@ int w2k_fs_drives(W2kDrive *out, int max)
         n++;
     }
     fclose(f);
+    return n;
+}
+
+/* KEY="value" out of a line of lsblk -P, which writes odd bytes as \xHH. */
+static void lsblk_value(const char *line, const char *key, char *out, size_t n)
+{
+    char pat[32];
+    snprintf(pat, sizeof pat, "%s=\"", key);
+    size_t kl = strlen(pat);
+    out[0] = 0;
+    for (const char *p = line; (p = strstr(p, pat)); p += kl) {
+        if (p != line && p[-1] != ' ') continue;
+        size_t o = 0;
+        for (p += kl; *p && *p != '"' && o + 1 < n; p++) {
+            if (p[0] == '\\' && p[1] == 'x' && isxdigit((unsigned char)p[2]) && isxdigit((unsigned char)p[3])) {
+                char h[3] = { p[2], p[3], 0 };
+                out[o++] = (char)strtol(h, NULL, 16);
+                p += 3;
+            } else out[o++] = *p;
+        }
+        out[o] = 0;
+        return;
+    }
+}
+
+/* File systems a desktop mounts, and the partitions it leaves alone: the
+ * EFI system partition, Microsoft's reserved and recovery partitions, BIOS
+ * and extended boot. */
+static int mountable_fs(const char *fs)
+{
+    static const char *const ok[] = { "vfat", "msdos", "exfat", "ntfs", "ntfs3", "ext2", "ext3",
+        "ext4", "xfs", "btrfs", "f2fs", "iso9660", "udf", "hfsplus", "hfs", "jfs", "nilfs2",
+        "reiserfs", "bcachefs", NULL };
+    for (int i = 0; ok[i]; i++) if (!strcmp(fs, ok[i])) return 1;
+    return 0;
+}
+
+static int system_parttype(const char *t)
+{
+    static const char *const sys[] = { "c12a7328-f81f-11d2-ba4b-00a0c93ec93b", "0xef",
+        "e3c9e316-0b5c-4db8-817d-f92df00215ae", "de94bba4-06d1-4d40-a16a-bfd50179d6ac", "0x27",
+        "21686148-6449-6e6f-744e-656564454649", "bc13c2ff-59e6-4262-a352-b275fd6f7172", NULL };
+    for (int i = 0; sys[i]; i++) if (!strcasecmp(t, sys[i])) return 1;
+    return 0;
+}
+
+int w2k_fs_drives_all(W2kDrive *out, int max)
+{
+    int n = w2k_fs_drives(out, max);
+    FILE *f = popen("lsblk -P -o PATH,TYPE,FSTYPE,LABEL,MOUNTPOINT,PARTTYPE,RM,HOTPLUG 2>/dev/null", "r");
+    if (!f) return n;
+    int mounted = n;
+    char line[1024];
+    while (fgets(line, sizeof line, f)) {
+        char path[128], type[16], fs[32], label[128], mnt[512], pt[48], rm[4], hp[4];
+        lsblk_value(line, "PATH", path, sizeof path);
+        lsblk_value(line, "TYPE", type, sizeof type);
+        lsblk_value(line, "FSTYPE", fs, sizeof fs);
+        lsblk_value(line, "LABEL", label, sizeof label);
+        lsblk_value(line, "MOUNTPOINT", mnt, sizeof mnt);
+        lsblk_value(line, "PARTTYPE", pt, sizeof pt);
+        lsblk_value(line, "RM", rm, sizeof rm);
+        lsblk_value(line, "HOTPLUG", hp, sizeof hp);
+        int rom = !strcmp(type, "rom");
+        int eject = rom || !strcmp(rm, "1") || !strcmp(hp, "1");
+        if (mnt[0]) {
+            for (int i = 0; i < mounted; i++) if (!strcmp(out[i].dev, path)) out[i].ejectable = eject;
+            continue;
+        }
+        if (n >= max || !path[0] || !mountable_fs(fs) || system_parttype(pt)) continue;
+        W2kDrive *d = &out[n];
+        memset(d, 0, sizeof *d);
+        snprintf(d->dev, sizeof d->dev, "%s", path);
+        d->optical = rom || !strcmp(fs, "iso9660") || !strcmp(fs, "udf");
+        d->removable = eject;
+        d->ejectable = eject;
+        snprintf(d->label, sizeof d->label, "%s", label[0] ? label : d->optical ? "CD Drive" :
+                 d->removable ? "Removable Disk" : "Local Disk");
+        d->letter = (char)('D' + n);
+        n++;
+    }
+    pclose(f);
     return n;
 }
 

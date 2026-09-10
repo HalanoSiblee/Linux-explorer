@@ -99,7 +99,10 @@ Try it nested first, without logging out of anything:
     l2kexplorer    Windows Explorer: Folders pane, four views, cut/copy/paste,
                    undo, drag and drop (XDND, with any other program), Recycle
                    Bin, Add to Archive / Extract with progress, Send To,
-                   Open With, Properties, Search, drives in My Computer
+                   Open With, Properties, Search, drives in My Computer --
+                   mounted or not: opening one mounts it, and the right-click
+                   menu mounts, unmounts and ejects (Safely Remove Hardware)
+                   through udisks
     l2kcontrol     Control Panel, the Windows 2000 folder with its web-view
                    pane: Date/Time, Default Programs, Device Manager, Display,
                    Folder Options, Fonts, Keyboard, Mouse, Network and Dial-up

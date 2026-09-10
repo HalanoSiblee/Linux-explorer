@@ -36,7 +36,8 @@ enum {
     ID_TB_STANDARD, ID_TB_ADDRESS, ID_STATUSBAR,
     ID_ARR_NAME, ID_ARR_SIZE, ID_ARR_TYPE, ID_ARR_DATE,
     ID_FAV_ADD, ID_FAV_ORG,
-    ID_SENDTO_DESKTOP, ID_SENDTO_MYDOCS
+    ID_SENDTO_DESKTOP, ID_SENDTO_MYDOCS,
+    ID_MOUNT, ID_UNMOUNT, ID_EJECT
 };
 
 /* Shell namespace node kinds. */
@@ -176,6 +177,8 @@ typedef struct {
     int  icon;
     char type[64];
     char target[512];           /* a drive's mount point, for My Computer */
+    char dev[128];              /* a drive's device; set for drives only */
+    int  mounted, ejectable, optical;
 } Entry;
 
 static Entry *entries;
@@ -323,18 +326,24 @@ static void refill_list(void)
             e->target[0] = 0;
         }
         if (ex.cur.kind == K_MYCOMPUTER) {
-            /* Mounted media and /mnt as drives from D:, then Control Panel,
-             * which Windows 2000 lists here too. */
+            /* Mounted media and /mnt as drives from D:, then the volumes
+             * that are not mounted (opening one mounts it), then Control
+             * Panel, which Windows 2000 lists here too. */
             W2kDrive dr[16];
-            int nd = w2k_fs_drives(dr, 16);
+            int nd = w2k_fs_drives_all(dr, 16);
             for (int i = 0; i < nd; i++) {
                 Entry *e = entry_push();
                 snprintf(e->name, sizeof e->name, "%.200s (%c:)", dr[i].label, dr[i].letter);
-                snprintf(e->type, sizeof e->type, "%s", dr[i].optical ? "Compact Disc"
-                         : dr[i].removable ? "Removable Disk" : "Local Disk");
+                snprintf(e->type, sizeof e->type, "%s%s", dr[i].optical ? "Compact Disc"
+                         : dr[i].removable ? "Removable Disk" : "Local Disk",
+                         dr[i].mounted ? "" : " (not mounted)");
                 e->isdir = 1;
                 e->icon = dr[i].optical ? ICO_DRIVE_CD : dr[i].removable ? ICO_DRIVE_FLOPPY : ICO_DRIVE_HDD;
                 snprintf(e->target, sizeof e->target, "%.511s", dr[i].path);
+                snprintf(e->dev, sizeof e->dev, "%s", dr[i].dev[0] ? dr[i].dev : dr[i].path);
+                e->mounted = dr[i].mounted;
+                e->ejectable = dr[i].ejectable;
+                e->optical = dr[i].optical;
             }
             Entry *e = entry_push();
             snprintf(e->name, sizeof e->name, "Control Panel");
@@ -749,17 +758,9 @@ static Node *mknode(int kind, const char *path)
     return n;
 }
 
-static void tree_build(void)
+/* My Computer's drives in the Folders pane: C: and whatever is mounted. */
+static void tree_fill_computer(W2kTreeNode *mc)
 {
-    W2kTreeNode *desk = w2k_tree_add(ex.tree, NULL, "Desktop", ICO_DESKTOP,
-                                     ICO_DESKTOP, mknode(K_DESKTOP, ""));
-    desk->expanded = 1;
-    w2k_tree_add(ex.tree, desk, "My Documents", ICO_MYDOCS, ICO_MYDOCS,
-                 mknode(K_FS, ex.home))->has_kids = dir_has_subdirs(ex.home);
-
-    W2kTreeNode *mc = w2k_tree_add(ex.tree, desk, "My Computer", ICO_MYCOMPUTER,
-                                   ICO_MYCOMPUTER, mknode(K_MYCOMPUTER, ""));
-    mc->expanded = 1;
     W2kTreeNode *c = w2k_tree_add(ex.tree, mc, "Local Disk (C:)", ICO_DRIVE_HDD,
                                   ICO_DRIVE_HDD, mknode(K_FS, "/"));
     c->has_kids = 1;
@@ -772,6 +773,40 @@ static void tree_build(void)
         w2k_tree_add(ex.tree, mc, label, ico, ico, mknode(K_FS, dr[i].path))->has_kids =
             dir_has_subdirs(dr[i].path);
     }
+}
+
+static void tree_free_data(W2kTreeNode *n)
+{
+    for (; n; n = n->sibling) { tree_free_data(n->child); free(n->data); n->data = NULL; }
+}
+
+/* After a drive is mounted or unmounted: My Computer's branch again. */
+static void tree_refresh_computer(void)
+{
+    for (W2kTreeNode *d = ex.tree->root->child; d; d = d->sibling)
+        for (W2kTreeNode *n = d->child; n; n = n->sibling) {
+            Node *nd = n->data;
+            if (!nd || nd->kind != K_MYCOMPUTER) continue;
+            tree_free_data(n->child);
+            w2k_tree_clear_children(ex.tree, n);
+            tree_fill_computer(n);
+            w2k_tree_layout(ex.tree);
+            return;
+        }
+}
+
+static void tree_build(void)
+{
+    W2kTreeNode *desk = w2k_tree_add(ex.tree, NULL, "Desktop", ICO_DESKTOP,
+                                     ICO_DESKTOP, mknode(K_DESKTOP, ""));
+    desk->expanded = 1;
+    w2k_tree_add(ex.tree, desk, "My Documents", ICO_MYDOCS, ICO_MYDOCS,
+                 mknode(K_FS, ex.home))->has_kids = dir_has_subdirs(ex.home);
+
+    W2kTreeNode *mc = w2k_tree_add(ex.tree, desk, "My Computer", ICO_MYCOMPUTER,
+                                   ICO_MYCOMPUTER, mknode(K_MYCOMPUTER, ""));
+    mc->expanded = 1;
+    tree_fill_computer(mc);
 
     w2k_tree_add(ex.tree, desk, "My Network Places", ICO_NETWORK, ICO_NETWORK,
                  mknode(K_NETWORK, ""));
@@ -1223,6 +1258,8 @@ static void spawn(const char *fmt, const char *arg)
     if (pid > 0) { int st; waitpid(pid, &st, 0); }
 }
 
+static void drive_open(const char *dev);
+
 static void on_activate(void *u, int idx)
 {
     (void)u;
@@ -1232,6 +1269,7 @@ static void on_activate(void *u, int idx)
     if (ex.cur.kind == K_DESKTOP || ex.cur.kind == K_MYCOMPUTER) {
         Node nd = { K_FS };
         if (!strcmp(e->target, "@controlpanel")) { spawn("%s", "l2kcontrol"); return; }
+        if (e->dev[0] && !e->mounted) { drive_open(e->dev); return; }
         if (e->target[0]) { navigate_path(e->target, 1); return; }
         if (!strcmp(e->name, "Local Disk (C:)")) snprintf(nd.path, sizeof nd.path, "/");
         else if (!strcmp(e->name, "My Documents")) snprintf(nd.path, sizeof nd.path, "%s", ex.home);
@@ -1476,17 +1514,25 @@ typedef struct {
     char     from[300], to[300];
     W2kRect  bar, cancel;
     int      down;
+    int      icon;
+    int      plain;              /* one line of words and the bar: no files */
 } Progress;
 
 static void progress_paint(W2kWin *w, Drawable d)
 {
     Progress *p = w->user;
     int fh = w2k_font_height(F_UI);
-    w2k_bigicon_draw(d, 14, 14, ICO_FILE_ZIP);
+    w2k_bigicon_draw(d, 14, 14, p->icon);
     /* An ellipsis on whatever will not fit the line. */
     char buf[400];
     w2k_ellipsis(F_UI, p->current, w->w - 70, buf, sizeof buf);
     w2k_text(d, F_UI, 58, 14, buf, C_TEXT);
+    if (p->plain) {
+        w2k_text(d, F_UI, 58, 14 + fh + 6, "Please wait...", C_GRAYTEXT);
+        w2k_draw_progress(d, &p->bar, -1, p->phase);
+        w2k_draw_pushbutton(d, &p->cancel, "Cancel", p->down ? BS_PRESSED : 0);
+        return;
+    }
     char fr[400], to[400];
     snprintf(fr, sizeof fr, "From:  %s", p->from);
     snprintf(to, sizeof to, "To:  %s", p->to);
@@ -1511,6 +1557,12 @@ static void progress_paint(W2kWin *w, Drawable d)
 static void progress_line(Progress *p, char *line)
 {
     while (*line == ' ') line++;
+    if (p->plain) {
+        size_t tl = strlen(p->tail);
+        if (tl + strlen(line) + 2 > sizeof p->tail) { p->tail[0] = 0; tl = 0; }
+        snprintf(p->tail + tl, sizeof p->tail - tl, "%s\n", line);
+        return;
+    }
     static const char *const prefixes[] = { "adding:", "inflating:", "extracting:",
                                             "creating:", "updating:", "- ", "+ ", "Extracting", NULL };
     char *name = line;
@@ -1588,17 +1640,22 @@ static int progress_event(W2kWin *w, XEvent *e)
 }
 
 /* Run `cmd` with the progress window up. Returns 1 on success, 0 when it
- * failed (the error is shown) or was cancelled. */
-static int run_with_progress(const char *title, const char *cmd, int total,
-                             const char *from, const char *to)
+ * failed or was cancelled. A failure's last words go to `err` when one is
+ * given, and into an error box when not. `text` makes it the plain window:
+ * that line, the bar and Cancel. */
+static int progress_run(const char *title, const char *cmd, int total, const char *from,
+                        const char *to, const char *text, int icon, char *err, int errn)
 {
     Progress p;
     memset(&p, 0, sizeof p);
     p.total = total;
     p.fd = -1;
+    p.icon = icon;
+    p.plain = text != NULL;
     snprintf(p.from, sizeof p.from, "%.299s", from);
     snprintf(p.to, sizeof p.to, "%.299s", to);
-    snprintf(p.current, sizeof p.current, "Preparing...");
+    snprintf(p.current, sizeof p.current, "%.299s", text ? text : "Preparing...");
+    if (err && errn > 0) err[0] = 0;
 
     int pipefd[2];
     if (pipe(pipefd) != 0) return 0;
@@ -1617,9 +1674,9 @@ static int run_with_progress(const char *title, const char *cmd, int total,
     p.fd = pipefd[0];
     fcntl(p.fd, F_SETFL, fcntl(p.fd, F_GETFL) | O_NONBLOCK);
 
-    int cw = 420, ch = 176;
+    int cw = p.plain ? 360 : 420, ch = p.plain ? 138 : 176;
     p.win = w2k_win_new(title, "l2kexplorer", cw, ch, 0);
-    p.bar = (W2kRect){ 14, 92, cw - 28, 18 };
+    p.bar = (W2kRect){ 14, p.plain ? 62 : 92, cw - 28, 18 };
     p.cancel = (W2kRect){ cw - 12 - 75, ch - 12 - 23, 75, 23 };
     p.win->user = &p;
     p.win->paint = progress_paint;
@@ -1636,12 +1693,19 @@ static int run_with_progress(const char *title, const char *cmd, int total,
 
     if (p.cancelled) return 0;
     if (p.status != 0) {
+        if (err && errn > 0) { snprintf(err, (size_t)errn, "%s", p.tail); return 0; }
         char msg[2400];
         snprintf(msg, sizeof msg, "The operation did not complete.\n\n%.2000s", p.tail);
         w2k_msgbox(ex.win, title, msg, MB_OK | MB_ICONERROR);
         return 0;
     }
     return 1;
+}
+
+static int run_with_progress(const char *title, const char *cmd, int total,
+                             const char *from, const char *to)
+{
+    return progress_run(title, cmd, total, from, to, NULL, ICO_FILE_ZIP, NULL, 0);
 }
 
 /* ---- the Add to Zip / Extract dialog ---- */
@@ -1659,13 +1723,173 @@ static const struct { const char *label, *ext, *tool; } formats[] = {
 
 static int tool_installed(const char *name)
 {
-    static const char *const dirs[] = { "/usr/local/bin", "/usr/bin", "/bin", NULL };
+    static const char *const dirs[] = { "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", NULL };
     for (int i = 0; dirs[i]; i++) {
         char p[300];
         snprintf(p, sizeof p, "%s/%s", dirs[i], name);
         if (access(p, X_OK) == 0) return 1;
     }
     return 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * Drives: mount, unmount, eject
+ *
+ * Through udisks, as every desktop does it: a USB stick or a card mounts
+ * under /run/media/<user> (or /media/<user>) without a password, and an
+ * internal disk asks for the administrator's through the session's
+ * PolicyKit agent. udisksctl reads /dev/null, so it never asks on a
+ * terminal Explorer happened to be started from.
+ * ------------------------------------------------------------------ */
+static int need_udisks(void)
+{
+    if (tool_installed("udisksctl")) return 1;
+    w2k_msgbox(ex.win, "Windows Explorer", "Mounting and ejecting drives needs udisks2 (the "
+               "udisksctl command), which is not installed.", MB_OK | MB_ICONWARNING);
+    return 0;
+}
+
+/* Where `dev` is mounted, out of /proc/mounts (which writes a space as
+ * \040 and any other awkward byte in octal the same way). */
+static int mount_point_of(const char *dev, char *out, int n)
+{
+    FILE *f = fopen("/proc/mounts", "r");
+    if (!f) return 0;
+    char line[1400], d[256], m[1100];
+    int found = 0;
+    while (!found && fgets(line, sizeof line, f)) {
+        if (sscanf(line, "%255s %1099s", d, m) != 2 || strcmp(d, dev)) continue;
+        int o = 0;
+        for (const char *p = m; *p && o < n - 1; p++) {
+            if (p[0] == '\\' && p[1] >= '0' && p[1] <= '3' && p[2] >= '0' && p[2] <= '7' &&
+                p[3] >= '0' && p[3] <= '7') {
+                out[o++] = (char)((p[1] - '0') * 64 + (p[2] - '0') * 8 + (p[3] - '0'));
+                p += 3;
+            } else out[o++] = *p;
+        }
+        out[o] = 0;
+        found = 1;
+    }
+    fclose(f);
+    return found;
+}
+
+/* udisks' errors in words: the two that matter, and the rest as given. */
+static void drive_error(const char *title, const char *what, const char *err)
+{
+    const char *why = err;
+    if (strstr(err, "NotAuthorized"))
+        why = "You are not allowed to do this, or the password was not given.";
+    else if (strstr(err, "DeviceBusy") || strstr(err, "target is busy"))
+        why = "The drive is in use. Close any windows and programs that are using files on it, "
+              "then try again.";
+    char msg[2400];
+    snprintf(msg, sizeof msg, "%s\n\n%.2000s", what, why);
+    w2k_msgbox(ex.win, title, msg, MB_OK | MB_ICONERROR);
+}
+
+static void drives_changed(void)
+{
+    tree_refresh_computer();
+    if (ex.cur.kind == K_MYCOMPUTER) refill_list();
+    w2k_win_dirty(ex.win);
+}
+
+/* Mount `dev`; its mount point goes to `mnt`. */
+static int drive_mount(const char *dev, char *mnt, int n)
+{
+    if (!need_udisks()) return 0;
+    char q[300], cmd[400], err[2048];
+    w2k_shell_quote(dev, q, sizeof q);
+    snprintf(cmd, sizeof cmd, "udisksctl mount -b %s </dev/null", q);
+    progress_run("Mount", cmd, 0, "", "", "Mounting the drive...", ICO_DRIVE_HDD, err, sizeof err);
+    /* Mounted already, by someone else, is as good. */
+    int ok = mount_point_of(dev, mnt, n);
+    if (!ok && err[0]) drive_error("Mount", "The drive could not be mounted.", err);
+    drives_changed();
+    return ok;
+}
+
+static void drive_unmount(const char *dev, const char *mnt)
+{
+    char q[1100], cmd[2400], err[2048];
+    if (!strncmp(dev, "/dev/", 5)) {
+        if (!need_udisks()) return;
+        w2k_shell_quote(dev, q, sizeof q);
+        snprintf(cmd, sizeof cmd, "udisksctl unmount -b %s </dev/null", q);
+    } else {
+        /* A network share or a FUSE file system: no device to name. */
+        w2k_shell_quote(mnt, q, sizeof q);
+        snprintf(cmd, sizeof cmd, "fusermount3 -u %s 2>/dev/null || fusermount -u %s 2>/dev/null || umount %s",
+                 q, q, q);
+    }
+    if (!progress_run("Unmount", cmd, 0, "", "", "Unmounting the drive...", ICO_DRIVE_HDD, err, sizeof err) && err[0])
+        drive_error("Unmount", "The drive could not be unmounted.", err);
+    drives_changed();
+}
+
+/* Eject: every volume on the disk unmounted, then a USB stick or card
+ * powered off -- Safely Remove Hardware -- or a disc's tray opened. */
+static void drive_eject(const char *dev, int optical)
+{
+    if (!need_udisks()) return;
+    char q[300], cmd[1400], err[2048];
+    w2k_shell_quote(dev, q, sizeof q);
+    snprintf(cmd, sizeof cmd,
+             "DISK=$(lsblk -ndpo PKNAME %s 2>/dev/null); [ -n \"$DISK\" ] || DISK=%s; "
+             "for p in $(lsblk -lnpo PATH,MOUNTPOINT \"$DISK\" | awk 'NF>1{print $1}'); do "
+             "udisksctl unmount -b \"$p\" </dev/null || exit 1; done; %s",
+             q, q, optical ? "eject \"$DISK\"" : "udisksctl power-off -b \"$DISK\" </dev/null");
+    int ok = progress_run("Eject", cmd, 0, "", "", "Stopping the device...",
+                          optical ? ICO_DRIVE_CD : ICO_DRIVE_FLOPPY, err, sizeof err);
+    drives_changed();
+    if (ok && !optical)
+        w2k_msgbox(ex.win, "Safe To Remove Hardware",
+                   "The device can now be safely removed from the computer.", MB_OK | MB_ICONINFO);
+    else if (!ok && err[0])
+        drive_error("Eject", "The device cannot be stopped right now.", err);
+}
+
+/* Opening a drive that is not mounted mounts it first, as a Windows user
+ * would expect a drive simply to open. */
+static void drive_open(const char *dev)
+{
+    char d[128], mnt[1024];
+    snprintf(d, sizeof d, "%s", dev);          /* the entry goes with the refill */
+    if (drive_mount(d, mnt, sizeof mnt)) navigate_path(mnt, 1);
+}
+
+/* The drive selected in My Computer, or NULL. */
+static Entry *selected_drive(void)
+{
+    if (ex.cur.kind != K_MYCOMPUTER) return NULL;
+    Entry *e = entry_at_row(ex.list->sel);
+    return e && e->dev[0] ? e : NULL;
+}
+
+/* Mount or Unmount, and Eject for what can be ejected: the File menu and
+ * the right-click menu alike. */
+static void add_drive_items(W2kMenu *m)
+{
+    Entry *e = selected_drive();
+    if (!e) return;
+    w2k_menu_sep(m);
+    if (e->mounted) w2k_menu_item(m, ID_UNMOUNT, "&Unmount", NULL, ICO_NONE);
+    else            w2k_menu_item(m, ID_MOUNT, "&Mount", NULL, ICO_NONE);
+    if (e->ejectable) w2k_menu_item(m, ID_EJECT, "&Eject", NULL, ICO_NONE);
+}
+
+static void drive_command(int id)
+{
+    Entry *e = selected_drive();
+    if (!e) return;
+    char dev[128], mnt[1024];
+    int optical = e->optical;
+    snprintf(dev, sizeof dev, "%s", e->dev);
+    snprintf(mnt, sizeof mnt, "%s", e->target);
+    if (id == ID_MOUNT) drive_mount(dev, mnt, sizeof mnt);
+    else if (id == ID_UNMOUNT) drive_unmount(dev, mnt);
+    else drive_eject(dev, optical);
 }
 
 /* Strip the archive extension off a name, whichever format's it is. */
@@ -2081,6 +2305,7 @@ static W2kMenu *build_file(void *u)
     w2k_menu_sep(m);
     w2k_menu_item(m, ID_OPENWITH, "Open &With...", NULL, ICO_NONE);
     if (!has || ex.cur.kind != K_FS) w2k_menu_disable(m);
+    add_drive_items(m);
     w2k_menu_sep(m);
     {
         W2kMenu *st = w2k_menu_new();
@@ -2177,6 +2402,7 @@ static W2kMenu *build_item_context(void)
     w2k_menu_default(m);
     w2k_menu_item(m, ID_OPENWITH, "Open &With...", NULL, ICO_NONE);
     if (!fs) w2k_menu_disable(m);
+    add_drive_items(m);
 
     if (fs) {
         int arch = 0;
@@ -2548,6 +2774,7 @@ static void command(void *user, int id)
     }
     case ID_SENDTO_MYDOCS: do_send_to_mydocs(); break;
     case ID_OPENWITH:      do_open_with(); break;
+    case ID_MOUNT: case ID_UNMOUNT: case ID_EJECT: drive_command(id); break;
     case ID_SELECTALL:
         for (int i = 0; i < ex.list->n; i++) ex.list->items[i].selected = 1;
         if (ex.list->n) ex.list->sel = 0;

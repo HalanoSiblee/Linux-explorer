@@ -127,7 +127,9 @@ Try it nested first, without logging out of anything:
                    to scale with the volume list above, as the Windows 2000
                    snap-in; create and delete partitions, format (NTFS,
                    FAT32, exFAT, ext2/3/4, XFS, Btrfs, swap), mount, mark
-                   active, initialize a blank disk as MBR or GPT -- through
+                   active, initialize a blank disk as MBR or GPT (Create
+                   Partition on a new USB stick does it first, and offers
+                   exFAT or FAT32, typed so Windows sees it) -- through
                    sfdisk, mkfs and mount; asks for the administrator's
                    password when it opens, as Windows does, and runs as
                    root from then on, each change confirmed first

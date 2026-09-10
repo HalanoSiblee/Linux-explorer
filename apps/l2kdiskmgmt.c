@@ -1207,20 +1207,79 @@ static void dlg_free(Dlg *g)
 static void checkbox_size(Ctl *c) { c->r.w = 13 + 6 + w2k_text_width(F_UI, c->text, -1) + 4; c->r.h = 16; }
 
 /* ---- Format ---- */
-static W2kCombo *fs_combo(int *first_default)
+/* The file system to offer first: what is there now, when it is one of
+ * ours; on a USB stick or a card what anything else will read -- exFAT
+ * past 32 GB, as Windows does, FAT32 below; ext4 on a fixed disk. */
+static const char *default_fs(const char *current, int removable, unsigned long long size)
+{
+    for (int i = 0; current && i < NFS; i++)
+        if (!strcmp(fs_choices[i].fstype, current) && have_tool(fs_choices[i].mkfs)) return current;
+    if (!removable) return "ext4";
+    if (size > 32ull * 1024 * 1024 * 1024 && have_tool("mkfs.exfat")) return "exfat";
+    return "vfat";
+}
+
+static W2kCombo *fs_combo(const char *want)
 {
     W2kCombo *c = w2k_combo_new(0);
     int n = 0, def = -1;
     for (int i = 0; i < NFS; i++) {
         if (!have_tool(fs_choices[i].mkfs)) continue;
         w2k_combo_add(c, fs_choices[i].name);
-        if (def < 0 && !strcmp(fs_choices[i].fstype, "ext4")) def = n;
+        if (def < 0 && !strcmp(fs_choices[i].fstype, want)) def = n;
         n++;
     }
     if (def < 0 && n) def = 0;
     c->sel = def;
-    *first_default = def;
     return c;
+}
+
+/* The partition type that goes with a file system. Windows gives no letter
+ * to a FAT or NTFS partition typed as Linux, so a stick formatted here
+ * would be invisible to it. */
+static const char *part_type_for(const FsChoice *fs, int mbr)
+{
+    int win = !strcmp(fs->fstype, "vfat") || !strcmp(fs->fstype, "ntfs") || !strcmp(fs->fstype, "exfat");
+    if (!strcmp(fs->fstype, "swap")) return mbr ? "82" : "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F";
+    if (mbr) return !strcmp(fs->fstype, "vfat") ? "c" : win ? "7" : "83";
+    return win ? "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7" : "0FC63DAF-8483-4772-8E79-3D69D8477DE4";
+}
+
+/* Only a plain data partition is retyped by a format: never an EFI
+ * system, recovery or boot partition that happens to be formatted. */
+static int plain_data_type(const char *t)
+{
+    static const char *const plain[] = { "", "0x83", "0x7", "0xc", "0xb", "0xe", "0x6", "0x82",
+        "0fc63daf-8483-4772-8e79-3d69d8477de4", "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+        "0657fd6d-a4ab-43c4-84e5-0933c84b4f4f", NULL };
+    for (int i = 0; plain[i]; i++) if (!strcasecmp(t, plain[i])) return 1;
+    return 0;
+}
+
+/* Whose a new Linux file system's top folder is: the user who opened Disk
+ * Management, not root, or they could not write to their own stick. */
+static int owner_ids(unsigned *uid, unsigned *gid)
+{
+    struct passwd *pw = NULL;
+    if (elevated_user[0]) pw = getpwnam(elevated_user);
+    else if (geteuid() != 0) pw = getpwuid(getuid());
+    else if (getenv("PKEXEC_UID")) pw = getpwuid((uid_t)atoi(getenv("PKEXEC_UID")));
+    else if (getenv("SUDO_UID")) pw = getpwuid((uid_t)atoi(getenv("SUDO_UID")));
+    if (!pw || pw->pw_uid == 0) return 0;
+    *uid = pw->pw_uid; *gid = pw->pw_gid;
+    return 1;
+}
+
+/* After a mkfs of `dev` (quoted, or "$DEV"): hand a Linux file system's
+ * top folder to the user. Nothing fails if it cannot be done. */
+static void chown_cmd(const FsChoice *fs, const char *qdev, char *out, int n)
+{
+    unsigned uid, gid;
+    out[0] = 0;
+    if (strncmp(fs->fstype, "ext", 3) && strcmp(fs->fstype, "xfs") && strcmp(fs->fstype, "btrfs")) return;
+    if (!owner_ids(&uid, &gid)) return;
+    snprintf(out, (size_t)n, "; T=$(mktemp -d) && { mount %s \"$T\" && chown %u:%u \"$T\"; umount \"$T\" 2>/dev/null; rmdir \"$T\"; }; true",
+             qdev, uid, gid);
 }
 
 static const FsChoice *fs_from_combo(W2kCombo *c)
@@ -1230,7 +1289,10 @@ static const FsChoice *fs_from_combo(W2kCombo *c)
     return NULL;
 }
 
-static void do_format(const char *dev, const char *volname, const char *cur_label, int over_mounted)
+/* Format `dev`: a partition `p` of disk `d`, or with `p` NULL the file
+ * system straight on `d`. */
+static void do_format(const char *dev, const char *volname, const char *cur_label, int over_mounted,
+                      const Disk *d, const Part *p)
 {
     Dlg g = { 0 };
     char title[160];
@@ -1242,7 +1304,8 @@ static void do_format(const char *dev, const char *volname, const char *cur_labe
     y += 30;
     dlg_add(&g, C_LABEL, 12, y + 3, 100, 16, "File system:");
     Ctl *fsc = dlg_add(&g, C_COMBO, 130, y, 190, 21, NULL);
-    int def; fsc->combo = fs_combo(&def);
+    fsc->combo = fs_combo(default_fs(p ? p->fstype : d ? d->fstype : NULL, d && d->rm,
+                                     p ? p->size : d ? d->size : 0));
     y += 30;
     dlg_add(&g, C_LABEL, 12, y + 3, 110, 16, "Allocation unit size:");
     Ctl *au = dlg_add(&g, C_COMBO, 130, y, 190, 21, NULL);
@@ -1264,13 +1327,20 @@ static void do_format(const char *dev, const char *volname, const char *cur_labe
     if (w2k_msgbox(app.win, "Format", "Formatting this volume will erase all data on it. Back up any data you "
                    "want to keep before formatting. Do you want to continue?", MB_YESNO | MB_ICONWARNING) != ID_YES)
         return;
-    char cmd[1200], qd[256], script[2000], out[4096];
+    char cmd[1200], qd[256], script[2800], out[4096], retype[400] = "", own[300];
     mkfs_cmd(fs, label, quick, dev, 0, cmd, sizeof cmd);
     w2k_shell_quote(dev, qd, sizeof qd);
-    if (over_mounted)
-        snprintf(script, sizeof script, "umount %s || exit 1; wipefs -a -q %s >/dev/null 2>&1; %s", qd, qd, cmd);
-    else
-        snprintf(script, sizeof script, "wipefs -a -q %s >/dev/null 2>&1; %s", qd, cmd);
+    chown_cmd(fs, qd, own, sizeof own);
+    if (d && p && d->pttype[0] && plain_data_type(p->parttype)) {
+        char qdisk[256];
+        w2k_shell_quote(d->path, qdisk, sizeof qdisk);
+        /* --no-reread: the disk may have another volume in use. */
+        snprintf(retype, sizeof retype, "sfdisk -q --no-reread --part-type %s %d %s >/dev/null 2>&1; ",
+                 qdisk, p->number, part_type_for(fs, !strcmp(d->pttype, "dos")));
+    }
+    snprintf(script, sizeof script, "%s%s%s%swipefs -a -q %s >/dev/null 2>&1; %s || exit 1%s",
+             over_mounted ? "umount " : "", over_mounted ? qd : "", over_mounted ? " || exit 1; " : "",
+             retype, qd, cmd, own);
     char what[200];
     snprintf(what, sizeof what, "Formatting %s as %s...", volname, fs->name);
     int st = run_root(app.win, what, script, out, sizeof out);
@@ -1279,18 +1349,45 @@ static void do_format(const char *dev, const char *volname, const char *cur_labe
 }
 
 /* ---- Create Partition ---- */
+static int do_init(Disk *d);
+#define MIB (1024ull * 1024)
+
 static void do_create(DRegion *rg)
 {
     Disk *d = &disks[rg->disk];
+    if (d->wholefs) {
+        w2k_msgbox(app.win, "Create Partition", "The disk holds a file system with no partition table. "
+                   "Format it as it is, or initialize the disk to partition it.", MB_OK | MB_ICONINFO);
+        return;
+    }
     if (!d->pttype[0]) {
-        w2k_msgbox(app.win, "Disk Management", "The disk has no partition table. Initialize it first "
-                   "(right-click the disk and choose Initialize Disk).", MB_OK | MB_ICONINFO);
+        /* A blank disk -- a new stick -- is initialized first, then the
+         * partition made in the space that leaves, as the wizard would. */
+        char name[32];
+        snprintf(name, sizeof name, "%s", d->name);
+        if (!do_init(d)) return;
+        d = disk_by_name(name);             /* refresh() rebuilt the table */
+        if (!d || !d->pttype[0]) return;
+        DRegion *big = NULL;
+        for (int r = 0; r < nregions; r++)
+            if (&disks[regions[r].disk] == d && regions[r].part == -1 && (!big || regions[r].size > big->size))
+                big = &regions[r];
+        if (big) { select_region((int)(big - regions)); do_create(big); }
+        return;
+    }
+    /* Partitions start on a mebibyte, clear of the table in front and of
+     * whatever alignment slack the free space carries. */
+    unsigned long long start_b = (rg->start + MIB - 1) / MIB * MIB;
+    if (start_b < MIB) start_b = MIB;
+    unsigned long long end_b = rg->start + rg->size;
+    if (start_b + MIB > end_b) {
+        w2k_msgbox(app.win, "Create Partition", "There is not enough free space here for a partition.", MB_OK | MB_ICONWARNING);
         return;
     }
     Dlg g = { 0 };
     char b[64], free_txt[96];
-    unsigned long long max_mb = rg->size / (1024 * 1024);
-    snprintf(free_txt, sizeof free_txt, "Free space: %s (%llu MB)", fmt_size(rg->size, b, sizeof b), max_mb);
+    unsigned long long max_mb = (end_b - start_b) / MIB;
+    snprintf(free_txt, sizeof free_txt, "Free space: %s (%llu MB)", fmt_size(end_b - start_b, b, sizeof b), max_mb);
     int y = 14;
     dlg_add(&g, C_LABEL, 12, y, 300, 16, free_txt);
     y += 24;
@@ -1323,7 +1420,7 @@ static void do_create(DRegion *rg)
     y += 24;
     dlg_add(&g, C_LABEL, 24, y + 3, 100, 16, "File system:");
     Ctl *fsc = dlg_add(&g, C_COMBO, 130, y, 170, 21, NULL);
-    int def; fsc->combo = fs_combo(&def);
+    fsc->combo = fs_combo(default_fs(NULL, d->rm, end_b - start_b));
     y += 28;
     dlg_add(&g, C_LABEL, 24, y + 3, 100, 16, "Volume label:");
     Ctl *lab = dlg_add(&g, C_EDIT, 130, y, 170, 21, NULL);
@@ -1344,36 +1441,43 @@ static void do_create(DRegion *rg)
         w2k_msgbox(app.win, "Create Partition", "The size must be between 1 MB and the free space.", MB_OK | MB_ICONWARNING);
         return;
     }
-    /* The new partition in sectors, its type by what will go on it. */
+    /* The new partition in sectors, its type by what will go on it. Given
+     * all the space, the size is left to sfdisk: the end of a GPT disk
+     * holds the table's backup copy, which the free space does not show. */
     unsigned long long sec = (unsigned long long)d->logsec;
-    unsigned long long start = rg->start / sec, size = mb * 1024 * 1024 / sec;
+    unsigned long long start = start_b / sec;
+    char size[32] = "";
+    if (mb < max_mb) snprintf(size, sizeof size, "%llu", mb * MIB / sec);
     const char *type = "L";
     if (kind == 1) type = "E";
-    else if (fs) {
-        if (!strcmp(fs->fstype, "swap")) type = "S";
-        else if (mbr && (!strcmp(fs->fstype, "vfat"))) type = "c";
-        else if (mbr && (!strcmp(fs->fstype, "ntfs") || !strcmp(fs->fstype, "exfat"))) type = "7";
-        else if (!mbr && (!strcmp(fs->fstype, "ntfs") || !strcmp(fs->fstype, "exfat") || !strcmp(fs->fstype, "vfat")))
-            type = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7";
-    }
-    char qd[256], script[2400], out[4096];
+    else if (fs) type = part_type_for(fs, mbr);
+    char qd[256], script[3200], out[4096];
     w2k_shell_quote(d->path, qd, sizeof qd);
-    /* sfdisk appends the partition and tells the kernel; then the new
-     * device is found by its start and formatted. */
+    /* sfdisk appends the partition -- --no-reread, as another volume on
+     * the disk may be in use and sfdisk would refuse the whole disk --
+     * and partx tells the kernel. Then the new device is found by its
+     * start, which lsblk counts in 512-byte sectors whatever the disk's
+     * own, and formatted once udev has made its node. */
     snprintf(script, sizeof script,
-             "printf '%%s\\n' '%llu,%llu,%s' | sfdisk --append -q %s || exit 1; "
-             "partprobe %s >/dev/null 2>&1; sleep 1; ",
-             start, size, type, qd, qd);
+             "printf '%%s\\n' '%llu,%s,%s' | sfdisk --append --no-reread -q %s || exit 1; "
+             "partx -u %s >/dev/null 2>&1 || partprobe %s >/dev/null 2>&1; udevadm settle >/dev/null 2>&1; ",
+             start, size, type, qd, qd, qd);
     if (fmt && fs && kind != 1) {
-        char cmd[1200];
-        char find[400];
+        char cmd[1200], own[300];
+        char find[600];
         snprintf(find, sizeof find,
-                 "DEV=$(lsblk -b -P -o PATH,START,TYPE %s | grep 'START=\"%llu\"' | grep 'TYPE=\"part\"' | sed 's/.*PATH=\"\\([^\"]*\\)\".*/\\1/' | head -n 1); "
-                 "[ -n \"$DEV\" ] || { echo 'The new partition did not appear.'; exit 1; }; ",
-                 qd, start);
+                 "for i in 1 2 3 4 5 6 7 8 9 10; do "
+                 "DEV=$(lsblk -b -P -o PATH,START,TYPE %s 2>/dev/null | grep 'START=\"%llu\"' | grep 'TYPE=\"part\"' | sed 's/.*PATH=\"\\([^\"]*\\)\".*/\\1/' | head -n 1); "
+                 "[ -n \"$DEV\" ] && [ -b \"$DEV\" ] && break; sleep 1; done; "
+                 "[ -n \"$DEV\" ] && [ -b \"$DEV\" ] || { echo 'The new partition did not appear.'; exit 1; }; "
+                 "wipefs -a -q \"$DEV\" >/dev/null 2>&1; ",
+                 qd, start_b / 512);
         mkfs_cmd(fs, label, quick, "\"$DEV\"", 1, cmd, sizeof cmd);
+        chown_cmd(fs, "\"$DEV\"", own, sizeof own);
         strncat(script, find, sizeof script - strlen(script) - 1);
         strncat(script, cmd, sizeof script - strlen(script) - 1);
+        strncat(script, " || exit 1", sizeof script - strlen(script) - 1);
+        strncat(script, own, sizeof script - strlen(script) - 1);
     }
     int st = run_root(app.win, "Creating the partition...", script, out, sizeof out);
     if (st != 0) report(app.win, "Create Partition", st, out);
@@ -1461,8 +1565,15 @@ static void do_mount(const char *dev, const char *name, const char *mount)
 }
 
 /* ---- Initialize disk ---- */
-static void do_init(Disk *d)
+/* Returns 1 when the disk now has a partition table. */
+static int do_init(Disk *d)
 {
+    for (int j = 0; j < d->nparts; j++)
+        if (d->part[j].busy) {
+            w2k_msgbox(app.win, "Initialize Disk", "A volume on this disk is in use by the system, "
+                       "so the disk cannot be initialized from here.", MB_OK | MB_ICONWARNING);
+            return 0;
+        }
     Dlg g = { 0 };
     int y = 14;
     char t[200];
@@ -1473,7 +1584,9 @@ static void do_init(Disk *d)
     y += 26;
     dlg_add(&g, C_LABEL, 12, y, 320, 16, "Use the following partition style:");
     y += 20;
-    int style = 1;
+    /* MBR for a stick or a card, which every camera, TV and older PC
+     * reads; GPT for a fixed disk. */
+    int style = d->rm ? 0 : 1;
     Ctl *r1 = dlg_add(&g, C_RADIO, 24, y, 0, 0, "MBR (Master Boot Record)"); r1->value = &style; r1->radio_id = 0; r1->group = 1; checkbox_size(r1);
     y += 20;
     Ctl *r2 = dlg_add(&g, C_RADIO, 24, y, 0, 0, "GPT (GUID Partition Table)"); r2->value = &style; r2->radio_id = 1; r2->group = 1; checkbox_size(r2);
@@ -1482,18 +1595,32 @@ static void do_init(Disk *d)
     Ctl *ca = dlg_add(&g, C_BUTTON, 352 - 12 - 75, y, 75, 23, "Cancel"); ca->id = ID_CANCEL;
     int r = dlg_run(&g, app.win, "Initialize Disk", 352, y + 23 + 14);
     dlg_free(&g);
-    if (r != ID_OK) return;
+    if (r != ID_OK) return 0;
     if (d->nparts || d->wholefs) {
         if (w2k_msgbox(app.win, "Initialize Disk", "The disk holds data. Writing a new partition table will "
-                       "erase it all. Do you want to continue?", MB_YESNO | MB_ICONWARNING) != ID_YES) return;
+                       "erase it all. Do you want to continue?", MB_YESNO | MB_ICONWARNING) != ID_YES) return 0;
     }
-    char qd[256], script[600], out[4096];
+    /* Whatever of the disk is mounted -- a stick the desktop mounted when
+     * it went in -- is unmounted first: sfdisk will not write to a disk
+     * in use. Its failure is reported, not swallowed. */
+    char qd[256], script[4000], out[4096], q[300];
+    int o = 0;
     w2k_shell_quote(d->path, qd, sizeof qd);
-    snprintf(script, sizeof script, "wipefs -a -q %s >/dev/null 2>&1; printf 'label: %s\\n' | sfdisk -q %s && partprobe %s >/dev/null 2>&1; true",
-             qd, style ? "gpt" : "dos", qd, qd);
+    if (d->wholefs && d->mount[0])
+        o += snprintf(script + o, sizeof script - (size_t)o, "umount %s || exit 1; ", qd);
+    for (int j = 0; j < d->nparts && o < (int)sizeof script - 400; j++)
+        if (d->part[j].mount[0]) {
+            w2k_shell_quote(d->part[j].path, q, sizeof q);
+            o += snprintf(script + o, sizeof script - (size_t)o, "umount %s || exit 1; ", q);
+        }
+    snprintf(script + o, sizeof script - (size_t)o,
+             "wipefs -a -q %s >/dev/null 2>&1; printf 'label: %s\\n' | sfdisk -q %s || exit 1; "
+             "partprobe %s >/dev/null 2>&1 || partx -u %s >/dev/null 2>&1; true",
+             qd, style ? "gpt" : "dos", qd, qd, qd);
     int st = run_root(app.win, "Initializing the disk...", script, out, sizeof out);
     if (st != 0) report(app.win, "Initialize Disk", st, out);
     refresh();
+    return st == 0;
 }
 
 /* ---- Properties ---- */
@@ -1614,8 +1741,9 @@ static void command(void *u, int id)
         w2k_msgbox(app.win, "Disk Management",
                    "Disk Management shows every disk as a row of partitions drawn to scale, with the "
                    "volumes listed above.\n\nRight-click a partition to open, format, mount or delete it, "
-                   "or to mark it active; right-click unallocated space to create a partition there; "
-                   "right-click a disk with no partition table to initialize it.\n\nChanges are made with "
+                   "or to mark it active; right-click unallocated space to create a partition there "
+                   "(a new, blank disk is initialized first); right-click a disk's label to "
+                   "initialize it.\n\nChanges are made with "
                    "sfdisk, mkfs and mount as root, and are asked for first.", MB_OK | MB_ICONINFO);
         return;
     case ID_ABOUT:
@@ -1653,10 +1781,10 @@ static void command(void *u, int id)
         if (rg && p) {
             if (p->busy) { w2k_msgbox(app.win, "Format", "This volume is in use by the system and cannot be formatted from here.", MB_OK | MB_ICONWARNING); return; }
             char nm[80]; part_volname(&disks[rg->disk], rg->disk, p, nm, sizeof nm);
-            do_format(p->path, nm, p->label, p->mount[0]);
+            do_format(p->path, nm, p->label, p->mount[0], &disks[rg->disk], p);
         } else if (rg && rg->part >= 0 && disks[rg->disk].wholefs) {
             Disk *d = &disks[rg->disk];
-            do_format(d->path, d->label[0] ? d->label : d->name, d->label, d->mount[0]);
+            do_format(d->path, d->label[0] ? d->label : d->name, d->label, d->mount[0], d, NULL);
         } else if (v && v->disk < 0)
             w2k_msgbox(app.win, "Format", "Dynamic volumes (LVM, encrypted) are managed by their own tools.", MB_OK | MB_ICONINFO);
         return;
@@ -1989,7 +2117,7 @@ int main(int argc, char **argv)
      * picture of that dialog for the first volume, free space or disk. */
     const char *rd = getenv("W2K_RENDER_DIALOG");
     if (rd && getenv("W2K_RENDER")) {
-        if (!strcmp(rd, "format") && nvols) do_format(vols[0].path, vols[0].name, vols[0].name, 0);
+        if (!strcmp(rd, "format") && nvols) do_format(vols[0].path, vols[0].name, vols[0].name, 0, NULL, NULL);
         else if (!strcmp(rd, "create")) {
             for (int r = 0; r < nregions; r++) if (regions[r].part == -1) { do_create(&regions[r]); break; }
         }

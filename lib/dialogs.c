@@ -744,6 +744,8 @@ typedef struct {
     int       accepted;
     struct { char label[64], pattern[64]; } filter[FD_MAXFILTER];
     int       nfilters;
+    int       folder;               /* choosing a folder: no files listed */
+    char      accept[64];           /* the OK button's words, when given */
 } FileDlg;
 
 /* Does a name match the chosen filter? Patterns are the simple "*.txt"
@@ -795,7 +797,7 @@ static void fd_fill(FileDlg *f)
         struct stat st;
         if (stat(full, &st) != 0) continue;
         if (S_ISDIR(st.st_mode)) { if (nd < 2048) dirs[nd++] = w2k_strdup(de->d_name); }
-        else if (fd_matches(f, de->d_name)) {
+        else if (!f->folder && fd_matches(f, de->d_name)) {
             if (nf < 2048) files[nf++] = w2k_strdup(de->d_name);
         }
     }
@@ -843,8 +845,10 @@ static void fd_activate(void *user, int idx)
     FileDlg *f = user;
     if (idx < 0) return;
     const char *nm = f->list->items[idx].text[0];
-    if (f->list->items[idx].data) { fd_chdir(f, nm); }
-    else {
+    if (f->list->items[idx].data) {
+        fd_chdir(f, nm);
+        if (f->folder) w2k_edit_set(f->name, "");   /* the folder now shown */
+    } else {
         w2k_edit_set(f->name, nm);
         f->accepted = 1;
         w2k_win_close(f->w, ID_OK);
@@ -855,7 +859,8 @@ static void fd_activate(void *user, int idx)
 static void fd_select(void *user, int idx)
 {
     FileDlg *f = user;
-    if (idx >= 0 && !f->list->items[idx].data)
+    if (idx >= 0 && (f->folder || !f->list->items[idx].data) &&
+        strcmp(f->list->items[idx].text[0], ".."))
         w2k_edit_set(f->name, f->list->items[idx].text[0]);
     w2k_win_dirty(f->w);
 }
@@ -944,14 +949,15 @@ static void fd_paint(W2kWin *w, Drawable d)
     w2k_list_draw(d, f->list);
 
     w2k_text_mnemonic(d, F_UI, f->bar.x, f->name->r.y + (21 - fh) / 2,
-                      "File &name:", C_TEXT, 1);
+                      f->folder ? "&Folder:" : "File &name:", C_TEXT, 1);
     w2k_edit_draw(d, f->name);
     if (f->nfilters > 0) {
         w2k_text_mnemonic(d, F_UI, f->bar.x, f->type->r.y + (21 - fh) / 2,
                           "Files of &type:", C_TEXT, 1);
         w2k_combo_draw(d, f->type);
     }
-    w2k_draw_pushbutton(d, &f->ok, f->save ? "&Save" : "&Open",
+    w2k_draw_pushbutton(d, &f->ok, f->accept[0] ? f->accept : f->folder ? "&Select" :
+                        f->save ? "&Save" : "&Open",
                         BS_DEFAULT | (f->down == 1 ? BS_PRESSED : 0));
     w2k_draw_pushbutton(d, &f->cancel, "Cancel", f->down == 2 ? BS_PRESSED : 0);
 }
@@ -1107,7 +1113,7 @@ static int fd_event(W2kWin *w, XEvent *e)
             char full[2048];
             snprintf(full, sizeof full, "%s%s%s", f->dir,
                      strcmp(f->dir, "/") ? "/" : "", nm);
-            if (!f->save && stat(full, &st) == 0 && S_ISDIR(st.st_mode)) {
+            if (!f->save && !f->folder && stat(full, &st) == 0 && S_ISDIR(st.st_mode)) {
                 fd_chdir(f, nm);
             } else {
                 f->accepted = 1;
@@ -1132,8 +1138,9 @@ static int fd_event(W2kWin *w, XEvent *e)
 static void fd_resized(W2kWin *w)
 {
     FileDlg *f = w->user;
-    int rows = f->nfilters > 0 ? 2 : 1;
-    int bottom = w->h - (rows == 2 ? 66 : 38);
+    /* Two rows under the list whether or not there is a Files of type
+     * box: Cancel sits under Open, and with one row it was cut off. */
+    int bottom = w->h - 66;
 
     f->look->r    = (W2kRect){ 62, 10, w->w - 62 - 70, 21 };
     f->up         = (W2kRect){ w->w - 64, 10, 24, 21 };
@@ -1182,11 +1189,20 @@ static void fd_parse_filters(FileDlg *f, const char *spec)
 int w2k_file_dialog_filter(W2kWin *over, int save, char *path, int pathsz,
                            const char *filters)
 {
+    return w2k_file_dialog_opts(over, save, path, pathsz, filters, NULL);
+}
+
+int w2k_file_dialog_opts(W2kWin *over, int save, char *path, int pathsz,
+                         const char *filters, W2kFileDlgOpts *o)
+{
     FileDlg f = { .save = save };
     f.place_hot = -1;
-    fd_parse_filters(&f, filters);
-    W2kWin *w = w2k_win_new(save ? "Save As" : "Open", "w2kdialog",
-                            560, f.nfilters ? 350 : 330, 1);
+    f.folder = o && o->folder;
+    if (o && o->accept) snprintf(f.accept, sizeof f.accept, "%s", o->accept);
+    if (!f.folder) fd_parse_filters(&f, filters);
+    const char *title = o && o->title && *o->title ? o->title :
+                        f.folder ? "Select Folder" : save ? "Save As" : "Open";
+    W2kWin *w = w2k_win_new(title, "w2kdialog", 560, 350, 1);
     f.w = w;
     f.list = w2k_list_new(LV_LIST);
     f.list->user = &f;
@@ -1203,7 +1219,7 @@ int w2k_file_dialog_filter(W2kWin *over, int save, char *path, int pathsz,
         f.type = w2k_combo_new(0);
         for (int i = 0; i < f.nfilters; i++)
             w2k_combo_add(f.type, f.filter[i].label);
-        f.type->sel = 0;
+        f.type->sel = o && o->filter > 0 && o->filter < f.nfilters ? o->filter : 0;
     }
 
     /* Split the incoming path into a directory and a file name. */
@@ -1234,12 +1250,24 @@ int w2k_file_dialog_filter(W2kWin *over, int save, char *path, int pathsz,
     w->min_w = 380;
     w->min_h = 260;
     fd_resized(w);
-    w2k_win_center(w, over);
+    /* Another program's window to stand over -- the portal's caller. */
+    Window parent = over ? over->win : o ? (Window)o->parent : None;
+    XWindowAttributes pa;
+    if (!over && parent && XGetWindowAttributes(w2k.dpy, parent, &pa)) {
+        W2kWin shell = { 0 };
+        shell.win = parent;
+        shell.w = w2k_lp(pa.width);
+        shell.h = w2k_lp(pa.height);
+        w2k_win_center(w, &shell);
+    } else {
+        if (!over) parent = None;               /* gone, or never given */
+        w2k_win_center(w, over);
+    }
 
     Atom t = w2k.a_net_wm_wt_dialog;
     XChangeProperty(w2k.dpy, w->win, w2k.a_net_wm_window_type, XA_ATOM, 32,
                     PropModeReplace, (unsigned char *)&t, 1);
-    if (over) XSetTransientForHint(w2k.dpy, w->win, over->win);
+    if (parent) XSetTransientForHint(w2k.dpy, w->win, parent);
 
     w2k_add_timer(w2k_caret_blink, blink_cb, f.name);
     if (f.look->edit)
@@ -1249,14 +1277,18 @@ int w2k_file_dialog_filter(W2kWin *over, int save, char *path, int pathsz,
     if (f.look->edit)
         w2k_del_timer(blink_cb, f.look->edit);
 
+    if (o && f.type) o->filter = f.type->sel;
     if (f.type) w2k_combo_free(f.type);
     int ok = f.accepted;
     if (ok) {
         const char *nm = w2k_edit_text(f.name);
         if (nm[0] == '/') snprintf(path, pathsz, "%s", nm);
+        else if (!nm[0] && f.folder) snprintf(path, pathsz, "%s", f.dir);
         else snprintf(path, pathsz, "%s%s%s", f.dir,
                       strcmp(f.dir, "/") ? "/" : "", nm);
-        if (!nm[0]) ok = 0;
+        struct stat ps;
+        if (f.folder) ok = stat(path, &ps) == 0 && S_ISDIR(ps.st_mode);
+        else if (!nm[0]) ok = 0;
     }
     w2k_list_free(f.list);
     w2k_edit_free(f.name);

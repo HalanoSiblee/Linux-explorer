@@ -1,0 +1,10 @@
+# Started by l2k-session for as long as the desktop runs. It is what
+# brings up graphical-session.target, which xdg-desktop-portal requires:
+# without it no portal starts, and a Flatpak program's Open and Save do
+# nothing.
+[Unit]
+Description=Linux 2000 desktop session
+Documentation=https://github.com/JackTulli/Linux-explorer
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target

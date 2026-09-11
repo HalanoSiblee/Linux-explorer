@@ -181,10 +181,25 @@ if [ "$(sed -n 's/^Compositor=//p' "$HOME/.w2k/scheme" 2>/dev/null | head -n 1)"
     fi
 fi
 
+# Which desktop this is: l2kdm says so, startx does not. xdg-desktop-portal
+# picks its back ends by it (w2k-portals.conf).
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-W2K}"
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-x11}"
+
 # Hand the lot to D-Bus, or anything it launches starts with none of it.
 dbus-update-activation-environment --systemd \
     DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE QT_STYLE_OVERRIDE \
-    QT_QPA_PLATFORMTHEME GTK_THEME 2>/dev/null
+    QT_QPA_PLATFORMTHEME GTK_THEME XDG_CURRENT_DESKTOP XDG_SESSION_TYPE 2>/dev/null
+
+# graphical-session.target, through l2k-session.target: xdg-desktop-portal
+# will not start without it, and with no portal a Flatpak program's Open
+# and Save As do nothing. A portal that already refused is let try again.
+if command -v systemctl >/dev/null 2>&1 && \
+   systemctl --user cat l2k-session.target >/dev/null 2>&1; then
+    systemctl --user reset-failed xdg-desktop-portal.service 2>/dev/null
+    systemctl --user start l2k-session.target 2>/dev/null \
+        || echo "l2k-session: could not start l2k-session.target; portals stay off"
+fi
 
 # A PolicyKit authentication agent, so that pkexec can ask for a password:
 # the lid and power-button settings, Device Manager's drivers, Disk
@@ -239,6 +254,8 @@ fi
 l2kwm -- "$@"
 rc=$?
 echo "=== $(date) : l2kwm exited with $rc ==="
+# The session is over for the portals too; the next logon starts them again.
+command -v systemctl >/dev/null 2>&1 && systemctl --user stop l2k-session.target 2>/dev/null
 [ -n "$SCALER_PID" ] && kill "$SCALER_PID" 2>/dev/null
 [ -n "$NESTED_PID" ] && kill "$NESTED_PID" 2>/dev/null
 case $rc in

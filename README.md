@@ -151,6 +151,11 @@ Try it nested first, without logging out of anything:
     l2kupdate      Windows Update: checks for and installs a newer Linux 2000
                    on request, and the distribution's own updates (apt, dnf,
                    pacman, zypper, apk, xbps, emerge, Flatpak, Snap)
+    l2kportal      the file chooser portal: Flatpak programs, and anything
+                   else that asks xdg-desktop-portal for a file, open and save
+                   through the shell's own Open, Save As and Select Folder
+                   dialogs (the session starts graphical-session.target, which
+                   the portal needs, through l2k-session.target)
     linver         About Linux 2000, in the manner of winver: the distribution's
                    logo, the version and build, the distribution, the kernel,
                    who it is licensed to and the memory (Start > Programs >

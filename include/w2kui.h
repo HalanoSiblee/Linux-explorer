@@ -485,6 +485,17 @@ int  w2k_file_dialog(W2kWin *over, int save, char *path, int pathsz);
  * one pattern are separated by semicolons. */
 int  w2k_file_dialog_filter(W2kWin *over, int save, char *path, int pathsz,
                             const char *filters);
+/* The same with what a caller from outside may ask for -- the file
+ * chooser portal (apps/l2kportal.c). NULL `o` is the dialog above. */
+typedef struct {
+    const char   *title;       /* the caption: NULL for Open, Save As, Select Folder */
+    const char   *accept;      /* the OK button: NULL for Open, Save, Select */
+    int           folder;      /* choose a folder rather than a file */
+    int           filter;      /* in: the file type to start on; out: the one chosen */
+    unsigned long parent;      /* another program's window to stand over, or 0 */
+} W2kFileDlgOpts;
+int  w2k_file_dialog_opts(W2kWin *over, int save, char *path, int pathsz,
+                          const char *filters, W2kFileDlgOpts *o);
 
 
 /* ------------------------------------------------------------------ *

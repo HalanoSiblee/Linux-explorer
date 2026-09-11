@@ -50,6 +50,11 @@ endif
 ifneq ($(shell pkg-config --exists dbus-1 2>/dev/null && echo y),)
 wm/notifyd.o: CFLAGS += -DHAVE_DBUS $(shell pkg-config --cflags dbus-1)
 bin/l2kwm: LDLIBS += $(shell pkg-config --libs dbus-1)
+# The file chooser portal is a D-Bus service or nothing.
+apps/l2kportal.o: CFLAGS += $(shell pkg-config --cflags dbus-1)
+bin/l2kportal: LDLIBS += $(shell pkg-config --libs dbus-1)
+else
+APPS    := $(filter-out bin/l2kportal,$(APPS))
 endif
 BINS    := bin/l2kwm $(APPS)
 
@@ -118,6 +123,20 @@ install: all
 	@if install -d $(DESTDIR)/usr/share/polkit-1/actions 2>/dev/null; then \
 	    sed 's|@BINDIR@|$(BINDIR)|' config/org.linux2000.diskmgmt.policy.in > $(DESTDIR)/usr/share/polkit-1/actions/org.linux2000.diskmgmt.policy; \
 	else echo "(no polkit action: /usr/share/polkit-1/actions not writable)"; fi
+	# The session target that lets graphical-session.target, and with it
+	# xdg-desktop-portal, run under this desktop.
+	install -d $(DESTDIR)$(PREFIX)/share/systemd/user
+	install -m644 config/l2k-session.target $(DESTDIR)$(PREFIX)/share/systemd/user
+	# File choosing for Flatpak programs in the shell's own dialogs: the
+	# portal back end, its D-Bus activation and which portals this desktop
+	# uses. xdg-desktop-portal reads its back ends from /usr/share only.
+	@if [ -x $(DESTDIR)$(BINDIR)/l2kportal ] && install -d $(DESTDIR)/usr/share/xdg-desktop-portal/portals 2>/dev/null && \
+	    install -d $(DESTDIR)/usr/share/dbus-1/services 2>/dev/null; then \
+	    install -m644 config/w2k.portal $(DESTDIR)/usr/share/xdg-desktop-portal/portals/w2k.portal; \
+	    install -m644 config/w2k-portals.conf $(DESTDIR)/usr/share/xdg-desktop-portal/w2k-portals.conf; \
+	    sed 's|@BINDIR@|$(BINDIR)|' config/org.freedesktop.impl.portal.desktop.w2k.service.in \
+	        > $(DESTDIR)/usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.w2k.service; \
+	else echo "(no file chooser portal: no l2kportal, or /usr/share not writable)"; fi
 
 .PHONY: all clean install swatch
 .PRECIOUS: apps/%.o

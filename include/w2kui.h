@@ -475,6 +475,15 @@ int  w2k_prompt(W2kWin *over, const char *title, const char *label,
                 const char *initial, char *out, int outsz, int icon);
 /* The file/folder property sheet. Returns 1 when the user pressed OK. */
 int  w2k_file_properties(W2kWin *over, const char *path);
+/* System Properties, sysdm.cpl's sheet (lib/sysprops.c). 1 on OK. */
+int  w2k_system_properties(W2kWin *over);
+/* A drive's property sheet: `path` is where it is mounted, `name` what
+ * Explorer calls it ("Local Disk (C:)"), `letter` its letter or 0
+ * (lib/driveprops.c). 1 on OK. */
+int  w2k_drive_properties(W2kWin *over, const char *path, const char *name, char letter);
+/* Disk Cleanup for the drive mounted at `path`; with no path it asks
+ * which drive first, as cleanmgr did. */
+void w2k_disk_cleanup(W2kWin *over, const char *path, const char *name);
 /* Tools > Folder Options. Returns 1 when the user pressed OK. */
 int  w2k_folder_options(W2kWin *over);
 /* File open/save. `path` is in/out. Returns 1 on OK. */

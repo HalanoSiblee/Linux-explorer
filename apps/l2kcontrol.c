@@ -38,6 +38,10 @@ static void open_datetime(void);
 static void open_power(void);
 static void open_users(void);
 static void open_logon(void);
+/* System Properties and Disk Cleanup live in the toolkit, so Explorer
+ * can open a drive's sheet itself; these open them from here. */
+static void open_system(void) { w2k_system_properties(NULL); }
+static void open_cleanup(void) { w2k_disk_cleanup(NULL, NULL, NULL); }
 
 typedef struct {
     const char *name;
@@ -79,7 +83,7 @@ static const Applet applets[] = {
     { "Sounds and Multimedia", "Assigns sounds to events and configures sound devices.",
       ICO_CP_SOUNDS, NULL, open_sounds },
     { "System", "Provides system information and changes environment settings.",
-      ICO_CP_SYSTEM, NULL, open_performance },
+      ICO_CP_SYSTEM, NULL, open_system },
     { "Task Manager", "Shows the programs and processes running on your computer.",
       ICO_TASKMGR, "l2ktaskmgr", NULL },
     { "Taskbar and Start Menu", "Customizes the Start Menu and the taskbar.",
@@ -2584,6 +2588,8 @@ int main(int argc, char **argv)
             { "power",       open_power       },
             { "users",       open_users       },
             { "logon",       open_logon       },
+            { "system",      open_system      },
+            { "cleanup",     open_cleanup     },
         };
         for (int i = 0; i < (int)(sizeof direct / sizeof *direct); i++)
             if (!strcasecmp(argv[1], direct[i].word)) {
@@ -2591,6 +2597,12 @@ int main(int argc, char **argv)
                 w2k_fini();
                 return 0;
             }
+        /* "l2kcontrol drive <mount point> [name]": that drive's sheet. */
+        if (!strcasecmp(argv[1], "drive") && argc > 2) {
+            w2k_drive_properties(NULL, argv[2], argc > 3 ? argv[3] : NULL, 0);
+            w2k_fini();
+            return 0;
+        }
         if (!strcasecmp(argv[1], "folders")) {
             w2k_folder_options(NULL);
             w2k_fini();

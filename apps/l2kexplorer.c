@@ -1226,10 +1226,34 @@ static void do_undo(void)
     refill_list();
 }
 
+/* In My Computer and on the Desktop: a drive's sheet for a drive that is
+ * mounted, System Properties for My Computer, My Documents' own folder
+ * sheet; the Recycle Bin and a drive not mounted have none. */
+static int virtual_props(const Entry *e)
+{
+    return !strcmp(e->name, "Local Disk (C:)") || !strcmp(e->name, "My Computer") ||
+           !strcmp(e->name, "My Documents") || (e->dev[0] && e->mounted && e->target[0] == '/');
+}
+
 static void do_properties(void)
 {
     Entry *e = entry_at_row(ex.list->sel);
     if (!e) return;
+    if (ex.cur.kind == K_MYCOMPUTER || ex.cur.kind == K_DESKTOP) {
+        if (!virtual_props(e)) return;
+        char name[256], path[512];
+        snprintf(name, sizeof name, "%s", e->name);          /* the entry goes with a refill */
+        snprintf(path, sizeof path, "%s", e->target);
+        if (!strcmp(name, "My Computer")) { w2k_system_properties(ex.win); return; }
+        if (!strcmp(name, "My Documents")) { w2k_file_properties(ex.win, ex.home); return; }
+        /* "TESTUSB (D:)": the letter is the one before the colon. */
+        const char *lp = strrchr(name, '(');
+        char letter = lp && lp[1] && lp[2] == ':' ? lp[1] : 0;
+        w2k_drive_properties(ex.win, !strcmp(name, "Local Disk (C:)") ? "/" : path, name, letter);
+        refill_list();
+        tree_refresh_computer();
+        return;
+    }
     if (ex.cur.kind != K_FS) return;         /* virtual folders have none */
     char full[2048];
     path_join(full, sizeof full, ex.cur.path, e->name);
@@ -2359,7 +2383,10 @@ static W2kMenu *build_file(void *u)
     }
     w2k_menu_sep(m);
     w2k_menu_item(m, ID_PROPS, "P&roperties", NULL, ICO_PROPERTIES);
-    if (!has) w2k_menu_disable(m);
+    {
+        Entry *e = entry_at_row(ex.list->sel);
+        if (!has || (ex.cur.kind != K_FS && !(e && virtual_props(e)))) w2k_menu_disable(m);
+    }
     w2k_menu_sep(m);
     w2k_menu_item(m, ID_CLOSE, "&Close", NULL, ICO_NONE);
     return m;
@@ -2445,7 +2472,10 @@ static W2kMenu *build_item_context(void)
     }
     w2k_menu_sep(m);
     w2k_menu_item(m, ID_PROPS, "P&roperties", NULL, ICO_PROPERTIES);
-    if (!fs) w2k_menu_disable(m);
+    {
+        Entry *e = entry_at_row(ex.list->sel);
+        if (!fs && !(e && virtual_props(e))) w2k_menu_disable(m);
+    }
     return m;
 }
 

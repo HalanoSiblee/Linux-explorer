@@ -492,6 +492,7 @@ static const struct { unsigned mod; KeySym key; } bindings[] = {
     { Mod4Mask,              XK_e      },   /* Explorer               */
     { Mod4Mask,              XK_r      },   /* Run...                 */
     { Mod4Mask,              XK_d      },   /* show desktop           */
+    { Mod4Mask,              XK_Pause  },   /* System Properties      */
     { Mod4Mask,              XK_Left   },   /* snap left              */
     { Mod4Mask,              XK_Right  },   /* snap right             */
     { Mod4Mask,              XK_Up     },   /* snap: maximise         */
@@ -634,4 +635,5 @@ void handle_key(XKeyEvent *e)
     if ((mod & Mod4Mask) && ks == XK_e) { wm_spawn("l2kexplorer"); return; }
     if ((mod & Mod4Mask) && ks == XK_r) { wm_run_dialog(); return; }
     if ((mod & Mod4Mask) && ks == XK_d) { show_desktop(); return; }
+    if ((mod & Mod4Mask) && ks == XK_Pause) { wm_spawn("l2kcontrol system"); return; }
 }

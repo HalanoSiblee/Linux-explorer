@@ -199,6 +199,8 @@ static int on_context(int id, int x, int y)
     case SM_CHARMAP:  own = "l2kcharmap";  own_label = "Character Map"; break;
     case SM_DEVMGMT:  own = "l2kdevmgmt";  own_label = "Device Manager"; break;
     case SM_DISKMGMT: own = "l2kdiskmgmt"; own_label = "Disk Management"; break;
+    case SM_CLEANUP:  own = "l2kcontrol cleanup"; own_label = "Disk Cleanup"; own_icon = "w2k:drive_hdd"; break;
+    case SM_SYSPROPS: own = "l2kcontrol system"; own_label = "System Properties"; own_icon = "w2k:mycomputer"; break;
     case SM_LINVER:   own = "linver";      own_label = "About Linux 2000"; own_icon = "w2k:startflag"; break;
     case SM_UPDATE:   own = "l2kupdate";   own_label = "Windows Update"; own_icon = "w2k:winupdate"; break;
     case SM_IMAGING:  own = "l2kimage";    own_label = "Imaging"; break;
@@ -242,6 +244,7 @@ void startmenu_open(void)
      * it -- Character Map lives there, not at the top level. */
     W2kMenu *systools = w2k_menu_new();
     prog_item(systools, SM_CHARMAP, "&Character Map", "l2kcharmap", ICO_CHARMAP);
+    prog_item(systools, SM_CLEANUP, "Disk C&leanup", "l2kcontrol", ICO_DRIVE_HDD);
     prog_item(systools, SM_DEVMGMT, "&Device Manager", "l2kdevmgmt", ICO_MYCOMPUTER);
     prog_item(systools, SM_DISKMGMT, "Dis&k Management", "l2kdiskmgmt", ICO_DRIVE_HDD);
     prog_item(systools, SM_LINVER, "&About Linux 2000", "linver", ICO_STARTFLAG);
@@ -289,6 +292,7 @@ void startmenu_open(void)
     w2k_menu_item(settings, SM_NETWORK, "&Network and Dial-up Connections", NULL,
                   ICO_CP_NETWORK);
     w2k_menu_item(settings, SM_DISPLAY, "&Display Properties...", NULL, ICO_CP_DISPLAY);
+    w2k_menu_item(settings, SM_SYSPROPS, "S&ystem Properties...", NULL, ICO_CP_SYSTEM);
     w2k_menu_item(settings, SM_DEFAULTS, "De&fault Programs...", NULL, ICO_PROGRAMS);
     w2k_menu_item(settings, SM_TASKBARPROPS, "&Taskbar and Start Menu...",
                   NULL, ICO_TASKBAR);
@@ -411,6 +415,8 @@ void startmenu_dispatch(int id)
     case SM_SEARCH:       wm_spawn("l2kexplorer ~"); break;
     case SM_HELP:         wm_help_dialog(); break;
     case SM_DISPLAY:      wm_spawn("l2kdisplay"); break;
+    case SM_SYSPROPS:     wm_spawn("l2kcontrol system"); break;
+    case SM_CLEANUP:      wm_spawn("l2kcontrol cleanup"); break;
     case SM_RUN:          wm_run_dialog(); break;
     case SM_LOGOFF:       wm_logoff_dialog(); break;
     case SM_SHUTDOWN:     wm_shutdown_dialog(); break;

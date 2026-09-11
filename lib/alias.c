@@ -41,7 +41,8 @@ static const W2kAlias aliases[] = {
     { "fonts",          "Fonts",                "l2kcontrol fonts",   ICO_FONTS_FOLDER },
     { "netplwiz",       "User Accounts",        "l2kcontrol users",   ICO_SETTINGS },
     { "lusrmgr",        "User Accounts",        "l2kcontrol users",   ICO_SETTINGS },
-    { "sysdm",          "Performance Options",  "l2kcontrol performance", ICO_SETTINGS },
+    { "sysdm",          "System Properties",    "l2kcontrol system",  ICO_CP_SYSTEM },
+    { "cleanmgr",       "Disk Cleanup",         "l2kcontrol cleanup", ICO_DRIVE_HDD },
     { "msinfo32",       "About Linux 2000",     "linver",             ICO_STARTFLAG },
     { "logonui",        "Logon Screen",         "l2kcontrol logon",   ICO_LOGOFF },
 };

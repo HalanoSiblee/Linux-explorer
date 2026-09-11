@@ -102,7 +102,9 @@ Try it nested first, without logging out of anything:
                    Open With, Properties, Search, drives in My Computer --
                    mounted or not: opening one mounts it, and the right-click
                    menu mounts, unmounts and ejects (Safely Remove Hardware)
-                   through udisks
+                   through udisks; a drive's Properties is Windows 2000's
+                   sheet -- label, file system, used and free space, the pie,
+                   Disk Cleanup, a read-only disk check, the disk drives
     l2kcontrol     Control Panel, the Windows 2000 folder with its web-view
                    pane: Date/Time, Default Programs, Device Manager, Display,
                    Folder Options, Fonts, Keyboard, Mouse, Network and Dial-up
@@ -111,7 +113,11 @@ Try it nested first, without logging out of anything:
                    monitor, stand by, hibernate after idle minutes; Advanced:
                    what the lid and the power button do, through logind;
                    the Power Meter; Brightness for the backlight), Sounds and
-                   Multimedia, System, Task Manager, Taskbar and Start Menu,
+                   Multimedia, System (System Properties: the monitor and
+                   flag beside the system, its owner, the processor, the
+                   machine and the memory; the computer's name; Device
+                   Manager; the user profiles; Performance and the
+                   environment), Task Manager, Taskbar and Start Menu,
                    User Accounts (the name and picture the Start menu shows
                    for you; ~/.w2k/account)
     l2knetwork     Network and Dial-up Connections: one icon per adapter, the
@@ -281,7 +287,8 @@ when they start.
 
 Keys: **Ctrl+Esc** / **Win** Start menu · **Alt+Tab** switch windows ·
 **Alt+F4** close · **Alt+Space** system menu · **Ctrl+Alt+Del** Task Manager ·
-**Win+E** Explorer · **Win+R** Run · **Win+D** show desktop · the keyboard's
+**Win+E** Explorer · **Win+R** Run · **Win+D** show desktop ·
+**Win+Pause** System Properties · the keyboard's
 volume, mute, play and stop keys do what they say · typing at the
 Start menu searches.
 

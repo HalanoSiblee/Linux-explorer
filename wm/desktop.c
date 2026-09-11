@@ -1034,8 +1034,8 @@ static void context_menu(int x, int y, int over)
         w2k_menu_sep(m);
         w2k_menu_item(m, DM_PROPS, "P&roperties", NULL, ICO_NONE);
         /* A shortcut on the desktop is a file and has a property sheet;
-         * the four system icons are not files. My Computer's sheet is the
-         * display settings, which is where Windows sends it too. */
+         * the four system icons are not files. My Computer's sheet is
+         * System Properties, as on Windows. */
         if (icons[over].system && icons[over].icon != ICO_MYCOMPUTER)
             w2k_menu_disable(m);
     } else {
@@ -1067,6 +1067,8 @@ static void context_menu(int x, int y, int over)
     case DM_PROPS:
         if (over >= 0 && !icons[over].system && icons[over].path[0]) {
             if (w2k_file_properties(NULL, icons[over].path)) desktop_reload();
+        } else if (over >= 0 && icons[over].icon == ICO_MYCOMPUTER) {
+            wm_spawn("l2kcontrol system");
         } else {
             wm_spawn("l2kdisplay");
         }

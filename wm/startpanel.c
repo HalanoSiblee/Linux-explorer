@@ -1057,6 +1057,7 @@ static int open_submenu(int id, int x, int y)
 {
     W2kMenu *m = w2k_menu_new();
     if (id == SM_ALLPROGRAMS) {
+        programs_collapse_all();               /* every opening starts folded */
         if (startdir_add_programs(m)) w2k_menu_sep(m);
         programs_add_groups(m);
     } else {
@@ -1071,7 +1072,9 @@ static int open_submenu(int id, int x, int y)
     }
     /* The panel holds the pointer grab; the menu takes it and gives it
      * back, in the same way the Start menu's context menus do. */
+    w2k_menu_on_expand = programs_expand_menu;
     int chosen = w2k_menu_popup(m, x, y, MPOP_BOTTOMUP);
+    w2k_menu_on_expand = NULL;
     w2k_menu_free(m);
     return chosen;
 }

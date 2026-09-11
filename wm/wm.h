@@ -294,6 +294,7 @@ int      programs_entry(int id, char *cmd, int cn, char *name, int nn,
 void     programs_note_use(const char *name);
 int      programs_is_chevron(int id, int *group);
 void     programs_expand(int group);
+W2kMenu *programs_expand_menu(int id);
 void     programs_collapse_all(void);
 
 /* startsearch.c -- searching from the Start menu, drawn inside it */

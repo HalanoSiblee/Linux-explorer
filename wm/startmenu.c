@@ -329,6 +329,8 @@ void startmenu_open(void)
 
     w2k_menu_closed = on_menu_closed;
     w2k_menu_on_context = on_context;
+    /* A folded group's chevron unrolls the group where it is. */
+    w2k_menu_on_expand = programs_expand_menu;
     /* Anchored to the Start button, which is on the primary monitor -- not
      * to the origin of the virtual screen, which may be a different panel. */
     int bx, by;
@@ -338,6 +340,7 @@ void startmenu_open(void)
                                                        : MPOP_BOTTOMUP);
     w2k_menu_closed = NULL;
     w2k_menu_on_context = NULL;
+    w2k_menu_on_expand = NULL;
     w2k_menu_typeahead = NULL;
     int mw, mh, bw = w2k_menu_banner_width(m);
     char btext[128];

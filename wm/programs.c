@@ -320,19 +320,22 @@ void programs_note_use(const char *name)
     fclose(f);
 }
 
-/* Set while a group is showing everything, after the chevron was clicked. */
+/* Set while a group is showing everything, after the chevron was clicked.
+ * Groups are counted as slots: the categories, then Flatpak (NGROUPS) and
+ * Windows Programs (NGROUPS + 1), which have no category of their own --
+ * numbered by category alone, their chevrons were the first category's. */
 static int expand_group = -1;
 
 void programs_expand(int group) { expand_group = group; }
 void programs_collapse_all(void) { expand_group = -1; }
-
 
 /* Build one group's submenu; NULL when the group is empty. */
 static W2kMenu *group_menu(int group, int flatpak, int wine)
 {
     W2kMenu *m = NULL;
     int shown = 0, hidden = 0;
-    int expand = !w2k_start_personalized || expand_group == group;
+    int slot = flatpak ? NGROUPS : wine ? NGROUPS + 1 : group;
+    int expand = !w2k_start_personalized || expand_group == slot;
 
     for (int pass = 0; pass < 2; pass++) {
         for (int i = 0; i < napps; i++) {
@@ -363,7 +366,7 @@ static W2kMenu *group_menu(int group, int flatpak, int wine)
     }
     if (m && !expand && hidden >= PERSONAL_MIN_HIDDEN) {
         w2k_menu_sep(m);
-        w2k_menu_item(m, CHEVRON_ID + group, "\xc2\xbb", NULL, ICO_NONE);
+        w2k_menu_item(m, CHEVRON_ID + slot, "\xc2\xbb", NULL, ICO_NONE);
     }
     return m;
 }
@@ -430,9 +433,19 @@ int programs_lookup(const char *key, char *name, int nn, char *icon, int in)
  * group to expand and say so, and the menu is rebuilt showing everything. */
 int programs_is_chevron(int id, int *group)
 {
-    if (id < CHEVRON_ID || id >= CHEVRON_ID + 64) return 0;
+    if (id < CHEVRON_ID || id > CHEVRON_ID + NGROUPS + 1) return 0;
     if (group) *group = id - CHEVRON_ID;
     return 1;
+}
+
+/* For w2k_menu_on_expand: a chevron's group again, showing everything,
+ * for the menu to put where the folded one was. */
+W2kMenu *programs_expand_menu(int id)
+{
+    int slot;
+    if (!programs_is_chevron(id, &slot)) return NULL;
+    expand_group = slot;
+    return group_menu(slot < NGROUPS ? slot : 0, slot == NGROUPS, slot == NGROUPS + 1);
 }
 
 /* Matches for a search box: substring of the program name, case-insensitive,

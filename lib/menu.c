@@ -617,6 +617,34 @@ static int match_mnemonic(W2kMenu *m, KeySym ks)
  * the Start menu does, for pinned entries and program entries. */
 int (*w2k_menu_on_context)(int id, int root_x, int root_y);
 
+/* Set by a caller whose menus fold items away -- the Start menu's
+ * personalized menus: an item it answers with a new menu is not a command
+ * but "show the rest". */
+W2kMenu *(*w2k_menu_on_expand)(int id);
+
+/* The chevron at the foot of a folded submenu was chosen: the menu the
+ * caller hands back takes the folded one's place, opened where it stood,
+ * and the rest of the chain stays up -- as Windows 2000 unrolls it. Only a
+ * submenu is swapped; the root belongs to the caller. 0 when `id` is an
+ * ordinary command. Frees the folded menu: nothing of it may be used after. */
+static int expand_level(Level *lv, int *n, int li, int id)
+{
+    if (!w2k_menu_on_expand || li == 0) return 0;
+    Level *p = &lv[li - 1];
+    if (p->sel < 0 || p->m->items[p->sel].sub != lv[li].m) return 0;
+    W2kMenu *full = w2k_menu_on_expand(id);
+    if (!full) return 0;
+    for (int k = li; k < *n; k++) level_destroy(&lv[k]);
+    Item *parent = &p->m->items[p->sel];
+    w2k_menu_free(parent->sub);
+    parent->sub = full;
+    int idx = p->sel;
+    open_level(&lv[li], full, 0, p->y + w2k_px(item_y(p->m, idx)), 0,
+               p->x + w2k_px(p->m->ix[idx] + p->m->col_w), p->x + w2k_px(p->m->ix[idx]));
+    *n = li + 1;
+    return 1;
+}
+
 static int menu_popup(W2kMenu *m, int x, int y, int flags);
 
 /* Menus are laid out in logical pixels even when the window manager,
@@ -760,6 +788,7 @@ static int menu_popup(W2kMenu *m, int x, int y, int flags)
             if (idx < 0) break;
             Item *it = &lv[li].m->items[idx];
             if (it->disabled || it->sub) break;
+            if (expand_level(lv, &n, li, it->id)) { repaint = 1; break; }
             result = it->id;
             done = 1;
             break;
@@ -805,7 +834,19 @@ static int menu_popup(W2kMenu *m, int x, int y, int flags)
                         lv[n].sel = next_selectable(it->sub, -1, 1);
                         n++;
                         repaint = 1;
-                    } else { result = it->id; done = 1; }
+                    } else {
+                        int li = n - 1, at = top->sel;
+                        if (expand_level(lv, &n, li, it->id)) {
+                            /* The highlight lands on the first item the
+                             * chevron uncovered, where the chevron's
+                             * separator was. */
+                            W2kMenu *fm = lv[li].m;
+                            int s = at - 1;
+                            lv[li].sel = s >= 0 && s < fm->n && !fm->items[s].separator
+                                       ? s : next_selectable(fm, -1, 1);
+                            repaint = 1;
+                        } else { result = it->id; done = 1; }
+                    }
                 }
             } else if (w2k_menu_typeahead && n == 1 && printable) {
                 /* A printable key at the top level: the caller wanted it

@@ -64,6 +64,11 @@ extern char *w2k_menu_typeahead;
  * menu up and return 1 if something was done (the menu then closes), or
  * 0 to leave the menu as it was. NULL for the usual "no context menu". */
 extern int (*w2k_menu_on_context)(int id, int root_x, int root_y);
+/* Called when an item in an open submenu is chosen. Return a new menu to
+ * put in that submenu's place -- the rest of a folded group, when `id` is
+ * its chevron -- or NULL for an ordinary command. The menu control owns
+ * what is returned. */
+extern W2kMenu *(*w2k_menu_on_expand)(int id);
 /* Events for windows this framework does not own go here. The window
  * manager points it at its own handler so its dialogs work while the
  * modal loop is running. */

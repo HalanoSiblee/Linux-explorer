@@ -112,7 +112,9 @@ Try it nested first, without logging out of anything:
                    Smooth edges of icons among them), Power Options (Power Schemes: turn off the
                    monitor, stand by, hibernate after idle minutes; Advanced:
                    what the lid and the power button do, through logind;
-                   the Power Meter; Brightness for the backlight), Sounds and
+                   the Power Meter; Brightness for the backlight; Graphics:
+                   which GPU the programs you start render on, on a laptop
+                   with two), Sounds and
                    Multimedia, System (System Properties: the monitor and
                    flag beside the system, its owner, the processor, the
                    machine and the memory; the computer's name; Device
@@ -346,8 +348,13 @@ Everything the applets set lives in `~/.w2k/scheme` (colours, theme,
 wallpaper, effects, taskbar, folder options, input settings, the monitor
 arrangement, `UiScale=` and `ScaleMode=desktop|supersample2|supersample|xrandr` for
 the scaling above, `Resample=`, the power scheme's `MonitorOff=`,
-`StandBy=` and `Hibernate=` minutes, `StartWidth=` for the classic Start
-menu's columns) and is applied live to every running program. Shut Down
+`StandBy=` and `Hibernate=` minutes, `Graphics=` for the GPU programs
+render on, `StartWidth=` for the classic Start
+menu's columns) and is applied live to every running program. `Graphics=`
+is a PCI address (empty for the GPU the screen is on): each shell process
+puts it in its environment as `DRI_PRIME`, or NVIDIA's
+`__NV_PRIME_RENDER_OFFLOAD` set for the proprietary driver, so programs
+started from then on inherit it; ones already running keep their GPU. Shut Down
 offers Stand by and Hibernate when logind allows them. The installer
 gives your account the `video` group and a udev rule so Power Options can
 set the screen brightness straight from `/sys/class/backlight` (log off

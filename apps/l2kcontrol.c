@@ -1751,6 +1751,8 @@ static void open_datetime(void)
  * in it and where the power is coming from -- and a Brightness page for
  * the screen's backlight, which the original kept in the laptop maker's
  * own software. Shown in Control Panel on machines that have either.
+ * Graphics picks the GPU the desktop's programs render on (lib/gpu.c),
+ * what NVIDIA's control panel did for a laptop with two.
  * ------------------------------------------------------------------ */
 typedef struct {
     W2kWin    *win;
@@ -1765,6 +1767,11 @@ typedef struct {
     W2kCombo  *mon_off, *standby, *hibern, *lid, *pbtn;
     char       lid_was[32], pbtn_was[32];
     int        can_suspend, can_hibernate;
+    /* Graphics: the processor the desktop's programs draw with; the
+     * first is the default one. */
+    W2kGpu     gpu[W2K_GPU_MAX];
+    W2kRect    gpu_radio[W2K_GPU_MAX];
+    int        ngpu, gpu_sel;
 } PowerDlg;
 
 /* The times on offer, in minutes; 0 is Never. */
@@ -1841,6 +1848,14 @@ static void pw_commit(PowerDlg *pd)
         w2k_standby_min = sb;
         w2k_hibernate_min = hb;
         w2k_input_apply();
+        w2k_scheme_save(NULL);
+        w2k_scheme_broadcast();
+    }
+    /* The graphics processor: saved and broadcast, and every shell
+     * process hands it on to what it starts next. */
+    const char *gpu = pd->gpu_sel > 0 ? pd->gpu[pd->gpu_sel].addr : "";
+    if (pd->ngpu && strcmp(gpu, w2k_gpu_pref)) {
+        snprintf(w2k_gpu_pref, sizeof w2k_gpu_pref, "%s", gpu);
         w2k_scheme_save(NULL);
         w2k_scheme_broadcast();
     }
@@ -1975,6 +1990,45 @@ static void pw_paint(W2kWin *w, Drawable d)
         }
         w2k_text(d, F_UI, c.x + 9, c.y + c.h - fh - 8,
                  "The meter refreshes every few seconds; the battery is read from sysfs.", C_GRAYTEXT);
+    } else if (pd->tabs->sel == 4) {
+        /* Graphics: Windows 10's "graphics preference", for the whole
+         * desktop rather than a program at a time. */
+        w2k_icon_draw(d, c.x + 12, c.y + 14, ICO_CP_DISPLAY);
+        w2k_text(d, F_UI, c.x + 36, c.y + 12, "Choose the graphics processor that programs you start", C_TEXT);
+        w2k_text(d, F_UI, c.x + 36, c.y + 12 + fh, "from this desktop draw with. Games run best on the", C_TEXT);
+        w2k_text(d, F_UI, c.x + 36, c.y + 12 + 2 * fh, "fastest one.", C_TEXT);
+        W2kRect g = { c.x + 9, c.y + 66, c.w - 18, 20 + (pd->ngpu ? pd->ngpu : 1) * (2 * fh + 12) + 2 };
+        w2k_draw_groupbox(d, &g, "Graphics processor");
+        if (!pd->ngpu)
+            w2k_text(d, F_UI, g.x + 10, g.y + 22, "No graphics processor was found in sysfs.", C_GRAYTEXT);
+        int nouveau = 0;
+        for (int i = 0; i < pd->ngpu; i++) {
+            const W2kGpu *gp = &pd->gpu[i];
+            const W2kRect *r = &pd->gpu_radio[i];
+            char line[200];
+            snprintf(line, sizeof line, "%s%s", gp->name, i == 0 ? "  (default)" : "");
+            w2k_draw_radio(d, r->x, r->y, line, pd->gpu_sel == i, 0, i > 0 && !gp->driver[0]);
+            if (gp->driver[0]) snprintf(line, sizeof line, "Driver: %s", gp->driver);
+            else               snprintf(line, sizeof line, "No driver is loaded for it.");
+            w2k_text(d, F_UI, r->x + 19, r->y + fh + 4, line, C_GRAYTEXT);
+            if (pd->gpu_sel == i && !strcmp(gp->driver, "nouveau")) nouveau = 1;
+        }
+        int y = g.y + g.h + 10;
+        if (pd->ngpu > 1) {
+            w2k_text(d, F_UI, c.x + 9, y, "Programs started after you click Apply use it. Close and", C_GRAYTEXT); y += fh;
+            w2k_text(d, F_UI, c.x + 9, y, "reopen those already running, such as Steam, to move them.", C_GRAYTEXT); y += fh;
+            w2k_text(d, F_UI, c.x + 9, y, "A second processor draws more power while it is in use.", C_GRAYTEXT); y += fh;
+        } else if (pd->ngpu == 1) {
+            w2k_text(d, F_UI, c.x + 9, y, "This computer has one graphics processor; every program", C_GRAYTEXT); y += fh;
+            w2k_text(d, F_UI, c.x + 9, y, "draws with it.", C_GRAYTEXT); y += fh;
+        }
+        if (nouveau) {
+            y += 8;
+            w2k_icon_draw(d, c.x + 9, y, ICO_WARNING);
+            w2k_text(d, F_UI, c.x + 33, y, "With nouveau, NVIDIA cards older than the GeForce 16", C_TEXT); y += fh;
+            w2k_text(d, F_UI, c.x + 33, y, "series run far below full speed. NVIDIA's own driver is", C_TEXT); y += fh;
+            w2k_text(d, F_UI, c.x + 33, y, "much faster for games.", C_TEXT);
+        }
     } else {
         W2kRect g = { c.x + 9, c.y + 10, c.w - 18, 90 };
         w2k_draw_groupbox(d, &g, "Screen brightness");
@@ -2019,6 +2073,13 @@ static int pw_event(W2kWin *w, XEvent *e)
                                    w2k_combo_press(pd->hibern, &e->xbutton))) { w2k_win_dirty(w); return 1; }
         if (pd->tabs->sel == 1 && (w2k_combo_press(pd->lid, &e->xbutton) ||
                                    w2k_combo_press(pd->pbtn, &e->xbutton))) { w2k_win_dirty(w); return 1; }
+        if (pd->tabs->sel == 4)
+            for (int i = 0; i < pd->ngpu; i++)
+                if (w2k_rect_hit(&pd->gpu_radio[i], x, y) && (i == 0 || pd->gpu[i].driver[0])) {
+                    if (pd->gpu_sel != i) { pd->gpu_sel = i; pd->dirty = 1; }
+                    w2k_win_dirty(w);
+                    return 1;
+                }
         if (w2k_rect_hit(&pd->ok, x, y)) pd->down = 1;
         else if (w2k_rect_hit(&pd->cancel, x, y)) pd->down = 2;
         else if (w2k_rect_hit(&pd->apply, x, y) && pd->dirty) pd->down = 3;
@@ -2064,8 +2125,15 @@ static void open_power(void)
     w2k_tabs_add(pd.tabs, "Advanced");
     w2k_tabs_add(pd.tabs, "Power Meter");
     w2k_tabs_add(pd.tabs, "Brightness");
+    w2k_tabs_add(pd.tabs, "Graphics");
     pd.tabs->r = (W2kRect){ 7, 7, cw - 14, chh - 7 - 41 };
     W2kRect c = w2k_tabs_client(pd.tabs);
+
+    pd.ngpu = w2k_gpus(pd.gpu, W2K_GPU_MAX, 1);
+    for (int i = 0; i < pd.ngpu; i++) {
+        pd.gpu_radio[i] = (W2kRect){ c.x + 19, c.y + 66 + 20 + i * (2 * fh0 + 12), c.w - 38, fh0 + 4 };
+        if (i > 0 && !strcmp(pd.gpu[i].addr, w2k_gpu_pref)) pd.gpu_sel = i;
+    }
 
     pd.can_suspend = w2k_power_can("suspend");
     pd.can_hibernate = w2k_power_can("hibernate");

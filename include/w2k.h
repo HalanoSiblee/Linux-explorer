@@ -890,6 +890,22 @@ void w2k_power_action(const char *what);
  * through pkexec and asks logind to reload. 0 on success. */
 void w2k_power_lid_get(char *lid, int nl, char *button, int nb);
 int  w2k_power_lid_set(const char *lid, const char *button);
+
+/* Graphics processors, from sysfs: the one the screen booted on
+ * (primary) first. Power Options picks one for the programs the desktop
+ * starts -- the scheme's Graphics=, a PCI address or empty for the
+ * primary -- and each process puts that choice in its environment
+ * (DRI_PRIME, or NVIDIA's offload variables) when it loads the scheme. */
+#define W2K_GPU_MAX 4
+typedef struct {
+    char addr[16];         /* "0000:02:00.0" */
+    char name[128];        /* "NVIDIA GeForce 940MX", when asked for */
+    char driver[32];       /* "i915", "nouveau", "nvidia"; "" for none */
+    int  primary;          /* boot_vga: the one the screen starts on */
+} W2kGpu;
+int  w2k_gpus(W2kGpu *out, int max, int with_names);
+extern char w2k_gpu_pref[16];
+void w2k_gpu_env_apply(void);
 const char *w2k_sound_pack_label(const char *id);
 int         w2k_sound_pack_dir(const char *pack, char *out, int n);
 int         w2k_sound_pack_files(const char *pack, char (*out)[128], int max);

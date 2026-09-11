@@ -531,6 +531,7 @@ void w2k_scheme_reset(void)
     w2k_view_toolbar = w2k_view_address = w2k_view_status = 1;
     w2k_effects_preset(0);
     w2k_monitor_cfg_n = 0;
+    w2k_gpu_pref[0] = 0;
 }
 
 /* PRETTY_NAME out of /etc/os-release: "Debian GNU/Linux 13 (trixie)". */
@@ -703,7 +704,7 @@ int w2k_scheme_load(const char *path)
     if (!path) { w2k_scheme_default_path(def, sizeof def); path = def; }
     w2k_scheme_reset();
     FILE *f = fopen(path, "r");
-    if (!f) return 0;
+    if (!f) { w2k_gpu_env_apply(); return 0; }
     char line[1200];
     int n = 0;
     /* The theme first, whatever line it is on: it brings a whole colour
@@ -731,6 +732,12 @@ int w2k_scheme_load(const char *path)
         if (!strcasecmp(line, "Wallpaper")) { snprintf(w2k_wallpaper, sizeof w2k_wallpaper, "%s", val); continue; }
         if (!strcasecmp(line, "ForceDecorations")) {
             w2k_force_decorations = atoi(val) != 0;
+            continue;
+        }
+        if (!strcasecmp(line, "Graphics")) {
+            /* A PCI address, "0000:02:00.0"; it ends up in DRI_PRIME. */
+            if (strlen(val) < sizeof w2k_gpu_pref && !val[strspn(val, "0123456789abcdefABCDEF:.")])
+                snprintf(w2k_gpu_pref, sizeof w2k_gpu_pref, "%s", val);
             continue;
         }
         if (!strcasecmp(line, "StartBannerMode")) {
@@ -985,6 +992,9 @@ int w2k_scheme_load(const char *path)
     w2k_skin_cache_flush();
     w2k_icon_load_default();
     w2k_start_icon_apply();          /* over whatever the set brought */
+    /* The graphics processor: into this process's environment, for
+     * everything it starts from now on. */
+    w2k_gpu_env_apply();
     return n;
 }
 
@@ -1069,6 +1079,7 @@ int w2k_scheme_save(const char *path)
     fprintf(f, "MonitorOff=%d\n", w2k_monitor_off_min);
     fprintf(f, "StandBy=%d\n", w2k_standby_min);
     fprintf(f, "Hibernate=%d\n", w2k_hibernate_min);
+    fprintf(f, "Graphics=%s\n", w2k_gpu_pref);
     fprintf(f, "FolderHidden=%d\n", w2k_folder_hidden);
     fprintf(f, "FolderHideExt=%d\n", w2k_folder_hide_ext);
     fprintf(f, "FolderFullPath=%d\n", w2k_folder_fullpath);

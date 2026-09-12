@@ -88,8 +88,8 @@ static struct {
 } cal;
 
 /* ---- expression parser -------------------------------------------
-SGFsYW5vCg==
-string parsing for faster calculations
+SGFsYW5v
+string stream parsing
 */
 
 typedef struct {
@@ -115,10 +115,30 @@ static int parse_number(Parser *pr, double *out)
     skip_ws(pr);
     if (!isdigit((unsigned char)*pr->p) && *pr->p != '.')
         return set_err(pr, "Expected a number");
+    /* Build a clean digit string, ignoring thousand separators (,). */
+    char tmp[96];
+    int n = 0;
+    const char *s = pr->p;
+    while (*s && n + 1 < (int)sizeof tmp) {
+        if (isdigit((unsigned char)*s) || *s == '.' || *s == 'e' || *s == 'E' ||
+            *s == '+' || *s == '-') {
+            /* sign/exponent only after e/E */
+            if ((*s == '+' || *s == '-') && n > 0 &&
+                tmp[n - 1] != 'e' && tmp[n - 1] != 'E')
+                break;
+            tmp[n++] = *s++;
+        } else if (*s == ',') {
+            s++; /* thousand separator — skip */
+        } else {
+            break;
+        }
+    }
+    tmp[n] = 0;
+    if (!n) return set_err(pr, "Invalid number");
     char *end = NULL;
-    *out = strtod(pr->p, &end);
-    if (end == pr->p) return set_err(pr, "Invalid number");
-    pr->p = end;
+    *out = strtod(tmp, &end);
+    if (end == tmp) return set_err(pr, "Invalid number");
+    pr->p = s;
     return 1;
 }
 
@@ -230,12 +250,40 @@ static void format_result(double v, char *buf, int n)
         return;
     }
     if (fabs(v) < 1e-15) v = 0;
-    snprintf(buf, (size_t)n, "%.15g", v);
-    if (strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E')) {
-        char *end = buf + strlen(buf) - 1;
-        while (end > buf && *end == '0') *end-- = 0;
+
+    /* Scientific notation for extremes — no thousands grouping there. */
+    if ((fabs(v) >= 1e15 || (fabs(v) > 0 && fabs(v) < 1e-6)) &&
+        fabs(v) != 0) {
+        snprintf(buf, (size_t)n, "%.15g", v);
+        return;
+    }
+
+    char raw[96];
+    snprintf(raw, sizeof raw, "%.15g", v);
+    if (strchr(raw, '.') && !strchr(raw, 'e') && !strchr(raw, 'E')) {
+        char *end = raw + strlen(raw) - 1;
+        while (end > raw && *end == '0') *end-- = 0;
         if (*end == '.') *end = 0;
     }
+
+    /* Insert commas into the integer part: 3000 -> 3,000 */
+    int neg = (raw[0] == '-');
+    const char *ip = raw + (neg ? 1 : 0);
+    const char *dot = strchr(ip, '.');
+    int intlen = dot ? (int)(dot - ip) : (int)strlen(ip);
+    const char *frac = dot ? dot : "";
+
+    char out[128];
+    int o = 0;
+    if (neg && o + 1 < (int)sizeof out) out[o++] = '-';
+    for (int i = 0; i < intlen; i++) {
+        if (i > 0 && (intlen - i) % 3 == 0 && o + 1 < (int)sizeof out)
+            out[o++] = ',';
+        if (o + 1 < (int)sizeof out) out[o++] = ip[i];
+    }
+    while (*frac && o + 1 < (int)sizeof out) out[o++] = *frac++;
+    out[o] = 0;
+    snprintf(buf, (size_t)n, "%s", out);
 }
 
 static void show_value(double v)
@@ -286,19 +334,28 @@ static double current_value(void)
     double v = 0;
     const char *err = NULL;
     if (evaluate(cal.expr, &v, &err)) return v;
+    /* Fall back: trailing token, commas ignored. */
     int i = cal.len - 1;
-    while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) || cal.expr[i] == '.'))
+    while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) ||
+                      cal.expr[i] == '.' || cal.expr[i] == ','))
         i--;
     if (i >= 0 && cal.expr[i] == '-' &&
         (i == 0 || is_binop((unsigned char)cal.expr[i - 1]) || cal.expr[i - 1] == '('))
         i--;
-    return atof(cal.expr + i + 1);
+    char tmp[96];
+    int n = 0;
+    for (int j = i + 1; j < cal.len && n + 1 < (int)sizeof tmp; j++) {
+        if (cal.expr[j] != ',') tmp[n++] = cal.expr[j];
+    }
+    tmp[n] = 0;
+    return atof(tmp);
 }
 
 static void replace_trailing_number(double v)
 {
     int i = cal.len - 1;
-    while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) || cal.expr[i] == '.'))
+    while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) ||
+                      cal.expr[i] == '.' || cal.expr[i] == ','))
         i--;
     if (i >= 0 && cal.expr[i] == '-' &&
         (i == 0 || is_binop((unsigned char)cal.expr[i - 1]) || cal.expr[i - 1] == '('))
@@ -358,6 +415,11 @@ static void press(int key)
         expr_append_char('.');
         return;
 
+    case ',':
+        /* Thousand separator in the number being typed. */
+        expr_append_char(',');
+        return;
+
     case K_BACK:
         if (cal.len > 1) cal.expr[--cal.len] = 0;
         else expr_clear();
@@ -367,7 +429,8 @@ static void press(int key)
         if (cal.error) { expr_clear(); return; }
         {
             int i = cal.len - 1;
-            while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) || cal.expr[i] == '.'))
+            while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) ||
+                              cal.expr[i] == '.' || cal.expr[i] == ','))
                 i--;
             if (i >= 0 && cal.expr[i] == '-' &&
                 (i == 0 || is_binop((unsigned char)cal.expr[i - 1]) || cal.expr[i - 1] == '('))
@@ -388,7 +451,8 @@ static void press(int key)
             return;
         }
         int i = cal.len - 1;
-        while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) || cal.expr[i] == '.'))
+        while (i >= 0 && (isdigit((unsigned char)cal.expr[i]) ||
+                          cal.expr[i] == '.' || cal.expr[i] == ','))
             i--;
         if (i >= 0 && cal.expr[i] == '-' &&
             (i == 0 || is_binop((unsigned char)cal.expr[i - 1]) || cal.expr[i - 1] == '(')) {
@@ -614,8 +678,13 @@ static void command(void *u, int id)
     case ID_STANDARD:   cal.scientific = 0; resize_window(); break;
     case ID_SCIENTIFIC: cal.scientific = 1; resize_window(); break;
     case ID_ABOUT:
-          w2k_msgbox(cal.win, "About Calculator",
-                   "Calculator\nLinux 2000\nA Windows 2000-style desktop for X11\n\nLinux 2000 is not affiliated with, endorsed by or sponsored by Microsoft.\nWindows is a trademark of Microsoft Corporation.", MB_OK | MB_ICONINFO);
+        w2k_msgbox(cal.win, "About Calculator",
+                   "Calculator\nLinux 2000\nA Windows 2000-style desktop for X11\n\n"
+                   "Expression mode: type -7+5*2^3 and press =\n"
+                   "Operators: + - * / ^   (keyboard glows the key)\n\n"
+                   "Linux 2000 is not affiliated with, endorsed by or sponsored by Microsoft.\n"
+                   "Windows is a trademark of Microsoft Corporation.",
+                   MB_OK | MB_ICONINFO);
         break;
     case ID_EXIT: w2k_win_close(cal.win, 0); break;
     }
@@ -665,13 +734,14 @@ static int event(W2kWin *w, XEvent *e)
         case XK_slash: case XK_KP_Divide:      key = '/'; break;
         case XK_asciicircum:                   key = K_POW; break;
         case XK_period: case XK_KP_Decimal:    key = '.'; break;
+        case XK_comma:                         key = ','; break;
         default:
             if (ks >= XK_0 && ks <= XK_9) key = (int)('0' + (ks - XK_0));
             else if (ks >= XK_KP_0 && ks <= XK_KP_9)
                 key = (int)('0' + (ks - XK_KP_0));
             else if (n == 1) {
                 char c = buf[0];
-                if ((c >= '0' && c <= '9') || c == '.' || c == '+' ||
+                if ((c >= '0' && c <= '9') || c == '.' || c == ',' || c == '+' ||
                     c == '-' || c == '*' || c == '/')
                     key = (unsigned char)c;
                 else if (c == '=') key = K_EQ;
